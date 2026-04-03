@@ -1,5 +1,5 @@
 ---
-name: idea-extractor
+name: soloflow-idea-extractor
 description: Extracts and structures raw ideas, feature requests, and bug reports into actionable task specs
 model: sonnet
 tools: [Read, Glob, Grep]

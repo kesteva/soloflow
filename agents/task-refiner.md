@@ -1,5 +1,5 @@
 ---
-name: task-refiner
+name: soloflow-task-refiner
 description: Refines approved ideas into execution-ready plans with acceptance criteria, file ownership, and dependency mapping
 model: opus
 tools: [Read, Glob, Grep, WebSearch]
