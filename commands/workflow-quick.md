@@ -1,9 +1,137 @@
 ---
 description: Lightweight bugfix path — skip refinement, go straight to executor + verifier
-argument-hint: <brief description of the bug or fix>
+argument-hint: <description of the bug or fix>
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent]
 ---
 
 # /soloflow-quick
 
-Implemented in Milestone 2. See workflow-implementation-plan.md for details.
+You are running the SoloFlow quick bugfix workflow. The user has described a bug or small fix. Your job is to create an inline plan, execute it, and verify the result.
+
+The bug description is: **$ARGUMENTS**
+
+## Step 1: Initialize
+
+Check if `.tasks/` directory exists. If not, run:
+```
+bash scripts/init.sh
+```
+(The `scripts/` path is relative to the SoloFlow plugin root, which may be in `.claude/soloflow/` or a plugin directory.)
+
+## Step 2: Ground the Bug
+
+Search the codebase to understand the bug:
+1. Use Grep and Glob to find files related to the bug description
+2. Read the relevant files to understand the current behavior
+3. Identify which files need to change and which are context-only
+
+This step is critical — the plan you create must reference real files and real code.
+
+## Step 3: Create the Plan
+
+Read `.tasks/active/progress.json` to get the current task counter. Generate the next task ID by incrementing `counters.tasks` (zero-padded to 3 digits: TASK-001, TASK-002, etc.).
+
+Write a plan file to `.tasks/active/plans/TASK-{NNN}-plan.md` with this exact format:
+
+```markdown
+---
+id: TASK-{NNN}
+idea: inline
+status: approved
+created: {ISO timestamp}
+files_owned:
+  - {files that need to change}
+files_readonly:
+  - {files for context only}
+acceptance_criteria:
+  - criterion: "{what must be true}"
+    verification: "{how to verify it}"
+depends_on: []
+estimated_complexity: low|medium|high
+---
+
+# {Bug/Fix Title}
+
+## Objective
+
+{One sentence: what this fixes and why}
+
+## Implementation Steps
+
+1. {Concrete step referencing specific files and functions}
+2. {Next step}
+
+## Acceptance Criteria
+
+{Restate each criterion with clear pass/fail definition}
+```
+
+Then update `.tasks/active/progress.json`:
+- Increment `counters.tasks`
+- Add the task entry with `status: "in_progress"`
+
+## Step 4: Spawn Executor
+
+Use the Agent tool to spawn the **executor** agent:
+- Pass the full content of the plan file as the prompt
+- Prefix the plan with: "Implement this task plan. Follow every step. Report your status when done."
+- Set `subagent_type` to use the executor agent
+
+Wait for the executor to complete and capture its status report.
+
+## Step 5: Handle Executor Result
+
+Read the executor's status report:
+
+- **If COMPLETED**: Proceed to Step 6 (verification).
+- **If BLOCKED**: Update the task in `progress.json` to `status: "blocked"`. Report the blocker to the user. Stop here.
+- **If STUCK**: Write a stuck report to `.tasks/active/stuck/TASK-{NNN}-stuck.md` with the executor's error details. Update `progress.json` to `status: "stuck"`. Report to the user. Stop here.
+
+## Step 6: Spawn Verifier
+
+Use the Agent tool to spawn the **verifier** agent:
+- Pass BOTH the plan file content AND the executor's status report
+- Prefix with: "Verify this completed task. The plan and executor report are below. Run all checks independently."
+- Set `subagent_type` to use the verifier agent
+
+Wait for the verifier's verdict.
+
+## Step 7: Handle Verifier Verdict
+
+Read the verifier's verification report:
+
+### If APPROVED
+1. Write a done report to `.tasks/archive/done/TASK-{NNN}-done.md` using the verifier's report
+2. Remove the task from `.tasks/active/progress.json`
+3. Report success to the user with a summary of changes
+
+### If NEEDS_CHANGES
+Check the loop counter (starts at 1, max 3 from config `executor_retry_max`):
+- **If loops < 3**: Go back to Step 4, but append the verifier's feedback to the executor prompt:
+  "Previous attempt had issues. The verifier found: {verifier feedback}. Fix these specific issues."
+  Increment the loop counter.
+- **If loops >= 3**: The task is stuck. Write a stuck report to `.tasks/active/stuck/TASK-{NNN}-stuck.md` including the verifier's feedback. Update `progress.json` to `status: "stuck"`. Report to the user that the fix needs human intervention.
+
+### If HUMAN_NEEDED
+1. Add an entry to `.tasks/human-review-queue.md` with the verifier's notes
+2. Update `progress.json` to `status: "human_needed"`
+3. Report to the user that the fix works technically but needs their review for product judgment
+
+## Step 8: Final Summary
+
+Report to the user:
+```
+## SoloFlow Quick — Summary
+- **Task:** TASK-{NNN}
+- **Verdict:** {APPROVED | STUCK | HUMAN_NEEDED}
+- **Executor loops:** {count}
+- **Files changed:** {list}
+- **Commits:** {list}
+```
+
+## Important Notes
+
+- The executor uses model `sonnet` for cost efficiency. The verifier uses model `opus` for thorough analysis.
+- Each executor run should produce atomic commits — do not squash them.
+- If the user's bug description is too vague to create a concrete plan, ask the user for clarification BEFORE creating the plan. Do not guess.
+- Keep the plan focused. This is the quick path — one bug, one fix. If the bug turns out to be bigger than expected, tell the user to use `/soloflow-start` instead.
