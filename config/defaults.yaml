@@ -1,0 +1,27 @@
+# SoloFlow default configuration
+
+models:
+  orchestrator: opus
+  verifier: opus
+  executor: sonnet
+  idea_extractor: sonnet
+  task_refiner: opus
+  compounder: sonnet
+
+limits:
+  executor_retry_max: 3
+  analysis_paralysis_threshold: 5  # consecutive read-only calls before forcing write
+  checkpoint_interval: 3           # tasks between progress checkpoints
+  max_sprint_tasks: 10
+
+verification:
+  run_tests: true
+  run_typecheck: true
+  run_linter: true
+  visual_mobile: false    # enable when Maestro MCP is configured
+  visual_web: false       # enable when Playwright MCP is configured
+
+paths:
+  tasks_dir: .tasks
+  active_dir: .tasks/active
+  archive_dir: .tasks/archive
