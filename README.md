@@ -16,7 +16,7 @@ git clone https://github.com/krishna/soloflow .claude/soloflow
 bash .claude/soloflow/scripts/init.sh
 ```
 
-This creates `.tasks/` with the active/archive directory structure for tracking workflow state.
+This creates `.soloflow/` with the active/archive directory structure for tracking workflow state.
 
 ## Commands
 

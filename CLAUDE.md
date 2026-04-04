@@ -12,11 +12,11 @@ SoloFlow is a hooks-based Claude Code workflow orchestration system that automat
 
 Five-phase workflow orchestrated via Claude Code hooks and agent definitions:
 
-1. **Idea Extraction** (Sonnet) — raw input → structured `.tasks/ideas/IDEA-NNN.md`
-2. **Task Refinement** (Opus) — idea → execution-ready `.tasks/plans/TASK-NNN-plan.md`
+1. **Idea Extraction** (Sonnet) — raw input → structured `.soloflow/ideas/IDEA-NNN.md`
+2. **Task Refinement** (Opus) — idea → execution-ready `.soloflow/plans/TASK-NNN-plan.md`
 3. **Execution Sprint** — Orchestrator (Opus) coordinates parallel Executor (Sonnet) + Verifier (Opus) subagents via worktrees
 4. **Human Review** — batched taste-level review (functional verification already done)
-5. **Compound Learning** (Sonnet) — extract reusable patterns → `.tasks/solutions/SOL-NNN.md`
+5. **Compound Learning** (Sonnet) — extract reusable patterns → `.soloflow/solutions/SOL-NNN.md`
 
 **Key constraint:** Subagents cannot spawn subagents. Orchestrator is main agent; executors/verifiers are leaf nodes only.
 
@@ -32,16 +32,16 @@ Five-phase workflow orchestrated via Claude Code hooks and agent definitions:
 
 ### State Layer
 
-All workflow state lives in `.tasks/` (created per-project by `scripts/init.sh`), split into active and archive:
+All workflow state lives in `.soloflow/` (created per-project by `scripts/init.sh`), split into active and archive:
 
-**`.tasks/active/`** — read during execution:
+**`.soloflow/active/`** — read during execution:
 - `ideas/`, `plans/`, `stuck/` — in-flight task files
 - `progress.json` — active sprint state (only current tasks, not historical)
 
-**`.tasks/archive/`** — never read during execution:
+**`.soloflow/archive/`** — never read during execution:
 - `done/`, `reviews/`, `solutions/` — completed task reports and learnings
 
-**`.tasks/`** root:
+**`.soloflow/`** root:
 - `checkpoint.md` — context restoration after compaction
 - `human-review-queue.md` — batched items for human review
 

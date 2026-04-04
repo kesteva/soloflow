@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TASKS_DIR="${1:-.tasks}"
+TASKS_DIR="${1:-.soloflow}"
 
 if [ -d "$TASKS_DIR" ]; then
   echo "SoloFlow already initialized at $TASKS_DIR"

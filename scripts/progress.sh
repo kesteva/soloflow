@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TASKS_DIR="${1:-.tasks}"
+TASKS_DIR="${1:-.soloflow}"
 PROGRESS="$TASKS_DIR/active/progress.json"
 DONE_DIR="$TASKS_DIR/archive/done"
 

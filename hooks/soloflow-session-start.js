@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const cwd = process.cwd();
-const tasksDir = path.join(cwd, '.tasks');
+const tasksDir = path.join(cwd, '.soloflow');
 
 // Silent exit if SoloFlow not initialized in this project
 if (!fs.existsSync(tasksDir)) {

@@ -22,6 +22,6 @@ verification:
   visual_web: false       # enable when Playwright MCP is configured
 
 paths:
-  tasks_dir: .tasks
-  active_dir: .tasks/active
-  archive_dir: .tasks/archive
+  state_dir: .soloflow
+  active_dir: .soloflow/active
+  archive_dir: .soloflow/archive
