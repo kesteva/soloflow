@@ -33,7 +33,33 @@ If the project has no test suite, type checker, or linter, note this in your rep
 
 ### Level 2: Visual Verification
 
-> Visual verification via Maestro MCP (mobile) and Playwright MCP (web) will be added in Milestone 3. For now, skip this level.
+Visual verification gives you "eyes" on the running app. It is optional — skip this level entirely if the task does not affect UI.
+
+**Decision gate:** Look at the task plan's `files_owned`. If they include mobile UI components/screens → use Maestro. If they include web pages/components → use Playwright. If neither → skip to Level 3.
+
+**Availability check (do this BEFORE any MCP interaction):**
+1. Run `which maestro` (for mobile) or `which npx` (for web) via Bash
+2. If the tool is not installed, log "SKIPPED — tool not installed" and proceed to Level 3
+3. Attempt a probe call (e.g., `inspect_view_hierarchy` for Maestro). If the MCP server is not running, log "SKIPPED — MCP server not available" and proceed to Level 3
+
+**Maestro verification (mobile):**
+1. Search the project for existing Maestro flows in `maestro/`, `.maestro/`, or `test/maestro/`. If a flow relevant to the changed feature exists, use `run_flow` and check its exit status.
+2. If no relevant flow exists, verify ad-hoc:
+   - `launch_app` to start the app in the simulator
+   - Navigate to the relevant screen using `tap_on` and `input_text`
+   - Use `inspect_view_hierarchy` first — it returns structured element data at ~50 tokens, sufficient for checking element presence, layout, and accessibility labels
+   - Only use `take_screenshot` when the acceptance criteria require checking visual appearance (colors, images, animations) that hierarchy data cannot answer. Limit to 3 screenshots per verification run.
+3. Map each visual check to a specific acceptance criterion
+
+**Playwright verification (web):**
+1. Navigate to the relevant URL
+2. Check element visibility and page content
+3. Take screenshots only when visual appearance must be verified
+4. Map results to acceptance criteria
+
+**Port conflict guard:** NEVER run `maestro test` via Bash while using Maestro MCP tools. Both use port 7001 and cannot run simultaneously.
+
+**Graceful degradation:** If any MCP tool call returns an error during verification, do NOT fail the task. Log the error, mark Level 2 as "SKIPPED — {reason}", and proceed to Level 3.
 
 ### Level 3: Requirements Adherence
 
@@ -100,6 +126,11 @@ Output exactly this structure:
 - **Tests:** PASS | FAIL | NO_TESTS — {summary}
 - **Type checker:** PASS | FAIL | SKIPPED — {summary}
 - **Linter:** PASS | FAIL | SKIPPED — {summary}
+
+### Visual Verification
+- **Mobile (Maestro):** PASS | FAIL | SKIPPED — {summary}
+- **Web (Playwright):** PASS | FAIL | SKIPPED — {summary}
+- **Evidence:** {screenshot descriptions or hierarchy excerpts, if applicable}
 
 ### Requirements Adherence
 For each acceptance criterion:
