@@ -20,6 +20,12 @@ verification:
   run_linter: true
   visual_mobile: false    # enable when Maestro MCP is configured
   visual_web: false       # enable when Playwright MCP is configured
+  visual_maestro_flow_dirs:     # directories to search for project Maestro flows
+    - maestro/
+    - .maestro/
+    - test/maestro/
+  visual_screenshot_budget: 3   # max screenshots per verification run
+  visual_prefer_hierarchy: true # use inspect_view_hierarchy before screenshots
 
 paths:
   state_dir: .soloflow
