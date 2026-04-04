@@ -23,9 +23,10 @@ Five-phase workflow orchestrated via Claude Code hooks and agent definitions:
 ### Components
 
 - **`agents/`** — Agent definitions as markdown with YAML frontmatter
-- **`hooks/`** — JavaScript Claude Code hooks (session-start, pre-compact, subagent-stop, post-tool-use, task-completed)
-- **`commands/`** — Slash command definitions (`/soloflow-start`, `/soloflow-quick`, `/soloflow-status`, `/soloflow-verify`)
-- **`skills/`** — Skill definitions (e.g., visual-verify)
+- **`hooks/`** — JavaScript Claude Code hooks (all prefixed `soloflow-*`)
+- **`commands/`** — Slash command definitions (all prefixed `soloflow-*`: `/soloflow-start`, `/soloflow-quick`, `/soloflow-status`, `/soloflow-verify`)
+- **`skills/`** — Skill definitions (e.g., `soloflow-visual-verify/`)
+- **`.mcp.json`** — MCP server declarations for Maestro and Playwright
 - **`templates/`** — Markdown templates for ideas, plans, done reports, reviews, solutions
 - **`scripts/`** — Shell scripts (`init.sh`, `ready.sh`, `progress.sh`)
 - **`config/`** — `defaults.yaml` configuration
@@ -62,7 +63,9 @@ Multi-layered verification hierarchy (in order of authority):
 3. Requirements adherence with concrete evidence
 4. Goal-backward: "What must be TRUE for production?"
 
-**Maestro note:** Uses port 7001. Use `inspect_view_hierarchy` (50 tokens) over screenshots (1600+ tokens) when layout-only checks suffice. Never run MCP and YAML flows simultaneously.
+**Visual verification:** The verifier checks tool availability at runtime (`which maestro`, `which npx`) before attempting MCP interactions. If tools aren't installed or MCP servers aren't running, Level 2 is skipped gracefully. See `docs/VISUAL-VERIFICATION-SETUP.md` for configuration.
+
+**Token budget:** Use `inspect_view_hierarchy` (~50 tokens) over `take_screenshot` (~1600 tokens) when layout-only checks suffice. Limit to 3 screenshots per verification. Never run `maestro test` via Bash while Maestro MCP is active (port 7001 conflict).
 
 ## Implementation Plan
 
