@@ -23,6 +23,7 @@ cat > "$TASKS_DIR/active/progress.json" << 'EOF'
   "counters": {
     "ideas": 0,
     "tasks": 0,
+    "sprints": 0,
     "solutions": 0
   }
 }
