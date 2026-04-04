@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/soloflow-session-start.js\"",
             "timeout": 10
           }
         ]
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/post-tool-use.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/soloflow-post-tool-use.js\"",
             "timeout": 15
           }
         ]
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/task-completed.js\"",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/soloflow-task-completed.js\"",
             "timeout": 120
           }
         ]
