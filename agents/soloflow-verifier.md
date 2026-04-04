@@ -33,11 +33,13 @@ If the project has no test suite, type checker, or linter, note this in your rep
 
 ### Level 2: Visual Verification
 
-Visual verification gives you "eyes" on the running app. It is optional — skip this level entirely if the task does not affect UI.
+Visual verification gives you "eyes" on the running app. It is **off by default** and must be explicitly enabled by the user.
 
-**Decision gate:** Look at the task plan's `files_owned`. If they include mobile UI components/screens → use Maestro. If they include web pages/components → use Playwright. If neither → skip to Level 3.
+**Settings gate (check first):** Read `config/defaults.yaml` (or the project's soloflow config). If `visual_mobile` is `false`, skip Maestro entirely. If `visual_web` is `false`, skip Playwright entirely. If both are `false`, skip Level 2 completely and proceed to Level 3. Do NOT run any availability checks or MCP probes unless the setting is enabled.
 
-**Availability check (do this BEFORE any MCP interaction):**
+**Decision gate (only if a setting is enabled):** Look at the task plan's `files_owned`. If they include mobile UI components/screens → use Maestro. If they include web pages/components → use Playwright. If neither → skip to Level 3.
+
+**Availability check (only if settings gate and decision gate both pass):**
 1. Run `which maestro` (for mobile) or `which npx` (for web) via Bash
 2. If the tool is not installed, log "SKIPPED — tool not installed" and proceed to Level 3
 3. Attempt a probe call (e.g., `inspect_view_hierarchy` for Maestro). If the MCP server is not running, log "SKIPPED — MCP server not available" and proceed to Level 3
