@@ -1,3 +1,141 @@
 # Architecture
 
-Implemented in Milestone 5. See workflow-implementation-plan.md for details.
+SoloFlow is a set of Claude Code hooks, agent definitions, slash commands, and skills that orchestrate a 5-phase product development workflow. It has no runtime dependencies beyond Claude Code and Node.js. All state is stored as markdown files with YAML frontmatter in the `.soloflow/` directory.
+
+## Workflow
+
+```
+  Raw Idea
+     │
+     ▼
+┌────────────────┐
+│ Idea Extractor │  (Sonnet)
+│ Phase 1        │
+└───────┬────────┘
+        │
+   Human Checkpoint ← approve / modify / reject
+        │
+        ▼
+┌────────────────┐
+│ Task Refiner   │  (Opus)
+│ Phase 2        │
+└───────┬────────┘
+        │
+   Human Checkpoint ← approve plans / request changes
+        │
+        ▼
+┌────────────────────────────────────┐
+│ Execution Sprint — Phase 3         │
+│                                    │
+│   ┌──────────┐     ┌──────────┐   │
+│   │ Executor │ ──▶ │ Verifier │   │
+│   │ (Sonnet) │ ◀── │ (Opus)   │   │
+│   └──────────┘     └──────────┘   │
+│        ↻ retry loop (max 3)       │
+└───────────────┬────────────────────┘
+                │
+   Human Review ← taste-level check (functional already verified)
+                │
+                ▼
+┌────────────────┐
+│ Compounder     │  (Sonnet)
+│ Phase 5        │
+└────────────────┘
+        │
+        ▼
+   Reusable Solutions
+```
+
+## Five Phases
+
+### Phase 1: Idea Extraction
+- **Agent:** `soloflow-idea-extractor` (Sonnet)
+- **Input:** Raw user description
+- **Output:** `IDEA-NNN.md` in `.soloflow/active/ideas/`
+- **Human touchpoint:** User reviews idea, approves/modifies/rejects
+- **Routing:** BUGFIX ideas redirect to `/soloflow-quick` for a shorter path
+
+### Phase 2: Task Refinement
+- **Agent:** `soloflow-task-refiner` (Opus)
+- **Input:** Approved idea file
+- **Output:** One or more `TASK-NNN-plan.md` files in `.soloflow/active/plans/`
+- **Human touchpoint:** User reviews all plans, approves/defers/requests changes
+
+### Phase 3: Execution Sprint
+- **Agents:** `soloflow-executor` (Sonnet) + `soloflow-verifier` (Opus), coordinated by the main session following `soloflow-orchestrator.md`
+- **Input:** Approved plan files
+- **Output:** Code changes (committed), done reports in `.soloflow/archive/done/`
+- **Loop:** Executor implements → verifier checks → retry up to 3 times if NEEDS_CHANGES → stuck report if still failing
+- **Human touchpoint:** Items marked HUMAN_NEEDED are queued for review
+
+### Phase 4: Human Review
+- **No agent** — the `/soloflow-start` command presents a consolidated review
+- **Input:** Done reports, stuck reports, human-needed items
+- **Human touchpoint:** User does taste-level review (all functional verification already done by the verifier)
+
+### Phase 5: Compound Learning
+- **Agent:** `soloflow-compounder` (Sonnet)
+- **Input:** Done reports and stuck reports from the sprint
+- **Output:** `SOL-NNN.md` files in `.soloflow/archive/solutions/`
+
+## Hook System
+
+| Event | File | Purpose | Timeout |
+|-------|------|---------|---------|
+| SessionStart | `soloflow-session-start.js` | Inject task state summary at session open | 10s |
+| PostToolUse | `soloflow-post-tool-use.js` | Auto-lint after Write/Edit operations | 15s |
+| TaskCompleted | `soloflow-task-completed.js` | Quality gate — block completion if tests/types fail | 120s |
+| PreCompact | `soloflow-pre-compact.js` | Save progress to checkpoint before context compression | 10s |
+| SubagentStop | `soloflow-subagent-stop.js` | Update progress state and inject context when a subagent completes | 10s |
+
+Hooks are plain Node.js with no external dependencies. They read stdin for event data and output JSON to stdout for context injection. The `soloflow-detect-tools.js` utility is shared by `post-tool-use` and `task-completed` to detect project test runners, type checkers, and linters.
+
+## Agent Model Strategy
+
+| Role | Model | Rationale |
+|------|-------|-----------|
+| Orchestrator | Opus | Complex coordination, dependency management |
+| Verifier | Opus | Thorough analysis, skeptical evaluation |
+| Task Refiner | Opus | Architectural decisions, approach selection |
+| Executor | Sonnet | Code implementation, high throughput |
+| Idea Extractor | Sonnet | Structured parsing, codebase search |
+| Compounder | Sonnet | Pattern extraction from completed work |
+
+Using Sonnet for throughput-oriented roles reduces cost by ~60% while maintaining quality for judgment-critical roles via Opus.
+
+## State Layer
+
+All workflow state lives in `.soloflow/`, created by `scripts/init.sh`:
+
+```
+.soloflow/
+├── active/                     # Read during execution
+│   ├── ideas/                  # IDEA-NNN.md (Phase 1 output)
+│   ├── plans/                  # TASK-NNN-plan.md (Phase 2 output)
+│   └── stuck/                  # TASK-NNN-stuck.md (failed tasks)
+├── archive/                    # Never read during execution
+│   ├── done/                   # TASK-NNN-done.md (completed tasks)
+│   ├── reviews/                # Human review reports
+│   └── solutions/              # SOL-NNN.md (Phase 5 output)
+├── active/progress.json        # Sprint state + counters
+├── checkpoint.md               # Context restoration after compaction
+└── human-review-queue.md       # Batched items for human review
+```
+
+**Design principles:**
+- Active/archive split ensures execution only reads in-flight state, not full history
+- Completed tasks are removed from `progress.json` and moved to `archive/done/`
+- All files use markdown + YAML frontmatter — optimized for LLM parsing and git diffs
+
+## Verification Hierarchy
+
+The verifier applies checks in priority order (from the `soloflow-verifier` agent):
+
+1. **Ground truth** — tests, type checker, linter (non-negotiable, automated)
+2. **Visual verification** — Maestro MCP for mobile, Playwright MCP for web (optional, gated on config). See [Visual Verification Setup](VISUAL-VERIFICATION-SETUP.md).
+3. **Requirements adherence** — each acceptance criterion checked with evidence
+4. **Goal-backward** — "what must be TRUE for this to work in production?"
+
+## Key Constraint
+
+Subagents cannot spawn subagents in Claude Code. The `/soloflow-start` command runs in the main session and acts as the orchestrator. All agents (executor, verifier, idea-extractor, task-refiner, compounder) are leaf-node subagents. The `soloflow-orchestrator.md` file is a reference document containing the Phase 3 algorithm — it is not spawned as a subagent.
