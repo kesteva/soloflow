@@ -8,7 +8,7 @@ Automates the full product development lifecycle: **idea extraction → refineme
 
 ```bash
 # Clone into your project
-git clone https://github.com/krishna/soloflow .claude/soloflow
+git clone https://github.com/kesteva/soloflow .claude/soloflow
 
 # Install (symlinks agents, commands, registers hooks)
 bash .claude/soloflow/scripts/install.sh
@@ -25,7 +25,7 @@ bash .claude/soloflow/scripts/install.sh
 **Per-project (recommended):**
 
 ```bash
-git clone https://github.com/krishna/soloflow .claude/soloflow
+git clone https://github.com/kesteva/soloflow .claude/soloflow
 bash .claude/soloflow/scripts/install.sh
 ```
 
