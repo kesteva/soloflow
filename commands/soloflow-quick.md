@@ -29,7 +29,7 @@ This step is critical — the plan you create must reference real files and real
 
 ## Step 3: Create the Plan
 
-Read `.soloflow/active/progress.json` to get the current task counter. Generate the next task ID by incrementing `counters.tasks` (zero-padded to 3 digits: TASK-001, TASK-002, etc.).
+Read `.soloflow/counters.json` to get the current task counter. Generate the next task ID by incrementing `tasks` (zero-padded to 3 digits: TASK-001, TASK-002, etc.).
 
 Write a plan file to `.soloflow/active/plans/TASK-{NNN}-plan.md` with this exact format:
 
@@ -66,9 +66,9 @@ estimated_complexity: low|medium|high
 {Restate each criterion with clear pass/fail definition}
 ```
 
-Then update `.soloflow/active/progress.json`:
-- Increment `counters.tasks`
-- Add the task entry with `status: "in_progress"`
+Then update state files:
+- Increment `tasks` in `.soloflow/counters.json`
+- Add the task entry with `status: "in_progress"` to `.soloflow/active/sprint.json` (quick path skips backlog)
 
 ## Step 4: Spawn Executor
 
@@ -84,8 +84,8 @@ Wait for the executor to complete and capture its status report.
 Read the executor's status report:
 
 - **If COMPLETED**: Proceed to Step 6 (verification).
-- **If BLOCKED**: Update the task in `progress.json` to `status: "blocked"`. Report the blocker to the user. Stop here.
-- **If STUCK**: Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` with the executor's error details. Update `progress.json` to `status: "stuck"`. Report to the user. Stop here.
+- **If BLOCKED**: Update the task in `.soloflow/active/sprint.json` to `status: "blocked"`. Report the blocker to the user. Stop here.
+- **If STUCK**: Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` with the executor's error details. Update `.soloflow/active/sprint.json` to `status: "stuck"`. Report to the user. Stop here.
 
 ## Step 6: Spawn Verifier
 
@@ -102,7 +102,7 @@ Read the verifier's verification report:
 
 ### If APPROVED
 1. Write a done report to `.soloflow/archive/done/TASK-{NNN}-done.md` using the verifier's report
-2. Remove the task from `.soloflow/active/progress.json`
+2. Remove the task from `.soloflow/active/sprint.json`
 3. Report success to the user with a summary of changes
 
 ### If NEEDS_CHANGES
@@ -110,11 +110,11 @@ Check the loop counter (starts at 1, max 3 from config `executor_retry_max`):
 - **If loops < 3**: Go back to Step 4, but append the verifier's feedback to the executor prompt:
   "Previous attempt had issues. The verifier found: {verifier feedback}. Fix these specific issues."
   Increment the loop counter.
-- **If loops >= 3**: The task is stuck. Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` including the verifier's feedback. Update `progress.json` to `status: "stuck"`. Report to the user that the fix needs human intervention.
+- **If loops >= 3**: The task is stuck. Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` including the verifier's feedback. Update `.soloflow/active/sprint.json` to `status: "stuck"`. Report to the user that the fix needs human intervention.
 
 ### If HUMAN_NEEDED
 1. Add an entry to `.soloflow/human-review-queue.md` with the verifier's notes
-2. Update `progress.json` to `status: "human_needed"`
+2. Update `.soloflow/active/sprint.json` to `status: "human_needed"`
 3. Report to the user that the fix works technically but needs their review for product judgment
 
 ## Step 8: Final Summary

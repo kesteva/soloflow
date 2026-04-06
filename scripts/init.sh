@@ -9,23 +9,35 @@ if [ -d "$TASKS_DIR" ]; then
 fi
 
 # Active state — read during execution
-mkdir -p "$TASKS_DIR"/active/{ideas,plans,stuck}
+mkdir -p "$TASKS_DIR"/active/{ideas,research,plans,stuck}
 
 # Archive — never read during execution
 mkdir -p "$TASKS_DIR"/archive/{done,reviews,solutions}
 
-# Active sprint state (only in-flight tasks)
-cat > "$TASKS_DIR/active/progress.json" << 'EOF'
+# Backlog — tasks awaiting execution (written by refinement, read by execution)
+cat > "$TASKS_DIR/active/backlog.json" << 'EOF'
 {
-  "version": 1,
+  "version": 2,
+  "tasks": {}
+}
+EOF
+
+# Sprint — active sprint state and in-flight tasks (written/read by execution)
+cat > "$TASKS_DIR/active/sprint.json" << 'EOF'
+{
+  "version": 2,
   "sprint": null,
-  "tasks": {},
-  "counters": {
-    "ideas": 0,
-    "tasks": 0,
-    "sprints": 0,
-    "solutions": 0
-  }
+  "tasks": {}
+}
+EOF
+
+# Counters — global ID counters (separate file to minimize merge conflicts)
+cat > "$TASKS_DIR/counters.json" << 'EOF'
+{
+  "ideas": 0,
+  "tasks": 0,
+  "sprints": 0,
+  "solutions": 0
 }
 EOF
 

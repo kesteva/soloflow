@@ -2,19 +2,19 @@
 set -euo pipefail
 
 TASKS_DIR="${1:-.soloflow}"
-PROGRESS="$TASKS_DIR/active/progress.json"
+BACKLOG="$TASKS_DIR/active/backlog.json"
 DONE_DIR="$TASKS_DIR/archive/done"
 
-if [ ! -f "$PROGRESS" ]; then
-  echo "No progress.json found. Run init.sh first."
+if [ ! -f "$BACKLOG" ]; then
+  echo "No backlog.json found. Run init.sh first."
   exit 1
 fi
 
 node -e "
   const fs = require('fs');
   const path = require('path');
-  const progress = JSON.parse(fs.readFileSync('$PROGRESS', 'utf8'));
-  const tasks = progress.tasks;
+  const backlog = JSON.parse(fs.readFileSync('$BACKLOG', 'utf8'));
+  const tasks = backlog.tasks;
 
   // Build set of completed task IDs from archive
   const done = new Set();

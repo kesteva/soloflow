@@ -11,26 +11,30 @@ if (!fs.existsSync(tasksDir)) {
   process.exit(0);
 }
 
-const progressPath = path.join(tasksDir, 'active', 'progress.json');
+const backlogPath = path.join(tasksDir, 'active', 'backlog.json');
+const sprintPath = path.join(tasksDir, 'active', 'sprint.json');
 const checkpointPath = path.join(tasksDir, 'checkpoint.md');
 const reviewQueuePath = path.join(tasksDir, 'human-review-queue.md');
 const doneDir = path.join(tasksDir, 'archive', 'done');
 
 let lines = ['## SoloFlow Status'];
 
-// Read active sprint state
-if (fs.existsSync(progressPath)) {
+// Read state from split files
+if (fs.existsSync(backlogPath) && fs.existsSync(sprintPath)) {
   try {
-    const progress = JSON.parse(fs.readFileSync(progressPath, 'utf8'));
-    const tasks = Object.entries(progress.tasks);
+    const backlog = JSON.parse(fs.readFileSync(backlogPath, 'utf8'));
+    const sprint = JSON.parse(fs.readFileSync(sprintPath, 'utf8'));
+    const backlogTasks = Object.entries(backlog.tasks);
+    const sprintTasks = Object.entries(sprint.tasks);
 
-    if (progress.sprint) {
-      lines.push(`Sprint: ${progress.sprint.id} (${progress.sprint.status})`);
+    if (sprint.sprint) {
+      lines.push(`Sprint: ${sprint.sprint.id} (${sprint.sprint.status})`);
     }
 
-    if (tasks.length > 0) {
+    const allTasks = [...backlogTasks, ...sprintTasks];
+    if (allTasks.length > 0) {
       const byStatus = {};
-      tasks.forEach(([_, t]) => {
+      allTasks.forEach(([_, t]) => {
         byStatus[t.status] = (byStatus[t.status] || 0) + 1;
       });
 
@@ -48,15 +52,16 @@ if (fs.existsSync(progressPath)) {
       if (byStatus.human_needed) parts.push(`${byStatus.human_needed} awaiting human`);
       if (doneCount) parts.push(`${doneCount} completed`);
 
+      lines.push(`Backlog: ${backlogTasks.length} | Sprint: ${sprintTasks.length}`);
       lines.push(`Tasks: ${parts.join(', ')}`);
     } else {
       lines.push('No active tasks.');
     }
   } catch (e) {
-    lines.push('Error reading progress.json: ' + e.message);
+    lines.push('Error reading state files: ' + e.message);
   }
 } else {
-  lines.push('No progress.json found. Run init.sh to set up.');
+  lines.push('State files not found. Run init.sh to set up.');
 }
 
 // Check for pending human reviews

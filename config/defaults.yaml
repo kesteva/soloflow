@@ -7,12 +7,23 @@ models:
   idea_extractor: sonnet
   task_refiner: opus
   compounder: sonnet
+  researcher: sonnet
+  code_reviewer: opus
+
+phases:
+  research: true  # enable external research after idea approval
 
 limits:
   executor_retry_max: 3
   analysis_paralysis_threshold: 5  # consecutive read-only calls before forcing write
   checkpoint_interval: 3           # tasks between progress checkpoints
   max_sprint_tasks: 10
+
+code_review:
+  enabled: true
+  run_simplify: true
+  run_security_review: true
+  review_retry_max: 1  # separate retry budget for code review improvements
 
 verification:
   run_tests: true
@@ -31,3 +42,6 @@ paths:
   state_dir: .soloflow
   active_dir: .soloflow/active
   archive_dir: .soloflow/archive
+  backlog: .soloflow/active/backlog.json
+  sprint: .soloflow/active/sprint.json
+  counters: .soloflow/counters.json

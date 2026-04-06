@@ -2,22 +2,29 @@
 set -euo pipefail
 
 TASKS_DIR="${1:-.soloflow}"
-PROGRESS="$TASKS_DIR/active/progress.json"
+BACKLOG="$TASKS_DIR/active/backlog.json"
+SPRINT="$TASKS_DIR/active/sprint.json"
 DONE_DIR="$TASKS_DIR/archive/done"
 
-if [ ! -f "$PROGRESS" ]; then
-  echo "No progress.json found. Run init.sh first."
+if [ ! -f "$BACKLOG" ] || [ ! -f "$SPRINT" ]; then
+  echo "State files not found. Run init.sh first."
   exit 1
 fi
 
 node -e "
   const fs = require('fs');
-  const progress = JSON.parse(fs.readFileSync('$PROGRESS', 'utf8'));
-  const tasks = Object.values(progress.tasks);
+  const backlog = JSON.parse(fs.readFileSync('$BACKLOG', 'utf8'));
+  const sprint = JSON.parse(fs.readFileSync('$SPRINT', 'utf8'));
 
-  // Count active tasks by status
+  const backlogTasks = Object.values(backlog.tasks);
+  const sprintTasks = Object.values(sprint.tasks);
+
+  // Count by status across both files
   const byStatus = {};
-  tasks.forEach(t => {
+  backlogTasks.forEach(t => {
+    byStatus[t.status] = (byStatus[t.status] || 0) + 1;
+  });
+  sprintTasks.forEach(t => {
     byStatus[t.status] = (byStatus[t.status] || 0) + 1;
   });
 
@@ -28,14 +35,15 @@ node -e "
     doneCount = fs.readdirSync(doneDir).filter(f => f.endsWith('.md')).length;
   }
 
-  const sprint = progress.sprint;
-  if (sprint) {
-    console.log('Sprint: ' + sprint.id + ' (' + sprint.status + ')');
+  if (sprint.sprint) {
+    console.log('Sprint: ' + sprint.sprint.id + ' (' + sprint.sprint.status + ')');
   } else {
     console.log('No active sprint.');
   }
 
-  console.log('Active: ' + tasks.length + ' tasks');
+  const total = backlogTasks.length + sprintTasks.length;
+  console.log('Backlog: ' + backlogTasks.length + ' tasks');
+  console.log('In sprint: ' + sprintTasks.length + ' tasks');
   Object.entries(byStatus).forEach(([status, count]) => {
     console.log('  ' + status + ': ' + count);
   });

@@ -12,7 +12,9 @@ Display the current SoloFlow workflow state for this project.
 1. **Check initialization.** If `.soloflow/` does not exist, report: "SoloFlow is not initialized in this project. Run `/soloflow-start` to begin."
 
 2. **Read state files:**
-   - `.soloflow/active/progress.json` for sprint and task data
+   - `.soloflow/active/backlog.json` for backlog tasks
+   - `.soloflow/active/sprint.json` for active sprint and in-flight tasks
+   - `.soloflow/counters.json` for global counters
    - `.soloflow/checkpoint.md` for last checkpoint info
    - `.soloflow/human-review-queue.md` for pending reviews
 

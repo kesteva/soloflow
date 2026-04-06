@@ -10,15 +10,16 @@ SoloFlow is a hooks-based Claude Code workflow orchestration system that automat
 
 ## Architecture
 
-Five-phase workflow orchestrated via Claude Code hooks and agent definitions:
+Six-phase workflow orchestrated via Claude Code hooks and agent definitions:
 
-1. **Idea Extraction** (Sonnet) — raw input → structured `.soloflow/ideas/IDEA-NNN.md`
-2. **Task Refinement** (Opus) — idea → execution-ready `.soloflow/plans/TASK-NNN-plan.md`
-3. **Execution Sprint** — Orchestrator (Opus) coordinates parallel Executor (Sonnet) + Verifier (Opus) subagents via worktrees
-4. **Human Review** — batched taste-level review (functional verification already done)
-5. **Compound Learning** (Sonnet) — extract reusable patterns → `.soloflow/solutions/SOL-NNN.md`
+1. **Idea Extraction** (Sonnet) — raw input → structured `.soloflow/active/ideas/IDEA-NNN.md`
+2. **Research** (Sonnet, optional) — external ecosystem research → `.soloflow/active/research/IDEA-NNN-research.md`
+3. **Task Refinement** (Opus) — idea + research → execution-ready `.soloflow/active/plans/TASK-NNN-plan.md`
+4. **Execution Sprint** — Orchestrator (Opus) coordinates parallel Executor (Sonnet) + Verifier (Opus) + Code Reviewer (Opus) subagents via worktrees
+5. **Human Review** — batched taste-level review (functional verification already done)
+6. **Compound Learning** (Sonnet) — extract reusable patterns → `.soloflow/archive/solutions/SOL-NNN.md`
 
-**Key constraint:** Subagents cannot spawn subagents. Orchestrator is main agent; executors/verifiers are leaf nodes only.
+**Key constraint:** Subagents cannot spawn subagents. Orchestrator is main agent; executors/verifiers/reviewers are leaf nodes only.
 
 ### Components
 
@@ -36,24 +37,26 @@ Five-phase workflow orchestrated via Claude Code hooks and agent definitions:
 All workflow state lives in `.soloflow/` (created per-project by `scripts/init.sh`), split into active and archive:
 
 **`.soloflow/active/`** — read during execution:
-- `ideas/`, `plans/`, `stuck/` — in-flight task files
-- `progress.json` — active sprint state (only current tasks, not historical)
+- `ideas/`, `research/`, `plans/`, `stuck/` — in-flight task files
+- `backlog.json` — tasks awaiting execution (written by refinement, read by execution)
+- `sprint.json` — active sprint + in-flight tasks (written/read by execution)
 
 **`.soloflow/archive/`** — never read during execution:
 - `done/`, `reviews/`, `solutions/` — completed task reports and learnings
 
 **`.soloflow/`** root:
+- `counters.json` — global ID counters (ideas, tasks, sprints, solutions)
 - `checkpoint.md` — context restoration after compaction
 - `human-review-queue.md` — batched items for human review
 
-Completed tasks are removed from `progress.json` and their reports move to `archive/done/`.
+State is split into 3 JSON files (backlog, sprint, counters) to enable parallel worktree execution without merge conflicts. Completed tasks are removed from `sprint.json` and their reports move to `archive/done/`.
 
 State format: Markdown with YAML frontmatter (optimized for LLM parsing + git diffs).
 
 ## Agent Model Strategy
 
-- **Opus:** Orchestrator, Verifier, Task Refiner (quality-critical roles)
-- **Sonnet:** Executor, Idea Extractor, Compounder (cost optimization, ~60% reduction)
+- **Opus:** Orchestrator, Verifier, Task Refiner, Code Reviewer (quality-critical roles)
+- **Sonnet:** Executor, Idea Extractor, Researcher, Compounder (cost optimization, ~60% reduction)
 
 ## Verification Layer
 
@@ -62,6 +65,7 @@ Multi-layered verification hierarchy (in order of authority):
 2. Visual: Maestro MCP (mobile), Playwright MCP (web)
 3. Requirements adherence with concrete evidence
 4. Goal-backward: "What must be TRUE for production?"
+5. Code review: `/simplify` (quality/reuse) + `/security-review` (security audit)
 
 **Visual verification:** The verifier checks tool availability at runtime (`which maestro`, `which npx`) before attempting MCP interactions. If tools aren't installed or MCP servers aren't running, Level 2 is skipped gracefully. See `docs/VISUAL-VERIFICATION-SETUP.md` for configuration.
 

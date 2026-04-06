@@ -19,13 +19,7 @@ process.stdin.on('data', chunk => { input += chunk; });
 process.stdin.on('end', () => {
   try {
     const event = JSON.parse(input);
-    const progressPath = path.join(soloflowDir, 'active', 'progress.json');
-
-    if (!fs.existsSync(progressPath)) {
-      process.exit(0);
-    }
-
-    const progress = JSON.parse(fs.readFileSync(progressPath, 'utf8'));
+    const sprintPath = path.join(soloflowDir, 'active', 'sprint.json');
     const now = new Date().toISOString();
 
     // Extract agent info from event
@@ -39,6 +33,10 @@ process.stdin.on('end', () => {
       context = `Executor subagent completed. Review the executor's status report and proceed with verification if status is COMPLETED.`;
     } else if (agentName.includes('verifier') || agentName.includes('soloflow-verifier')) {
       context = `Verifier subagent completed. Review the verification report and handle the verdict (APPROVED/NEEDS_CHANGES/HUMAN_NEEDED).`;
+    } else if (agentName.includes('code-reviewer') || agentName.includes('soloflow-code-reviewer')) {
+      context = `Code reviewer completed. Review the code review report and handle the verdict (CLEAN/IMPROVEMENTS_NEEDED/SECURITY_ISSUE).`;
+    } else if (agentName.includes('researcher') || agentName.includes('soloflow-researcher')) {
+      context = `Researcher completed. Write the research report and proceed to task refinement.`;
     } else if (agentName.includes('idea-extractor') || agentName.includes('soloflow-idea-extractor')) {
       context = `Idea extractor completed. Write the idea file and present it to the user for review.`;
     } else if (agentName.includes('task-refiner') || agentName.includes('soloflow-task-refiner')) {
@@ -48,10 +46,13 @@ process.stdin.on('end', () => {
     }
 
     if (context) {
-      // Update last activity timestamp
-      if (progress.sprint && progress.sprint.status === 'active') {
-        progress.sprint.last_activity = now;
-        fs.writeFileSync(progressPath, JSON.stringify(progress, null, 2));
+      // Update last activity timestamp in sprint state
+      if (fs.existsSync(sprintPath)) {
+        const sprintData = JSON.parse(fs.readFileSync(sprintPath, 'utf8'));
+        if (sprintData.sprint && sprintData.sprint.status === 'active') {
+          sprintData.sprint.last_activity = now;
+          fs.writeFileSync(sprintPath, JSON.stringify(sprintData, null, 2));
+        }
       }
 
       console.log(JSON.stringify({

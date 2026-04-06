@@ -14,28 +14,37 @@ if (!fs.existsSync(soloflowDir)) {
   process.exit(0);
 }
 
-const progressPath = path.join(soloflowDir, 'active', 'progress.json');
+const backlogPath = path.join(soloflowDir, 'active', 'backlog.json');
+const sprintPath = path.join(soloflowDir, 'active', 'sprint.json');
 const checkpointPath = path.join(soloflowDir, 'checkpoint.md');
 
-if (!fs.existsSync(progressPath)) {
+if (!fs.existsSync(sprintPath)) {
   process.exit(0);
 }
 
 try {
-  const progress = JSON.parse(fs.readFileSync(progressPath, 'utf8'));
-  const tasks = Object.entries(progress.tasks);
+  const sprintData = JSON.parse(fs.readFileSync(sprintPath, 'utf8'));
+  const sprintTasks = Object.entries(sprintData.tasks);
+
+  // Also read backlog for ready tasks
+  let backlogTasks = [];
+  if (fs.existsSync(backlogPath)) {
+    const backlog = JSON.parse(fs.readFileSync(backlogPath, 'utf8'));
+    backlogTasks = Object.entries(backlog.tasks);
+  }
+
   const now = new Date().toISOString();
 
-  const inFlight = tasks.filter(([_, t]) => t.status === 'in_progress').map(([id]) => id);
-  const stuck = tasks.filter(([_, t]) => t.status === 'stuck').map(([id]) => id);
-  const humanNeeded = tasks.filter(([_, t]) => t.status === 'human_needed').map(([id]) => id);
-  const ready = tasks.filter(([_, t]) => t.status === 'ready').map(([id]) => id);
+  const inFlight = sprintTasks.filter(([_, t]) => t.status === 'in_progress').map(([id]) => id);
+  const stuck = sprintTasks.filter(([_, t]) => t.status === 'stuck').map(([id]) => id);
+  const humanNeeded = sprintTasks.filter(([_, t]) => t.status === 'human_needed').map(([id]) => id);
+  const ready = backlogTasks.filter(([_, t]) => t.status === 'ready').map(([id]) => id);
 
   // Determine current phase
   let phase = 'idle';
-  if (progress.sprint && progress.sprint.status === 'active') {
+  if (sprintData.sprint && sprintData.sprint.status === 'active') {
     phase = '3 (execution sprint)';
-  } else if (tasks.length > 0) {
+  } else if (backlogTasks.length > 0) {
     phase = '2 (refinement)';
   }
 
@@ -49,7 +58,7 @@ try {
     nextAction = `Review human-needed tasks: ${humanNeeded.join(', ')}`;
   }
 
-  const sprint = progress.sprint ? progress.sprint.id : 'none';
+  const sprint = sprintData.sprint ? sprintData.sprint.id : 'none';
 
   const checkpoint = `---
 last_updated: ${now}
