@@ -4,6 +4,7 @@ status: done
 completed: YYYY-MM-DDTHH:MM:SSZ
 executor_loops: 1
 verifier_verdict: APPROVED
+code_review_verdict: CLEAN
 ---
 
 # Task Completion Report: TASK-NNN
@@ -24,6 +25,9 @@ verifier_verdict: APPROVED
 
 ### Requirements Adherence
 [Each acceptance criterion with evidence of satisfaction]
+
+### Code Review
+[Code review verdict and summary of findings. References TASK-NNN-review.md for full report.]
 
 ## Changes Made
 
