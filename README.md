@@ -95,9 +95,8 @@ soloflow/
 ├── commands/        # Slash command definitions
 ├── hooks/           # Claude Code hooks (Node.js)
 ├── skills/          # Skill definitions (visual verification)
-├── templates/       # State file templates (idea, plan, done, review, solution)
 ├── config/          # Default configuration (defaults.yaml)
-├── scripts/         # Shell scripts (install.sh, init.sh, ready.sh, progress.sh)
+├── scripts/         # Shell scripts (install.sh, init.sh, uninstall.sh)
 ├── docs/            # Documentation
 └── .claude-plugin/  # Plugin manifest
 ```

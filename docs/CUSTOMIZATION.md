@@ -63,16 +63,3 @@ The verifier discovers and runs Maestro YAML flows from the directories listed i
 2. Write YAML flows following the [Maestro documentation](https://maestro.mobile.dev)
 3. The verifier will discover and use them during visual verification
 
-## Templates
-
-The `templates/` directory contains markdown templates for all state files:
-
-| Template | Used For | Created During |
-|----------|----------|----------------|
-| `idea-template.md` | Structured idea specs | Phase 1 (Idea Extraction) |
-| `plan-template.md` | Execution-ready plans | Phase 2 (Task Refinement) |
-| `done-template.md` | Completed task reports | Phase 3 (Execution Sprint) |
-| `review-template.md` | Human review reports | Phase 4 (Human Review) |
-| `solution-template.md` | Reusable pattern captures | Phase 5 (Compound Learning) |
-
-To customize the structure of state files, edit the relevant template. Agents reference these templates when generating output.

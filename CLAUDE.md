@@ -28,8 +28,7 @@ Six-phase workflow orchestrated via Claude Code hooks and agent definitions:
 - **`commands/`** — Slash command definitions (all prefixed `soloflow-*`: `/soloflow-idea-extractor`, `/soloflow-planner`, `/soloflow-executor`, `/soloflow-compound`, `/soloflow-quick`, `/soloflow-status`, `/soloflow-verify`)
 - **`skills/`** — Skill definitions (e.g., `soloflow-visual-verify/`)
 - **`.mcp.json`** — MCP server declarations for Maestro and Playwright
-- **`templates/`** — Markdown templates for ideas, plans, done reports, reviews, solutions
-- **`scripts/`** — Shell scripts (`init.sh`, `ready.sh`, `progress.sh`)
+- **`scripts/`** — Shell scripts (`init.sh`, `install.sh`, `uninstall.sh`)
 - **`config/`** — `defaults.yaml` configuration
 
 ### State Layer
@@ -71,11 +70,3 @@ Multi-layered verification hierarchy (in order of authority):
 
 **Token budget:** Use `inspect_view_hierarchy` (~50 tokens) over `take_screenshot` (~1600 tokens) when layout-only checks suffice. Limit to 3 screenshots per verification. Never run `maestro test` via Bash while Maestro MCP is active (port 7001 conflict).
 
-## Implementation Plan
-
-Full plan in `workflow-implementation-plan.md`. Five milestones:
-1. Foundation — repo scaffolding, state layer, session-start hook
-2. Executor + Verifier Loop — inner execution loop, `/soloflow-quick`
-3. Visual Verification — Maestro/Playwright integration
-4. Full Pipeline — all agents + commands + remaining hooks
-5. Polish + Open Source — docs, config, marketplace setup
