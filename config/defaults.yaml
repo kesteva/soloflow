@@ -1,7 +1,6 @@
 # SoloFlow default configuration
 
 models:
-  orchestrator: opus
   verifier: opus
   executor: sonnet
   idea_extractor: sonnet
