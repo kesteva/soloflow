@@ -120,6 +120,16 @@ fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
 echo ""
 bash "$SOLOFLOW_DIR/scripts/init.sh" "$PROJECT_DIR/.soloflow"
 
+# --- Stage .soloflow/ in git so task/idea history is tracked ---
+if git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if git -C "$PROJECT_DIR" check-ignore -q .soloflow 2>/dev/null; then
+    echo "  [warn] .soloflow/ is gitignored — task history will not be tracked"
+  else
+    git -C "$PROJECT_DIR" add .soloflow >/dev/null 2>&1 && \
+      echo "  [git]  staged .soloflow/ for tracking"
+  fi
+fi
+
 echo ""
 echo "Done. Start a Claude Code session and try:"
 echo "  /soloflow-status"

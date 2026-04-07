@@ -14,6 +14,12 @@ mkdir -p "$TASKS_DIR"/active/{ideas,research,plans,stuck}
 # Archive — never read during execution
 mkdir -p "$TASKS_DIR"/archive/{done,reviews,solutions}
 
+# .gitkeep files so empty subdirs get tracked by git
+for sub in active/ideas active/research active/plans active/stuck \
+           archive/done archive/reviews archive/solutions; do
+  touch "$TASKS_DIR/$sub/.gitkeep"
+done
+
 # Backlog — tasks awaiting execution (written by refinement, read by execution)
 cat > "$TASKS_DIR/active/backlog.json" << 'EOF'
 {
