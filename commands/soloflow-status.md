@@ -9,7 +9,7 @@ Display the current SoloFlow workflow state for this project.
 
 ## Steps
 
-1. **Check initialization.** If `.soloflow/` does not exist, report: "SoloFlow is not initialized in this project. Run `/soloflow-start` to begin."
+1. **Check initialization.** If `.soloflow/` does not exist, report: "SoloFlow is not initialized in this project. Run `/soloflow-idea-extractor` to begin."
 
 2. **Read state files:**
    - `.soloflow/active/backlog.json` for backlog tasks

@@ -8,7 +8,6 @@
 
 ```yaml
 models:
-  orchestrator: opus       # soloflow-orchestrator.md (reference doc)
   verifier: opus           # agents/soloflow-verifier.md
   executor: sonnet         # agents/soloflow-executor.md
   idea_extractor: sonnet   # agents/soloflow-idea-extractor.md
@@ -22,10 +21,10 @@ To change an agent's model, edit the `model:` field in its YAML frontmatter. For
 
 | Setting | Default | Where Used | Description |
 |---------|---------|------------|-------------|
-| `executor_retry_max` | 3 | `commands/soloflow-start.md`, `commands/soloflow-quick.md` | Max executor→verifier loops before marking a task as stuck |
+| `executor_retry_max` | 3 | `commands/soloflow-executor.md`, `commands/soloflow-quick.md` | Max executor→verifier loops before marking a task as stuck |
 | `analysis_paralysis_threshold` | 5 | `agents/soloflow-executor.md` | Consecutive read-only tool calls before the executor is forced to write code |
-| `checkpoint_interval` | 3 | `commands/soloflow-start.md` | Tasks completed between progress checkpoints |
-| `max_sprint_tasks` | 10 | `commands/soloflow-start.md` | Maximum tasks in a single execution sprint |
+| `checkpoint_interval` | 3 | `commands/soloflow-executor.md` | Tasks completed between progress checkpoints |
+| `max_sprint_tasks` | 10 | `commands/soloflow-executor.md` | Maximum tasks in a single execution sprint |
 
 ## Verification Toggles
 

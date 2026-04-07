@@ -62,14 +62,14 @@ SoloFlow is a set of Claude Code hooks, agent definitions, slash commands, and s
 - **Human touchpoint:** User reviews all plans, approves/defers/requests changes
 
 ### Phase 3: Execution Sprint
-- **Agents:** `soloflow-executor` (Sonnet) + `soloflow-verifier` (Opus), coordinated by the main session following `soloflow-orchestrator.md`
+- **Agents:** `soloflow-executor` (Sonnet) + `soloflow-verifier` (Opus) + `soloflow-code-reviewer` (Opus), coordinated by the main session via the `/soloflow-executor` command
 - **Input:** Approved plan files
 - **Output:** Code changes (committed), done reports in `.soloflow/archive/done/`
 - **Loop:** Executor implements → verifier checks → retry up to 3 times if NEEDS_CHANGES → stuck report if still failing
 - **Human touchpoint:** Items marked HUMAN_NEEDED are queued for review
 
 ### Phase 4: Human Review
-- **No agent** — the `/soloflow-start` command presents a consolidated review
+- **No agent** — the `/soloflow-executor` command presents a consolidated review at the end of the sprint
 - **Input:** Done reports, stuck reports, human-needed items
 - **Human touchpoint:** User does taste-level review (all functional verification already done by the verifier)
 
@@ -138,4 +138,4 @@ The verifier applies checks in priority order (from the `soloflow-verifier` agen
 
 ## Key Constraint
 
-Subagents cannot spawn subagents in Claude Code. The `/soloflow-start` command runs in the main session and acts as the orchestrator. All agents (executor, verifier, idea-extractor, task-refiner, compounder) are leaf-node subagents. The `soloflow-orchestrator.md` file is a reference document containing the Phase 3 algorithm — it is not spawned as a subagent.
+Subagents cannot spawn subagents in Claude Code. The phase commands (`/soloflow-idea-extractor`, `/soloflow-planner`, `/soloflow-executor`, `/soloflow-compound`) run in the main session and act as the orchestrator for their phase. All agents (executor, verifier, idea-extractor, task-refiner, compounder) are leaf-node subagents.

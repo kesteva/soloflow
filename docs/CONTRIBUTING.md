@@ -36,7 +36,7 @@ There is no automated test suite — SoloFlow is session-based tooling tested by
 1. Install SoloFlow in a scratch project (`bash scripts/install.sh`)
 2. Start a Claude Code session
 3. Run `/soloflow-quick "add a hello world file"` to test the inner loop
-4. Run `/soloflow-start "add a new feature"` to test the full pipeline
+4. Run `/soloflow-idea-extractor "add a new feature"` → `/soloflow-planner IDEA-001` → `/soloflow-executor` → `/soloflow-compound` to test the full pipeline
 5. Verify hooks fire (session-start injects state, post-tool-use lints, task-completed runs tests)
 
 ## License
