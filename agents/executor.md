@@ -1,5 +1,5 @@
 ---
-name: soloflow-executor
+name: executor
 description: Implements a single task from an execution-ready plan with scope boundaries, deviation rules, and atomic commits
 model: sonnet
 tools: [Read, Write, Edit, Glob, Grep, Bash]

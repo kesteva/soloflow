@@ -1,5 +1,5 @@
 ---
-name: soloflow-idea-extractor
+name: idea-extractor
 description: Extracts and structures raw ideas, feature requests, and bug reports into actionable task specs
 model: sonnet
 tools: [Read, Glob, Grep]
@@ -19,7 +19,7 @@ You receive raw user input describing a feature request, bug report, refactoring
 
 3. **Classify** the idea:
    - `FEATURE` — new functionality
-   - `BUGFIX` — something broken that needs fixing. Note: this should be routed to `/soloflow-quick` instead of the full pipeline.
+   - `BUGFIX` — something broken that needs fixing. Note: this should be routed to `/soloflow:quick` instead of the full pipeline.
    - `REFACTOR` — restructuring existing code without changing behavior
    - `EXPLORATION` — research or investigation with no clear implementation yet
    
@@ -93,4 +93,4 @@ assumptions:
 - Do NOT assume answers to open questions. List them.
 - Every file path referenced must come from an actual Glob/Grep search.
 - If the user's input is too vague to produce meaningful slices, output the idea with the vague areas as open questions rather than guessing.
-- For BUGFIX classification, note prominently that this should be routed to `/soloflow-quick`.
+- For BUGFIX classification, note prominently that this should be routed to `/soloflow:quick`.

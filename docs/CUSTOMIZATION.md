@@ -8,11 +8,11 @@
 
 ```yaml
 models:
-  verifier: opus           # agents/soloflow-verifier.md
-  executor: sonnet         # agents/soloflow-executor.md
-  idea_extractor: sonnet   # agents/soloflow-idea-extractor.md
-  task_refiner: opus       # agents/soloflow-task-refiner.md
-  compounder: sonnet       # agents/soloflow-compounder.md
+  verifier: opus           # agents/verifier.md
+  executor: sonnet         # agents/soloflow:executor.md
+  idea_extractor: sonnet   # agents/soloflow:idea-extractor.md
+  task_refiner: opus       # agents/task-refiner.md
+  compounder: sonnet       # agents/compounder.md
 ```
 
 To change an agent's model, edit the `model:` field in its YAML frontmatter. For example, use Opus for the executor on architecturally complex tasks where implementation quality matters more than cost.
@@ -21,20 +21,20 @@ To change an agent's model, edit the `model:` field in its YAML frontmatter. For
 
 | Setting | Default | Where Used | Description |
 |---------|---------|------------|-------------|
-| `executor_retry_max` | 3 | `commands/soloflow-executor.md`, `commands/soloflow-quick.md` | Max executor→verifier loops before marking a task as stuck |
-| `analysis_paralysis_threshold` | 5 | `agents/soloflow-executor.md` | Consecutive read-only tool calls before the executor is forced to write code |
-| `checkpoint_interval` | 3 | `commands/soloflow-executor.md` | Tasks completed between progress checkpoints |
-| `max_sprint_tasks` | 10 | `commands/soloflow-executor.md` | Maximum tasks in a single execution sprint |
+| `executor_retry_max` | 3 | `commands/soloflow:executor.md`, `commands/soloflow:quick.md` | Max executor→verifier loops before marking a task as stuck |
+| `analysis_paralysis_threshold` | 5 | `agents/soloflow:executor.md` | Consecutive read-only tool calls before the executor is forced to write code |
+| `checkpoint_interval` | 3 | `commands/soloflow:executor.md` | Tasks completed between progress checkpoints |
+| `max_sprint_tasks` | 10 | `commands/soloflow:executor.md` | Maximum tasks in a single execution sprint |
 
 ## Verification Toggles
 
 | Setting | Default | Where Used | Description |
 |---------|---------|------------|-------------|
-| `run_tests` | true | `hooks/soloflow-task-completed.js` | Run test suite as quality gate |
-| `run_typecheck` | true | `hooks/soloflow-task-completed.js` | Run type checker as quality gate |
-| `run_linter` | true | `hooks/soloflow-post-tool-use.js` | Auto-lint after Write/Edit |
-| `visual_mobile` | false | `agents/soloflow-verifier.md` | Enable Maestro MCP visual verification for mobile |
-| `visual_web` | false | `agents/soloflow-verifier.md` | Enable Playwright MCP visual verification for web |
+| `run_tests` | true | `hooks/task-completed.js` | Run test suite as quality gate |
+| `run_typecheck` | true | `hooks/task-completed.js` | Run type checker as quality gate |
+| `run_linter` | true | `hooks/post-tool-use.js` | Auto-lint after Write/Edit |
+| `visual_mobile` | false | `agents/verifier.md` | Enable Maestro MCP visual verification for mobile |
+| `visual_web` | false | `agents/verifier.md` | Enable Playwright MCP visual verification for web |
 
 To enable visual verification:
 
@@ -53,7 +53,7 @@ visual_screenshot_budget: 3     # Max screenshots per verification run
 visual_prefer_hierarchy: true   # Use inspect_view_hierarchy (~50 tokens) before screenshots (~1600 tokens)
 ```
 
-These are referenced in `agents/soloflow-verifier.md` and `skills/soloflow-visual-verify/SKILL.md`.
+These are referenced in `agents/verifier.md` and `skills/visual-verify/SKILL.md`.
 
 ## Adding Maestro Flows
 

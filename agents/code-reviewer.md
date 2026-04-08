@@ -1,5 +1,5 @@
 ---
-name: soloflow-code-reviewer
+name: code-reviewer
 description: Reviews completed code for quality, reuse, and security using /simplify and /security-review
 model: opus
 tools: [Read, Glob, Grep, Bash, Skill]

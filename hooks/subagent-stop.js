@@ -29,19 +29,19 @@ process.stdin.on('end', () => {
     let context = '';
 
     // Identify which soloflow agent completed
-    if (agentName.includes('executor') || agentName.includes('soloflow-executor')) {
+    if (agentName.includes('executor')) {
       context = `Executor subagent completed. Review the executor's status report and proceed with verification if status is COMPLETED.`;
-    } else if (agentName.includes('verifier') || agentName.includes('soloflow-verifier')) {
+    } else if (agentName.includes('verifier')) {
       context = `Verifier subagent completed. Review the verification report and handle the verdict (APPROVED/NEEDS_CHANGES/HUMAN_NEEDED).`;
-    } else if (agentName.includes('code-reviewer') || agentName.includes('soloflow-code-reviewer')) {
+    } else if (agentName.includes('code-reviewer')) {
       context = `Code reviewer completed. Review the code review report and handle the verdict (CLEAN/IMPROVEMENTS_NEEDED/SECURITY_ISSUE).`;
-    } else if (agentName.includes('researcher') || agentName.includes('soloflow-researcher')) {
+    } else if (agentName.includes('researcher')) {
       context = `Researcher completed. Write the research report and proceed to task refinement.`;
-    } else if (agentName.includes('idea-extractor') || agentName.includes('soloflow-idea-extractor')) {
+    } else if (agentName.includes('idea-extractor')) {
       context = `Idea extractor completed. Write the idea file and present it to the user for review.`;
-    } else if (agentName.includes('task-refiner') || agentName.includes('soloflow-task-refiner')) {
+    } else if (agentName.includes('task-refiner')) {
       context = `Task refiner completed. Write the plan files and present them to the user for review.`;
-    } else if (agentName.includes('compounder') || agentName.includes('soloflow-compounder')) {
+    } else if (agentName.includes('compounder')) {
       context = `Compounder completed. Solution files have been written to the archive.`;
     }
 

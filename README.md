@@ -14,13 +14,13 @@ git clone https://github.com/kesteva/soloflow .claude/soloflow
 bash .claude/soloflow/scripts/install.sh
 
 # Start a Claude Code session, then try:
-/soloflow-quick "fix the loading indicator showing a question mark"
+/soloflow:quick "fix the loading indicator showing a question mark"
 
 # For full features, run the pipeline stage by stage:
-/soloflow-idea-extractor "add retry UI for failed content generation"
-/soloflow-planner IDEA-001
-/soloflow-executor
-/soloflow-compound
+/soloflow:idea-extractor "add retry UI for failed content generation"
+/soloflow:planner IDEA-001
+/soloflow:executor
+/soloflow:compound
 ```
 
 ## Installation
@@ -44,13 +44,13 @@ The install script:
 
 | Command | When to Use |
 |---------|-------------|
-| `/soloflow-idea-extractor <description>` | Phase 1 — extract a structured idea from raw input, with optional research |
-| `/soloflow-planner <IDEA-NNN>` | Phase 2 — refine an approved idea into execution-ready task plans |
-| `/soloflow-executor [IDEA-NNN or TASK list]` | Phase 3 — run an execution sprint (executor → verifier → code reviewer) |
-| `/soloflow-compound [SPRINT-NNN]` | Phase 5 — extract reusable learnings from a completed sprint |
-| `/soloflow-quick <bug>` | Fast path for bugfixes — skips idea extraction and refinement |
-| `/soloflow-status` | Check current sprint state, task progress, and review queue |
-| `/soloflow-verify` | Run visual verification standalone (requires Maestro or Playwright) |
+| `/soloflow:idea-extractor <description>` | Phase 1 — extract a structured idea from raw input, with optional research |
+| `/soloflow:planner <IDEA-NNN>` | Phase 2 — refine an approved idea into execution-ready task plans |
+| `/soloflow:executor [IDEA-NNN or TASK list]` | Phase 3 — run an execution sprint (executor → verifier → code reviewer) |
+| `/soloflow:compound [SPRINT-NNN]` | Phase 5 — extract reusable learnings from a completed sprint |
+| `/soloflow:quick <bug>` | Fast path for bugfixes — skips idea extraction and refinement |
+| `/soloflow:status` | Check current sprint state, task progress, and review queue |
+| `/soloflow:verify` | Run visual verification standalone (requires Maestro or Playwright) |
 
 ## How It Works
 

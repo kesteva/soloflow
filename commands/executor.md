@@ -1,10 +1,10 @@
 ---
 description: Run an execution sprint over ready tasks in the backlog
 argument-hint: [optional: TASK-NNN TASK-NNN ... or idea ID to filter]
-allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent]
+allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 
-# /soloflow-executor
+# /soloflow:executor
 
 Phase 3 of the SoloFlow pipeline. Creates a sprint from ready tasks in the backlog and runs the executor → verifier → code-reviewer loop until the sprint is complete.
 
@@ -14,8 +14,8 @@ Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDE
 
 ## Step 1: Initialize
 
-1. If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow-idea-extractor` first." and stop.
-2. Read `.soloflow/checkpoint.md` — if it indicates an active sprint mid-execution, ask the user: "Sprint {SPRINT-NNN} is in progress. Resume it or start fresh?"
+1. If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:idea-extractor` first." and stop.
+2. Read `.soloflow/checkpoint.md` — if it indicates an active sprint mid-execution, use the **AskUserQuestion** tool (question: "Sprint {SPRINT-NNN} is in progress. Resume it or start fresh?", options: **Resume** / **Start fresh**). Do not print the choice as prose.
    - If resume: load `sprint.json` and continue the execution loop below.
    - If fresh: archive the stale sprint and continue.
 3. Read `.soloflow/active/backlog.json`.
@@ -26,7 +26,7 @@ Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDE
    - If `$ARGUMENTS` names specific task IDs, include only those.
    - If `$ARGUMENTS` names an idea (`IDEA-NNN`), include all ready tasks belonging to that idea.
    - Otherwise, include all `status: "ready"` tasks up to `max_sprint_tasks` (config default: 10).
-2. If no tasks match, tell the user: "No ready tasks in backlog. Run `/soloflow-planner IDEA-NNN` first." and stop.
+2. If no tasks match, tell the user: "No ready tasks in backlog. Run `/soloflow:planner IDEA-NNN` first." and stop.
 3. Read `.soloflow/counters.json` for sprint counter.
 4. Generate sprint ID: `SPRINT-{padded sprints + 1}`.
 5. Create `.soloflow/active/sprint.json` with:
@@ -42,21 +42,21 @@ Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDE
 
    a. Set task `status: "in_progress"` in `sprint.json`.
 
-   b. Spawn **soloflow-executor** agent with the plan content. Wait for result.
+   b. Spawn **executor** agent with the plan content. Wait for result.
 
    c. Handle executor result:
       - **COMPLETED** → proceed to verification.
       - **BLOCKED** → update status to `"blocked"` in `sprint.json`, continue to next task.
       - **STUCK** → write stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md`, update status in `sprint.json`, continue.
 
-   d. Spawn **soloflow-verifier** with plan + executor report. Wait for verdict.
+   d. Spawn **verifier** with plan + executor report. Wait for verdict.
 
    e. Handle verifier verdict:
       - **APPROVED** → proceed to code review (step f).
       - **NEEDS_CHANGES** → if loops < `executor_retry_max` (config default: 3), re-spawn executor with verifier feedback. Otherwise write stuck report.
       - **HUMAN_NEEDED** → add to `.soloflow/human-review-queue.md`, update status in `sprint.json`.
 
-   f. Spawn **soloflow-code-reviewer** with the plan + executor's changed files list. Wait for verdict.
+   f. Spawn **code-reviewer** with the plan + executor's changed files list. Wait for verdict.
       - **CLEAN** → write done report to `.soloflow/archive/done/TASK-{NNN}-done.md`, remove task from `sprint.json`.
       - **IMPROVEMENTS_NEEDED** (first time only) → re-spawn executor with review feedback, then re-verify. Does NOT consume the executor retry budget.
       - **SECURITY_ISSUE** → escalate to HUMAN_NEEDED. Add to `.soloflow/human-review-queue.md`, update status in `sprint.json`.
@@ -86,7 +86,7 @@ Sprint SPRINT-{NNN} complete.
 - Human-needed: {count}
 - Total executor loops: {count}
 
-Next step: /soloflow-compound  (to extract learnings from this sprint)
+Next step: /soloflow:compound  (to extract learnings from this sprint)
 ```
 
 ---

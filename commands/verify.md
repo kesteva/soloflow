@@ -1,10 +1,10 @@
 ---
 description: Run standalone visual verification using Maestro MCP (mobile) and/or Playwright MCP (web)
 argument-hint: <screen or feature to verify>
-allowed-tools: [Read, Glob, Grep, Bash]
+allowed-tools: [Read, Glob, Grep, Bash, AskUserQuestion]
 ---
 
-# /soloflow-verify
+# /soloflow:verify
 
 You are running standalone visual verification. The user wants to visually check a screen or feature without running the full workflow.
 
@@ -73,4 +73,4 @@ Output a visual verification report:
 
 - Do NOT run `maestro test` via Bash while using Maestro MCP tools — both use port 7001.
 - Prefer `inspect_view_hierarchy` over `take_screenshot` when checking element presence or layout.
-- If the user's target is too vague, ask for clarification before proceeding.
+- If the user's target is too vague, ask for clarification before proceeding. Prefer the **AskUserQuestion** tool when the clarification can be framed as a choice between candidate targets; use a free-form text question only when genuinely open-ended.

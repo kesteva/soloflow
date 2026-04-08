@@ -5,7 +5,7 @@
 
 const path = require('path');
 const { execSync } = require('child_process');
-const { detectLinter } = require(path.join(__dirname, 'soloflow-detect-tools'));
+const { detectLinter } = require(path.join(__dirname, 'detect-tools'));
 
 let input = '';
 process.stdin.on('data', chunk => { input += chunk; });

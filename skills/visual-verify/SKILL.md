@@ -1,5 +1,5 @@
 ---
-name: soloflow-visual-verify
+name: visual-verify
 description: This skill should be used when verifying UI changes visually using Maestro MCP (mobile) or Playwright MCP (web). Provides patterns for availability checks, screenshot comparison, view hierarchy inspection, and automated visual testing flows.
 version: 0.2.0
 ---

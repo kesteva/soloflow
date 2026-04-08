@@ -27,7 +27,7 @@ Open an issue before submitting a PR. SoloFlow is intentionally minimal — not 
 - **Commands** (`commands/`): Markdown with YAML frontmatter (`description`, `argument-hint`, `allowed-tools`). Instructions for the main session.
 - **Skills** (`skills/`): `SKILL.md` in a named directory. Patterns and instructions for specific capabilities.
 - **Config**: YAML format in `config/`.
-- **Naming**: All files are prefixed with `soloflow-`.
+- **Naming**: Files inside `agents/`, `commands/`, `hooks/`, and `skills/` are *not* prefixed — the `soloflow` plugin namespace is applied at invocation time (e.g. `/soloflow:planner`, skill id `soloflow:visual-verify`).
 
 ## Testing
 
@@ -35,8 +35,8 @@ There is no automated test suite — SoloFlow is session-based tooling tested by
 
 1. Install SoloFlow in a scratch project (`bash scripts/install.sh`)
 2. Start a Claude Code session
-3. Run `/soloflow-quick "add a hello world file"` to test the inner loop
-4. Run `/soloflow-idea-extractor "add a new feature"` → `/soloflow-planner IDEA-001` → `/soloflow-executor` → `/soloflow-compound` to test the full pipeline
+3. Run `/soloflow:quick "add a hello world file"` to test the inner loop
+4. Run `/soloflow:idea-extractor "add a new feature"` → `/soloflow:planner IDEA-001` → `/soloflow:executor` → `/soloflow:compound` to test the full pipeline
 5. Verify hooks fire (session-start injects state, post-tool-use lints, task-completed runs tests)
 
 ## License

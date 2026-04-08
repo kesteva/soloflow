@@ -24,9 +24,9 @@ Six-phase workflow orchestrated via Claude Code hooks and agent definitions:
 ### Components
 
 - **`agents/`** — Agent definitions as markdown with YAML frontmatter
-- **`hooks/`** — JavaScript Claude Code hooks (all prefixed `soloflow-*`)
-- **`commands/`** — Slash command definitions (all prefixed `soloflow-*`: `/soloflow-idea-extractor`, `/soloflow-planner`, `/soloflow-executor`, `/soloflow-compound`, `/soloflow-quick`, `/soloflow-status`, `/soloflow-verify`)
-- **`skills/`** — Skill definitions (e.g., `soloflow-visual-verify/`)
+- **`hooks/`** — JavaScript Claude Code hooks, declared in `hooks/hooks.json` with `${CLAUDE_PLUGIN_ROOT}` paths
+- **`commands/`** — Slash command definitions, namespaced as `/soloflow:<name>`: `/soloflow:idea-extractor`, `/soloflow:planner`, `/soloflow:executor`, `/soloflow:compound`, `/soloflow:quick`, `/soloflow:status`, `/soloflow:verify`
+- **`skills/`** — Skill definitions (e.g., `visual-verify/`)
 - **`.mcp.json`** — MCP server declarations for Maestro and Playwright
 - **`scripts/`** — Shell scripts (`init.sh`, `install.sh`, `uninstall.sh`)
 - **`config/`** — `defaults.yaml` configuration

@@ -1,5 +1,5 @@
 ---
-name: soloflow-compounder
+name: compounder
 description: Captures reusable patterns, anti-patterns, decisions, and process learnings from completed sprints
 model: sonnet
 tools: [Read, Write, Glob, Grep]
