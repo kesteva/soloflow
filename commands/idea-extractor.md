@@ -14,7 +14,7 @@ The user's idea is: **$ARGUMENTS**
 
 ## Step 1: Initialize
 
-1. If `.soloflow/` does not exist, run `scripts/init.sh` to create it.
+1. If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
 2. Read `.soloflow/counters.json` for current counters.
 
 ## Step 2: Extract the Idea

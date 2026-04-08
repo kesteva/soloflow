@@ -14,7 +14,7 @@ Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDE
 
 ## Step 1: Initialize
 
-1. If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:idea-extractor` first." and stop.
+1. If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
 2. Read `.soloflow/checkpoint.md` — if it indicates an active sprint mid-execution, use the **AskUserQuestion** tool (question: "Sprint {SPRINT-NNN} is in progress. Resume it or start fresh?", options: **Resume** / **Start fresh**). Do not print the choice as prose.
    - If resume: load `sprint.json` and continue the execution loop below.
    - If fresh: archive the stale sprint and continue.

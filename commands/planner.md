@@ -12,6 +12,10 @@ The target idea is: **$ARGUMENTS**
 
 ---
 
+## Step 0: Check initialization
+
+If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
+
 ## Step 1: Load the Idea
 
 1. Parse `$ARGUMENTS` as an idea ID (e.g., `IDEA-001`). If empty or malformed, list `.soloflow/active/ideas/` and use the **AskUserQuestion** tool to let the user pick which idea to refine — pass the discovered idea IDs as options rather than printing them as prose.

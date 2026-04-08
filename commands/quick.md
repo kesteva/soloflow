@@ -10,13 +10,9 @@ You are running the SoloFlow quick bugfix workflow. The user has described a bug
 
 The bug description is: **$ARGUMENTS**
 
-## Step 1: Initialize
+## Step 1: Check initialization
 
-Check if `.soloflow/` directory exists. If not, run:
-```
-bash scripts/init.sh
-```
-(The `scripts/` path is relative to the SoloFlow plugin root, which may be in `.claude/soloflow/` or a plugin directory.)
+If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
 
 ## Step 2: Ground the Bug
 

@@ -10,6 +10,10 @@ You are running standalone visual verification. The user wants to visually check
 
 The target to verify is: **$ARGUMENTS**
 
+## Step 0: Check initialization
+
+If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
+
 ## Step 1: Check Availability
 
 Before any MCP interaction, confirm the tools are installed:

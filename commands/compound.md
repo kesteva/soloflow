@@ -12,6 +12,10 @@ Target sprint: **$ARGUMENTS** (optional — defaults to the most recently comple
 
 ---
 
+## Step 0: Check initialization
+
+If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
+
 ## Step 1: Identify the Sprint
 
 1. If `$ARGUMENTS` names a sprint (`SPRINT-NNN`), use it.
