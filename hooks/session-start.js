@@ -6,9 +6,68 @@ const path = require('path');
 const cwd = process.cwd();
 const tasksDir = path.join(cwd, '.soloflow');
 
-// Silent exit if SoloFlow not initialized in this project
+let autoInitialized = false;
+
+// Auto-initialize .soloflow/ on first session, so the plugin is usable
+// immediately after `/plugin install soloflow` without a separate setup step.
+//
+// Guards:
+//   - Only inside a git repository (avoids polluting $HOME or scratch dirs).
+//   - Skipped entirely when SOLOFLOW_AUTOINIT=0 (opt-out for CI/experiments).
 if (!fs.existsSync(tasksDir)) {
-  process.exit(0);
+  const autoInitDisabled = process.env.SOLOFLOW_AUTOINIT === '0';
+  const insideGitRepo = fs.existsSync(path.join(cwd, '.git'));
+
+  if (autoInitDisabled || !insideGitRepo) {
+    process.exit(0);
+  }
+
+  try {
+    initStateDir(tasksDir);
+    autoInitialized = true;
+  } catch (e) {
+    // Don't block session start if init fails — just bail silently.
+    process.exit(0);
+  }
+}
+
+function initStateDir(root) {
+  const subdirs = [
+    'active/ideas',
+    'active/research',
+    'active/plans',
+    'active/stuck',
+    'archive/done',
+    'archive/reviews',
+    'archive/solutions',
+  ];
+  for (const sub of subdirs) {
+    fs.mkdirSync(path.join(root, sub), { recursive: true });
+    fs.writeFileSync(path.join(root, sub, '.gitkeep'), '');
+  }
+
+  fs.writeFileSync(
+    path.join(root, 'active', 'backlog.json'),
+    JSON.stringify({ version: 2, tasks: {} }, null, 2) + '\n'
+  );
+  fs.writeFileSync(
+    path.join(root, 'active', 'sprint.json'),
+    JSON.stringify({ version: 2, sprint: null, tasks: {} }, null, 2) + '\n'
+  );
+  fs.writeFileSync(
+    path.join(root, 'counters.json'),
+    JSON.stringify({ ideas: 0, tasks: 0, sprints: 0, solutions: 0 }, null, 2) + '\n'
+  );
+  fs.writeFileSync(
+    path.join(root, 'checkpoint.md'),
+    '---\nlast_updated: null\nactive_sprint: null\ntasks_in_flight: []\n---\n\n' +
+    '# Session Checkpoint\n\n' +
+    'No checkpoint data yet. Updated by the pre-compact hook to preserve state across context compactions.\n'
+  );
+  fs.writeFileSync(
+    path.join(root, 'human-review-queue.md'),
+    '---\npending_count: 0\nitems: []\n---\n\n# Human Review Queue\n\nNo items pending review.\n'
+  );
 }
 
 const backlogPath = path.join(tasksDir, 'active', 'backlog.json');
@@ -18,6 +77,10 @@ const reviewQueuePath = path.join(tasksDir, 'human-review-queue.md');
 const doneDir = path.join(tasksDir, 'archive', 'done');
 
 let lines = ['## SoloFlow Status'];
+
+if (autoInitialized) {
+  lines.push('Initialized `.soloflow/` in this project. Run `/soloflow:idea-extractor "<description>"` to create your first idea, or set `SOLOFLOW_AUTOINIT=0` to disable auto-init.');
+}
 
 // Read state from split files
 if (fs.existsSync(backlogPath) && fs.existsSync(sprintPath)) {
