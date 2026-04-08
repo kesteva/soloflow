@@ -2,6 +2,25 @@
 
 All notable changes to SoloFlow are documented in this file.
 
+## [0.2.0] - 2026-04-08
+
+### Changed (BREAKING)
+- All agent, command, hook, and skill files renamed to drop the `soloflow-` prefix. The `soloflow` plugin namespace is applied at invocation time instead.
+- Slash commands moved from `/soloflow-<name>` to `/soloflow:<name>` (e.g. `/soloflow-planner` → `/soloflow:planner`). Existing projects must reinstall.
+- `scripts/install.sh` rewritten as a copy-based installer (no more symlinks). Works on Windows without Developer Mode, survives source-clone relocation, supports per-project version pinning.
+
+### Added
+- `/plugin install soloflow` is now the primary install path. The repo ships as a valid Claude Code plugin with auto-discovery of agents/commands/hooks/skills.
+- SessionStart hook auto-initializes `.soloflow/` on first session inside a git repo (opt out with `SOLOFLOW_AUTOINIT=0`), so no separate setup step is needed after plugin install.
+- `scripts/update.sh` — manifest-diff updater for the script-install fallback. Copies new files, prunes removed ones, leaves `.soloflow/` untouched.
+- `.claude/soloflow-install/manifest.json` and `VERSION` stamp track the installed file set for idempotent reinstall/update/uninstall.
+- `docs/PLUGIN-MIGRATION-PLAN.md` documents the migration from symlink install to plugin distribution.
+
+### Migration from 0.1.0
+1. Uninstall the old scaffolding: `bash <path-to-soloflow>/scripts/uninstall.sh --scaffolding` (preserves `.soloflow/`).
+2. Install the plugin: `/plugin install soloflow` (or re-run the new `scripts/install.sh` for the vendored path).
+3. Update any scripts or docs referencing `/soloflow-<name>` to `/soloflow:<name>`.
+
 ## [0.1.0] - 2026-04-04
 
 ### Added

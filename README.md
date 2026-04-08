@@ -6,17 +6,21 @@ Automates the full product development lifecycle: **idea extraction → refineme
 
 ## Quick Start
 
-```bash
-# Clone into your project
-git clone https://github.com/kesteva/soloflow .claude/soloflow
+Install the plugin inside Claude Code:
 
-# Install (symlinks agents, commands, registers hooks)
-bash .claude/soloflow/scripts/install.sh
+```
+/plugin install soloflow
+```
 
-# Start a Claude Code session, then try:
+On first session, `.soloflow/` is auto-initialized in your project root. Then try:
+
+```
 /soloflow:quick "fix the loading indicator showing a question mark"
+```
 
-# For full features, run the pipeline stage by stage:
+For full features, run the pipeline stage by stage:
+
+```
 /soloflow:idea-extractor "add retry UI for failed content generation"
 /soloflow:planner IDEA-001
 /soloflow:executor
@@ -25,20 +29,33 @@ bash .claude/soloflow/scripts/install.sh
 
 ## Installation
 
-**Per-project (recommended):**
+### Plugin (recommended)
 
-```bash
-git clone https://github.com/kesteva/soloflow .claude/soloflow
-bash .claude/soloflow/scripts/install.sh
+```
+/plugin install soloflow
 ```
 
-The install script:
-- Symlinks agent definitions to `.claude/agents/`
-- Symlinks commands to `.claude/commands/soloflow/`
-- Registers hooks in `.claude/settings.json`
-- Creates the `.soloflow/` state directory
+Or, from a git URL:
 
-**Manual setup:** See the install script source for the exact symlinks and hook registrations if you prefer to configure manually.
+```
+claude plugin install https://github.com/kesteva/soloflow
+```
+
+The plugin auto-discovers agents, commands, hooks, and skills from the repo layout and registers everything automatically. Updates are handled with `/plugin update soloflow`. On first session in a project, `.soloflow/` is scaffolded and staged for git (set `SOLOFLOW_AUTOINIT=0` to disable).
+
+### Script fallback (vendored install)
+
+For CI environments, air-gapped machines, Windows users without Developer Mode, or anyone who prefers explicit control:
+
+```bash
+git clone https://github.com/kesteva/soloflow /tmp/soloflow
+bash /tmp/soloflow/scripts/install.sh /path/to/your/project
+```
+
+This **copies** (not symlinks) agents, commands, skills, and hook scripts into your project's `.claude/` directory, registers hooks in `.claude/settings.json`, writes a `.claude/soloflow-install/VERSION` stamp, and tracks installed files in `.claude/soloflow-install/manifest.json` for idempotent updates.
+
+To update: `bash /tmp/soloflow/scripts/update.sh /path/to/your/project`
+To uninstall: `bash /tmp/soloflow/scripts/uninstall.sh /path/to/your/project`
 
 ## Commands
 
@@ -96,7 +113,7 @@ soloflow/
 ├── hooks/           # Claude Code hooks (Node.js)
 ├── skills/          # Skill definitions (visual verification)
 ├── config/          # Default configuration (defaults.yaml)
-├── scripts/         # Shell scripts (install.sh, init.sh, uninstall.sh)
+├── scripts/         # Shell scripts (install.sh, update.sh, uninstall.sh, init.sh)
 ├── docs/            # Documentation
 └── .claude-plugin/  # Plugin manifest
 ```

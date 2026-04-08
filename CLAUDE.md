@@ -28,7 +28,7 @@ Six-phase workflow orchestrated via Claude Code hooks and agent definitions:
 - **`commands/`** — Slash command definitions, namespaced as `/soloflow:<name>`: `/soloflow:idea-extractor`, `/soloflow:planner`, `/soloflow:executor`, `/soloflow:compound`, `/soloflow:quick`, `/soloflow:status`, `/soloflow:verify`
 - **`skills/`** — Skill definitions (e.g., `visual-verify/`)
 - **`.mcp.json`** — MCP server declarations for Maestro and Playwright
-- **`scripts/`** — Shell scripts (`init.sh`, `install.sh`, `uninstall.sh`)
+- **`scripts/`** — Shell scripts for the script-install fallback (`install.sh`, `update.sh`, `uninstall.sh`, `init.sh`). Primary install path is `/plugin install soloflow`.
 - **`config/`** — `defaults.yaml` configuration
 
 ### State Layer
