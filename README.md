@@ -12,9 +12,10 @@ Install the plugin inside Claude Code:
 /plugin install soloflow
 ```
 
-On first session, `.soloflow/` is auto-initialized in your project root. Then try:
+Start a Claude Code session in your project and initialize state:
 
 ```
+/soloflow:init
 /soloflow:quick "fix the loading indicator showing a question mark"
 ```
 
@@ -41,7 +42,7 @@ Or, from a git URL:
 claude plugin install https://github.com/kesteva/soloflow
 ```
 
-The plugin auto-discovers agents, commands, hooks, and skills from the repo layout and registers everything automatically. Updates are handled with `/plugin update soloflow`. On first session in a project, `.soloflow/` is scaffolded and staged for git (set `SOLOFLOW_AUTOINIT=0` to disable).
+The plugin auto-discovers agents, commands, hooks, and skills from the repo layout and registers everything automatically. Updates are handled with `/plugin update soloflow`. On first session in a project, SoloFlow prompts you to run `/soloflow:init` — nothing is written to your project until you opt in explicitly.
 
 ### Script fallback (vendored install)
 
@@ -61,6 +62,7 @@ To uninstall: `bash /tmp/soloflow/scripts/uninstall.sh /path/to/your/project`
 
 | Command | When to Use |
 |---------|-------------|
+| `/soloflow:init` | One-time setup — scaffold `.soloflow/` state in the current project |
 | `/soloflow:idea-extractor <description>` | Phase 1 — extract a structured idea from raw input, with optional research |
 | `/soloflow:planner <IDEA-NNN>` | Phase 2 — refine an approved idea into execution-ready task plans |
 | `/soloflow:executor [IDEA-NNN or TASK list]` | Phase 3 — run an execution sprint (executor → verifier → code reviewer) |

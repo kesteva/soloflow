@@ -11,7 +11,9 @@ All notable changes to SoloFlow are documented in this file.
 
 ### Added
 - `/plugin install soloflow` is now the primary install path. The repo ships as a valid Claude Code plugin with auto-discovery of agents/commands/hooks/skills.
-- SessionStart hook auto-initializes `.soloflow/` on first session inside a git repo (opt out with `SOLOFLOW_AUTOINIT=0`), so no separate setup step is needed after plugin install.
+- `/soloflow:init` — new command that explicitly scaffolds `.soloflow/` in the current project. Required once per project before any other phase command will run.
+- SessionStart hook detects missing `.soloflow/` and prompts the user to run `/soloflow:init` — no silent file creation.
+- All seven phase commands (`idea-extractor`, `planner`, `executor`, `compound`, `quick`, `status`, `verify`) gate on `.soloflow/` existence and refuse to run if missing, pointing the user at `/soloflow:init`.
 - `scripts/update.sh` — manifest-diff updater for the script-install fallback. Copies new files, prunes removed ones, leaves `.soloflow/` untouched.
 - `.claude/soloflow-install/manifest.json` and `VERSION` stamp track the installed file set for idempotent reinstall/update/uninstall.
 - `docs/PLUGIN-MIGRATION-PLAN.md` documents the migration from symlink install to plugin distribution.
