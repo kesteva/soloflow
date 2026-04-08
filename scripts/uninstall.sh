@@ -1,14 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# SoloFlow uninstaller — removes agents, commands, and hooks from a target project.
-# Optionally also removes task history and state.
+# SoloFlow uninstaller (script fallback) — removes the files recorded in
+# `.claude/soloflow-install/manifest.json` and unregisters hooks from
+# `.claude/settings.json`. Optionally also removes `.soloflow/` data.
+#
+# If SoloFlow was installed via the Claude Code plugin system
+# (`/plugin install soloflow`), use `/plugin uninstall soloflow` instead.
 #
 # Usage: bash uninstall.sh [project_dir] [flags]
 # Defaults to current directory if no project_dir given.
 #
 # Flags:
-#   --scaffolding   Remove only agents/commands/hooks. Keep .soloflow/ data.
+#   --scaffolding   Remove only installed files + hook entries. Keep .soloflow/.
 #   --all           Remove scaffolding AND .soloflow/ data (task history, ideas, archive).
 #   --dry-run       Show what would be removed without doing it.
 #
@@ -28,15 +32,24 @@ for arg in "$@"; do
 done
 
 PROJECT_DIR="$(cd "${PROJECT_ARG:-.}" && pwd)"
+RUNTIME_DIR="$PROJECT_DIR/.claude/soloflow-install"
+MANIFEST="$RUNTIME_DIR/manifest.json"
 
 echo "Uninstalling SoloFlow from $PROJECT_DIR"
 if $DRY_RUN; then echo "  (dry run — no changes will be made)"; fi
 echo ""
 
+if [ ! -f "$MANIFEST" ]; then
+  echo "  [error] no script install detected (missing $MANIFEST)" >&2
+  echo "          If you installed via the Claude Code plugin system, run" >&2
+  echo "          '/plugin uninstall soloflow' inside Claude Code instead." >&2
+  exit 1
+fi
+
 # --- Prompt for mode if not specified ---
 if [ -z "$MODE" ]; then
   echo "What would you like to remove?"
-  echo "  1) Scaffolding only — agents, commands, hooks (keeps .soloflow/ task history)"
+  echo "  1) Scaffolding only — installed files + hook entries (keeps .soloflow/)"
   echo "  2) Everything       — scaffolding AND .soloflow/ data (ideas, plans, archive)"
   echo ""
   read -r -p "Choose [1/2]: " choice
@@ -48,86 +61,101 @@ if [ -z "$MODE" ]; then
   echo ""
 fi
 
-run() {
-  if $DRY_RUN; then
-    echo "  [dry-run] $1"
-  else
-    eval "$2"
-    echo "  [done] $1"
-  fi
-}
-
-# --- Remove agent files ---
-if [ -d "$PROJECT_DIR/.claude/agents" ]; then
-  for agent in "$PROJECT_DIR"/.claude/agents/soloflow-*.md; do
-    [ -e "$agent" ] || [ -L "$agent" ] || continue
-    name="$(basename "$agent")"
-    run "remove agents/$name" "rm -f '$agent'"
-  done
-fi
-
-# --- Remove command files ---
-if [ -d "$PROJECT_DIR/.claude/commands/soloflow" ]; then
-  for cmd in "$PROJECT_DIR"/.claude/commands/soloflow/soloflow-*.md; do
-    [ -e "$cmd" ] || [ -L "$cmd" ] || continue
-    name="$(basename "$cmd")"
-    run "remove commands/soloflow/$name" "rm -f '$cmd'"
-  done
-
-  if $DRY_RUN; then
-    echo "  [dry-run] remove commands/soloflow/ (if empty)"
-  else
-    rmdir "$PROJECT_DIR/.claude/commands/soloflow" 2>/dev/null && \
-      echo "  [done] remove commands/soloflow/" || true
-  fi
-fi
-
-# --- Remove hooks from settings.json ---
-SETTINGS_FILE="$PROJECT_DIR/.claude/settings.json"
-
-if [ -f "$SETTINGS_FILE" ]; then
-  if $DRY_RUN; then
-    echo "  [dry-run] remove soloflow hooks from settings.json"
-  else
-    node -e "
+# --- Remove tracked files + unregister hooks via node ---
+node <<NODE
 const fs = require('fs');
+const path = require('path');
 
-const settingsFile = '$SETTINGS_FILE';
-const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+const projectDir = '$PROJECT_DIR';
+const runtimeDir = '$RUNTIME_DIR';
+const manifestPath = '$MANIFEST';
+const dryRun = $DRY_RUN;
+const settingsFile = path.join(projectDir, '.claude', 'settings.json');
 
-if (settings.hooks) {
-  let removed = 0;
-  for (const event of Object.keys(settings.hooks)) {
-    const before = settings.hooks[event].length;
-    settings.hooks[event] = settings.hooks[event].filter(group =>
-      !(group.hooks && group.hooks.some(h => h.command && h.command.includes('soloflow')))
-    );
-    removed += before - settings.hooks[event].length;
+const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 
-    if (settings.hooks[event].length === 0) {
-      delete settings.hooks[event];
+// Remove each tracked file.
+for (const rel of manifest.files) {
+  const abs = path.join(projectDir, rel);
+  if (fs.existsSync(abs)) {
+    if (dryRun) {
+      console.log('  [dry-run] remove ' + rel);
+    } else {
+      fs.unlinkSync(abs);
+      console.log('  [done] remove ' + rel);
     }
   }
-
-  if (Object.keys(settings.hooks).length === 0) {
-    delete settings.hooks;
-  }
-
-  fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
-  console.log('  [done] removed ' + removed + ' hook(s) from settings.json');
-} else {
-  console.log('  [skip] no hooks found in settings.json');
 }
-"
-  fi
-else
-  echo "  [skip] no settings.json found"
-fi
+
+// Prune empty directories under .claude/ (bottom-up).
+const dirsToCheck = new Set();
+for (const rel of manifest.files) {
+  let dir = path.dirname(path.join(projectDir, rel));
+  while (dir.startsWith(path.join(projectDir, '.claude'))) {
+    dirsToCheck.add(dir);
+    dir = path.dirname(dir);
+  }
+}
+// Sort deepest-first so we remove children before parents.
+const sortedDirs = Array.from(dirsToCheck).sort((a, b) => b.length - a.length);
+for (const d of sortedDirs) {
+  try {
+    if (!fs.existsSync(d)) continue;
+    if (fs.readdirSync(d).length === 0) {
+      if (dryRun) {
+        console.log('  [dry-run] rmdir ' + path.relative(projectDir, d));
+      } else {
+        fs.rmdirSync(d);
+        console.log('  [done] rmdir ' + path.relative(projectDir, d));
+      }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+// Remove runtime dir (VERSION, manifest.json, hooks/) entirely.
+if (fs.existsSync(runtimeDir)) {
+  if (dryRun) {
+    console.log('  [dry-run] rm -rf ' + path.relative(projectDir, runtimeDir));
+  } else {
+    fs.rmSync(runtimeDir, { recursive: true, force: true });
+    console.log('  [done] rm -rf ' + path.relative(projectDir, runtimeDir));
+  }
+}
+
+// Unregister hooks by absolute-path substring match against the old runtime dir.
+if (fs.existsSync(settingsFile)) {
+  const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+  if (settings.hooks) {
+    let removed = 0;
+    for (const event of Object.keys(settings.hooks)) {
+      const before = settings.hooks[event].length;
+      settings.hooks[event] = settings.hooks[event].filter((group) =>
+        !(group.hooks && group.hooks.some((h) => h.command && h.command.includes(runtimeDir)))
+      );
+      removed += before - settings.hooks[event].length;
+      if (settings.hooks[event].length === 0) delete settings.hooks[event];
+    }
+    if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
+
+    if (dryRun) {
+      console.log('  [dry-run] unregister ' + removed + ' hook(s) from settings.json');
+    } else {
+      fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+      console.log('  [done] unregistered ' + removed + ' hook(s) from settings.json');
+    }
+  }
+}
+NODE
 
 # --- Remove state directory (only in --all mode) ---
 if [ "$MODE" = "all" ]; then
   if [ -d "$PROJECT_DIR/.soloflow" ]; then
-    run "remove .soloflow/ (task history, ideas, archive)" "rm -rf '$PROJECT_DIR/.soloflow'"
+    if $DRY_RUN; then
+      echo "  [dry-run] rm -rf .soloflow/ (task history, ideas, archive)"
+    else
+      rm -rf "$PROJECT_DIR/.soloflow"
+      echo "  [done] rm -rf .soloflow/ (task history, ideas, archive)"
+    fi
   else
     echo "  [skip] no .soloflow/ directory"
   fi
