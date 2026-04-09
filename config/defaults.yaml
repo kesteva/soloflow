@@ -37,6 +37,19 @@ verification:
   visual_screenshot_budget: 3   # max screenshots per verification run
   visual_prefer_hierarchy: true # use inspect_view_hierarchy before screenshots
 
+git:
+  # Whether /soloflow:executor runs each invocation on a dedicated branch that
+  # gets merged back into the starting branch after human review.
+  # Values: always | never | prompt
+  # This setting IS runtime-read by commands/executor.md (unlike most entries
+  # in this file). Override per-project by creating .soloflow/config.json with:
+  #   { "git": { "branch_per_run": "always" } }
+  branch_per_run: prompt
+  # Format string for the run branch. {timestamp} → YYYYMMDD-HHMMSS, {sprint_id} → SPRINT-NNN
+  branch_name_format: "soloflow/run-{timestamp}-{sprint_id}"
+  # Merge flag passed to `git merge` when merging the run branch back.
+  merge_strategy: "--no-ff"
+
 paths:
   state_dir: .soloflow
   active_dir: .soloflow/active

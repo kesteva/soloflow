@@ -2,7 +2,17 @@
 
 ## Configuration Overview
 
-`config/defaults.yaml` documents all configurable values. These values are embedded directly in agent definitions (`.md` files) and hook scripts (`.js` files) — the config file is not read at runtime. To customize behavior, edit the relevant source file directly.
+`config/defaults.yaml` documents all configurable values. Most of these values are embedded directly in agent definitions (`.md` files) and hook scripts (`.js` files) — the config file is not read at runtime for those. To customize behavior, edit the relevant source file directly.
+
+A small number of values **are** runtime-read (noted explicitly below). For those, you can override the plugin default per-project by creating `.soloflow/config.json`:
+
+```json
+{
+  "git": { "branch_per_run": "always" }
+}
+```
+
+Runtime-read resolution order: project `.soloflow/config.json` → plugin `config/defaults.yaml` → built-in fallback.
 
 ## Model Assignments
 
@@ -54,6 +64,22 @@ visual_prefer_hierarchy: true   # Use inspect_view_hierarchy (~50 tokens) before
 ```
 
 These are referenced in `agents/verifier.md` and `skills/visual-verify/SKILL.md`.
+
+## Git Branching (runtime-read)
+
+| Setting | Default | Where Used | Description |
+|---------|---------|------------|-------------|
+| `git.branch_per_run` | `prompt` | `commands/executor.md` | Whether `/soloflow:executor` runs each invocation on a dedicated branch that gets merged after human review. Values: `always`, `never`, `prompt` |
+| `git.branch_name_format` | `soloflow/run-{timestamp}-{sprint_id}` | `commands/executor.md` | Format string for the run branch name |
+| `git.merge_strategy` | `--no-ff` | `commands/executor.md` | Flag passed to `git merge` when merging the run branch back |
+
+These ARE runtime-read. Override per-project by creating `.soloflow/config.json`:
+
+```json
+{ "git": { "branch_per_run": "always" } }
+```
+
+When set to `prompt` (the default), `/soloflow:executor` asks at the start of each run. Choosing "remember this choice" in the prompt writes `always` to `.soloflow/config.json` for you.
 
 ## Adding Maestro Flows
 
