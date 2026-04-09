@@ -93,6 +93,8 @@ When you report `COMPLETED`, the `Commits:` line in your status report MUST list
 
 If during your task you notice a bug, dead code, stale doc, or smell in a file that is **not** part of your acceptance criteria, do NOT expand scope to fix it. Instead, append a finding to `.soloflow/active/findings.md` and keep going.
 
+Do NOT commit `findings.md`. Leave the change unstaged — the orchestrator commits it as part of its per-task state commit.
+
 Entry format (append under the `# Findings Queue` heading):
 
 ```
