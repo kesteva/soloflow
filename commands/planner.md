@@ -58,6 +58,16 @@ Use the **AskUserQuestion** tool to present the choice. Do not list the options 
 
 The tool call blocks until the user responds — do not proceed until it returns.
 
+## Step 3.5: Commit state
+
+After the user responds (approval, subset, or rejection), commit the resulting state via Bash. Stage only the specific paths touched in this run — never `git add .` / `git add -A`.
+
+1. `git add` each plan file written (or removed) plus `.soloflow/active/backlog.json` plus any new/modified `EPIC.md` files. For rejections, `git rm` the deleted plans.
+2. If `git diff --cached --quiet` reports no staged changes, skip (idempotent re-run).
+3. Otherwise commit with a message of the form `chore: queue TASK-{NNN}..TASK-{MMM} from IDEA-{NNN}` (adjust for single-task runs or rejection: `chore: reject plans for IDEA-{NNN}`).
+
+Skip this step silently if the project is not inside a git repo or `.soloflow/` is gitignored.
+
 ## Step 4: Report
 
 ```
