@@ -2,6 +2,19 @@
 
 All notable changes to SoloFlow are documented in this file.
 
+## [0.5.0] - 2026-04-09
+
+### Removed (BREAKING)
+- **`counters.json`** — deleted. Parallel workers racing on a shared mutable counter caused merge conflicts without adding value. ID allocation (`IDEA-NNN`, `TASK-NNN`, `SPRINT-NNN`, `SOL-NNN`) is now derived from the filesystem: glob the artifact locations, take `max(numeric_suffix) + 1`. Writes use `noclobber` / `wx` semantics and retry on collision. See the "ID allocation" section in `CLAUDE.md` for the shared recipe.
+
+### Changed
+- `scripts/init.sh` and `/soloflow:init` no longer create `counters.json`.
+- All phase commands (`idea-extractor`, `planner`, `executor`, `quick`, `compound`) compute next IDs by globbing instead of reading/writing a counter file.
+- `commands/executor.md` now writes `sprint.id` into `sprint.json` directly (previously derived from the sprints counter).
+
+### Migration from 0.4.x
+Delete `.soloflow/counters.json` from your project — it's no longer read or written. Everything else keeps working; existing ID sequences are preserved because the filesystem already reflects the highest allocated ID.
+
 ## [0.4.0] - 2026-04-09
 
 ### Added
