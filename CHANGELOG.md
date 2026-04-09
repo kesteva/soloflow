@@ -2,7 +2,7 @@
 
 All notable changes to SoloFlow are documented in this file.
 
-## [Unreleased]
+## [0.4.0] - 2026-04-09
 
 ### Added
 - **Findings queue** — `.soloflow/active/findings.md`. Executor, verifier, and code-reviewer append out-of-scope observations here instead of expanding scope or dropping them. Consumed and archived by the compounder.
