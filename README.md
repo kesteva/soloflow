@@ -13,6 +13,12 @@ Install the plugin inside Claude Code (two steps — add the marketplace, then i
 /plugin install soloflow@soloflow
 ```
 
+By default this installs at **user scope** — available in every project on your machine. To scope it to a single project, use the CLI form with `--scope project`:
+
+```
+claude plugin install soloflow@soloflow --scope project
+```
+
 Start a Claude Code session in your project and initialize state:
 
 ```
@@ -43,6 +49,18 @@ SoloFlow ships as a self-hosted plugin marketplace. From inside Claude Code:
 The first command registers this repo as a marketplace (reading `.claude-plugin/marketplace.json`). The second installs the `soloflow` plugin from that marketplace.
 
 The plugin auto-discovers agents, commands, hooks, and skills from the repo layout and registers everything automatically. Updates are handled with `/plugin update soloflow@soloflow`. On first session in a project, SoloFlow prompts you to run `/soloflow:init` — nothing is written to your project until you opt in explicitly.
+
+#### Install scope
+
+Plugin scope is a Claude Code feature (not something the plugin controls). You have three options:
+
+| Scope | Flag | Where it's stored | When to use |
+|---|---|---|---|
+| **User** (default) | `--scope user` | User-level config | You want SoloFlow in every project on this machine |
+| **Project** | `--scope project` | `.claude/settings.json` in the repo | You want SoloFlow only for this repo AND want to share the choice with collaborators via git |
+| **Local** | `--scope local` | User-only entry for this repo | You want SoloFlow only for this repo and don't want to commit the choice |
+
+You can also open `/plugin` inside Claude Code for an interactive picker that lets you choose scope when installing.
 
 ### Script fallback (vendored install)
 
