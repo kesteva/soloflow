@@ -117,14 +117,16 @@ All workflow state lives in `.soloflow/`, created by `scripts/init.sh`:
 │   ├── done/                   # TASK-NNN-done.md (completed tasks)
 │   ├── reviews/                # Human review reports
 │   └── solutions/              # SOL-NNN.md (Phase 5 output)
-├── active/progress.json        # Sprint state + counters
+├── active/backlog.json         # Ready tasks awaiting execution
+├── active/sprint.json          # Active sprint + in-flight tasks
 ├── checkpoint.md               # Context restoration after compaction
 └── human-review-queue.md       # Batched items for human review
 ```
 
 **Design principles:**
 - Active/archive split ensures execution only reads in-flight state, not full history
-- Completed tasks are removed from `progress.json` and moved to `archive/done/`
+- Completed tasks are removed from `sprint.json` and moved to `archive/done/`
+- ID allocation (IDEA/TASK/SPRINT/SOL) is derived from the filesystem — no counters file — so parallel workers don't merge-conflict on a shared counter
 - All files use markdown + YAML frontmatter — optimized for LLM parsing and git diffs
 
 ## Verification Hierarchy

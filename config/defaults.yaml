@@ -56,4 +56,3 @@ paths:
   archive_dir: .soloflow/archive
   backlog: .soloflow/active/backlog.json
   sprint: .soloflow/active/sprint.json
-  counters: .soloflow/counters.json

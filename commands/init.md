@@ -32,8 +32,10 @@ Create these directories (use `mkdir -p` via Bash):
 - `.soloflow/archive/done`
 - `.soloflow/archive/reviews`
 - `.soloflow/archive/solutions`
+- `.soloflow/archive/findings`
+- `.soloflow/archive/compound`
 
-Write an empty `.gitkeep` file into each of the seven subdirectories above so
+Write an empty `.gitkeep` file into each of the nine subdirectories above so
 git tracks them while they're empty.
 
 ## Step 3: Write state files
@@ -57,14 +59,16 @@ Use the Write tool to create each of these files with the exact contents shown.
 }
 ```
 
-**`.soloflow/counters.json`**
-```json
-{
-  "ideas": 0,
-  "tasks": 0,
-  "sprints": 0,
-  "solutions": 0
-}
+**`.soloflow/active/findings.md`**
+```markdown
+---
+pending_count: 0
+last_updated: null
+---
+
+# Findings Queue
+
+No findings yet.
 ```
 
 **`.soloflow/checkpoint.md`**

@@ -38,16 +38,6 @@ cat > "$TASKS_DIR/active/sprint.json" << 'EOF'
 }
 EOF
 
-# Counters — global ID counters (separate file to minimize merge conflicts)
-cat > "$TASKS_DIR/counters.json" << 'EOF'
-{
-  "ideas": 0,
-  "tasks": 0,
-  "sprints": 0,
-  "solutions": 0
-}
-EOF
-
 # Context restoration after compaction
 cat > "$TASKS_DIR/checkpoint.md" << 'EOF'
 ---

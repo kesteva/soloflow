@@ -48,13 +48,36 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 - `compound/` — archived compound proposals (including rejected items) for later reference
 
 **`.soloflow/`** root:
-- `counters.json` — global ID counters (ideas, tasks, sprints, solutions)
 - `checkpoint.md` — context restoration after compaction
 - `human-review-queue.md` — batched items for human review
 
+**ID allocation.** `IDEA-NNN`, `TASK-NNN`, `SPRINT-NNN`, and `SOL-NNN` are derived from the filesystem — there is no `counters.json`. To allocate the next ID, glob every location an ID of that kind could live, extract the numeric suffix, take `max + 1`, zero-pad to 3 digits. Reference globs:
+
+- **IDEA:** `.soloflow/active/ideas/IDEA-*.md` (+ any future archive location)
+- **TASK:** `.soloflow/active/plans/**/TASK-*-plan.md` ∪ `.soloflow/active/stuck/**/TASK-*-stuck.md` ∪ `.soloflow/archive/done/**/TASK-*-done.md`
+- **SPRINT:** `.soloflow/archive/compound/SPRINT-*-proposal.md` ∪ `.soloflow/archive/findings/SPRINT-*-findings.md` ∪ `.soloflow/archive/solutions/SPRINT-*/` ∪ the active `sprint.json`'s `sprint.id`
+- **SOL:** `.soloflow/archive/solutions/**/SOL-*.md`
+
+Recipe (bash):
+```bash
+next_id() {
+  local prefix=$1; shift
+  local max=0
+  for p in "$@"; do
+    for f in $(compgen -G "$p" 2>/dev/null); do
+      n=$(basename "$f" | sed -n "s/^${prefix}-0*\([0-9]\+\).*/\1/p")
+      [ -n "$n" ] && [ "$n" -gt "$max" ] && max=$n
+    done
+  done
+  printf "%03d" $((max + 1))
+}
+```
+
+**Collision handling.** When two parallel workers compute the same "next ID," the second writer must fail-fast on write and retry. In bash, use `set -o noclobber` + `> file` (or `: > file`) which errors if the file exists; in Node, `fs.writeFileSync(path, data, { flag: 'wx' })`; via a slash command, check `test -e` and retry with `max+1` if it exists. Never overwrite an existing ID file.
+
 **Findings queue.** Executor / verifier / code-reviewer agents append an entry to `active/findings.md` whenever they notice something out of scope for their current task (a bug elsewhere, stale docs, a CLAUDE.md gap). They never expand scope to fix it. The compounder consumes the queue at learning time and uses it as the primary seed for clean-up, backlog, and CLAUDE.md proposals.
 
-State is split into 3 JSON files (backlog, sprint, counters) to enable parallel worktree execution without merge conflicts. Completed tasks are removed from `sprint.json` and their reports move to `archive/done/`.
+State is split into 2 JSON files (backlog, sprint) to enable parallel worktree execution without merge conflicts. Completed tasks are removed from `sprint.json` and their reports move to `archive/done/`. There is no counters file — IDs are derived from the filesystem (see "ID allocation" above).
 
 **Run branches.** When `git.branch_per_run` is enabled (see `docs/CUSTOMIZATION.md`), `/soloflow:executor` creates a dedicated branch per invocation (default: `soloflow/run-{timestamp}-{sprint_id}`), executor commits accumulate on it, and the branch is merged back (`--no-ff` by default) after human review. `sprint.json` carries a `run` object (`branch`, `base_branch`, `base_sha`, `created_at`) so resume detects the branch across sessions. The default preference (`prompt`) asks at the start of each run; set to `always` / `never` via `.soloflow/config.json` to skip the prompt.
 
