@@ -2,6 +2,12 @@
 
 All notable changes to SoloFlow are documented in this file.
 
+## [0.5.2] - 2026-04-09
+
+### Fixed
+- **Plugin install actually works now.** Added `.claude-plugin/marketplace.json` so the repo declares itself as a Claude Code plugin marketplace. Previously `/plugin install soloflow` and `claude plugin install https://github.com/kesteva/soloflow` both failed with "not found in any configured marketplace" because neither command accepts a bare GitHub URL.
+- **README install instructions corrected.** The real flow is two steps: `/plugin marketplace add kesteva/soloflow` then `/plugin install soloflow@soloflow`. Updates use `/plugin update soloflow@soloflow`.
+
 ## [0.5.1] - 2026-04-09
 
 ### Changed
