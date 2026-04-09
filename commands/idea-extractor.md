@@ -16,11 +16,31 @@ The user's idea is: **$ARGUMENTS**
 
 1. If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
 
+## Step 1.5: Clarify if ambiguous
+
+1. Resolve `clarify_enabled`:
+   - If `$ARGUMENTS` contains the literal token `--skip-clarify`, set `clarify_enabled = false` and strip the token from `$ARGUMENTS` before using it downstream.
+   - Else if `.soloflow/config.json` exists and contains `phases.clarify === false`, set `clarify_enabled = false`.
+   - Else if `config/defaults.yaml` (via `${CLAUDE_PLUGIN_ROOT}`) has `phases.clarify: false`, set `clarify_enabled = false`.
+   - Otherwise `clarify_enabled = true`.
+
+2. If `clarify_enabled` is false, set `brief = $ARGUMENTS` and proceed to Step 2.
+
+3. Read `${CLAUDE_PLUGIN_ROOT}/skills/clarify-idea/SKILL.md` via the `Read` tool and apply its **"When to invoke"** checklist against `$ARGUMENTS`. The checklist covers: goal, target user/surface, success signal, scope boundary, grounding.
+
+4. If every checklist item is satisfied, the input is already clear — set `brief = $ARGUMENTS` and proceed to Step 2 without running the loop.
+
+5. Otherwise, run the clarification routine defined in the skill:
+   - Honor the scope-decomposition gate first (if the ask spans multiple independent subsystems, pick one via `AskUserQuestion`).
+   - Run the clarification loop: one `AskUserQuestion` at a time, preferring multi-choice, following threads, until the checklist is satisfied.
+   - Present the skill's hard-gated readiness prompt ("Ready to extract the idea?" — Extract now / Keep clarifying / Cancel). Loop on "Keep clarifying." Stop the whole command on "Cancel."
+   - On "Extract now," assemble the **clarified brief** (raw input + transcript + synthesis paragraph) exactly as the skill specifies, and set `brief` to that markdown block.
+
 ## Step 2: Extract the Idea
 
 1. Generate the next idea ID by globbing `.soloflow/active/ideas/IDEA-*.md`, extracting each numeric suffix, and taking `max + 1` (zero-padded to 3 digits). See the "ID allocation" section in the project `CLAUDE.md` for the shared recipe.
 2. Spawn the **idea-extractor** agent via the Agent tool with:
-   - The user's raw input
+   - `brief` (either the raw `$ARGUMENTS` or the clarified brief produced in Step 1.5). If it's a clarified brief, prefix it with: *"The following is a clarified brief produced from a user conversation. Treat the Synthesis section as the canonical ask; use the transcript only for extra context."*
    - The idea ID to use
    - Instruction: "Extract and structure this idea. Use the provided idea ID. Output the complete IDEA file content."
 3. Capture the extractor's output.
@@ -30,21 +50,38 @@ The user's idea is: **$ARGUMENTS**
 
 ## Step 3: Human Checkpoint — Idea Review
 
-Present the idea to the user with:
+Print a prose summary of the idea first so the user has context:
 - Type and classification
 - Slices (with value statements)
-- Open questions that need answers
 - Assumptions that need validation
 
-Use the **AskUserQuestion** tool to present the choice. Do not list the options as plain markdown bullets — the user should see a structured picker. Ask a single question like "How should we proceed with this idea?" with these options:
-- **Approve + Research** — run external research next (default when `phases.research: true` in config)
-- **Approve (skip research)** — stop here; idea is ready for `/soloflow:planner`
-- **Modify** — update slices, answer questions, add constraints
-- **Reject** — delete the idea file and stop
+Do NOT print the open questions as prose — they go into the structured picker below.
 
-The tool call blocks until the user responds — do not proceed until it returns.
+Then make a **single batched `AskUserQuestion` call** whose questions list is built in this order:
 
-If the user modifies the idea, update the idea file accordingly before continuing.
+1. **One question per `open_questions` entry** from the extractor output, in order. For each:
+   - `question`: the `question` field verbatim
+   - `header`: a short label derived from the question (≤20 chars)
+   - `options`: the extractor's `candidates` array if present (2–4 concrete candidate answers). Always rely on the `AskUserQuestion` tool's built-in free-form fallback so the user can type their own answer. If `candidates` is absent or empty, pass an empty options list and the user will answer free-form.
+2. **Final question — the proceed picker.** Question: "How should we proceed with IDEA-{NNN}?" with options:
+   - **Approve + Research** — run external research next (default when `phases.research: true` in config)
+   - **Approve (skip research)** — stop here; idea is ready for `/soloflow:planner`
+   - **Modify** — update slices, answer questions, add constraints
+   - **Reject** — delete the idea file and stop
+
+If the extractor produced zero open questions, the batch degenerates to just the proceed picker — that's fine.
+
+The tool call blocks until the user responds to every question — do not proceed until it returns.
+
+**After the tool returns, update the idea file:**
+- For each answered open question, append `**Answer:** {user response}` beneath the question under `## Open Questions` in the body, and mirror the answer into the YAML frontmatter as `open_questions[i].answer`.
+- If every open question got an answer, flip `status: draft` → `status: answered`. Otherwise leave status unchanged.
+
+**Then branch on the proceed answer:**
+- **Approve + Research** → continue to Step 4.
+- **Approve (skip research)** → skip Step 4, go to Step 4.5.
+- **Modify** → use `AskUserQuestion` follow-ups (or a free-form question) to collect the specific modifications, update the idea file, then re-present Step 3's batched picker. Loop until the user approves or rejects.
+- **Reject** → delete the idea file and stop.
 
 ## Step 4: Research (if selected)
 
