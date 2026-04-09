@@ -180,8 +180,29 @@ Set config accordingly:
 2. **If found:** print `✓ npx detected; Playwright MCP runs via "npx @playwright/mcp@latest" on demand — no separate install needed.`
 3. **If missing:** print `⚠ Node.js / npx is required for Playwright visual verification. Install Node.js from https://nodejs.org before running visual verification. Your config will still be written.` Do NOT attempt to install Node.
 
-MCP servers themselves are declared in the plugin's `.mcp.json` and
-auto-discovered by Claude Code — no per-project MCP configuration needed.
+### MCP server registration (runs after dependency check, per selected type)
+
+The plugin does NOT ship its own `.mcp.json` — that would collide for any user who already has `maestro` or `playwright` registered. Instead, detect and offer to register.
+
+For each required MCP server (`maestro` if `visual_mobile`, `playwright` if `visual_web`):
+
+1. Run `claude mcp list` via Bash and grep the output for the server name.
+2. **If already registered:** print `✓ MCP server "<name>" already registered`. Continue.
+3. **If missing:** use `AskUserQuestion`:
+   - **Question:** `'MCP server "<name>" is not registered with Claude Code. Register it now?'`
+   - **Header:** `Register <name>`
+   - **Options:**
+     - `"Yes — user scope (all projects)"`
+     - `"Yes — project scope (this project only, writes .mcp.json)"`
+     - `"Skip"`
+   - **On user scope:** run the appropriate command:
+     - maestro: `claude mcp add --scope user maestro maestro mcp`
+     - playwright: `claude mcp add --scope user playwright npx @playwright/mcp@latest`
+   - **On project scope:** same command with `--scope project`.
+   - **On Skip:** print `Visual verification will be enabled in config — the verifier will gracefully skip <name> until the MCP server is registered. Register later with: claude mcp add --scope user <args>`.
+4. After a successful `claude mcp add`, re-run `claude mcp list` and confirm the entry appears. If not, warn but do not retry.
+
+Never run `claude mcp add` without the explicit user choice above — registering servers silently is exactly the collision problem we're avoiding.
 
 ### Q3 — Branch strategy for `/soloflow:executor`
 
