@@ -8,11 +8,19 @@ A small number of values **are** runtime-read (noted explicitly below). For thos
 
 ```json
 {
-  "git": { "branch_per_run": "always" }
+  "verification": {
+    "visual_mobile": true,
+    "visual_web": false
+  },
+  "git": {
+    "branch_per_run": "always"
+  }
 }
 ```
 
 Runtime-read resolution order: project `.soloflow/config.json` → plugin `config/defaults.yaml` → built-in fallback.
+
+The easiest way to populate `.soloflow/config.json` is to run `/soloflow:init` — it's idempotent and includes a short setup wizard that asks about visual verification and branching preferences, then writes the config for you.
 
 ## Model Assignments
 
@@ -43,8 +51,8 @@ To change an agent's model, edit the `model:` field in its YAML frontmatter. For
 | `run_tests` | true | `hooks/task-completed.js` | Run test suite as quality gate |
 | `run_typecheck` | true | `hooks/task-completed.js` | Run type checker as quality gate |
 | `run_linter` | true | `hooks/post-tool-use.js` | Auto-lint after Write/Edit |
-| `visual_mobile` | false | `agents/verifier.md` | Enable Maestro MCP visual verification for mobile |
-| `visual_web` | false | `agents/verifier.md` | Enable Playwright MCP visual verification for web |
+| `verification.visual_mobile` | false | `agents/verifier.md` | Enable Maestro MCP visual verification for mobile. **Runtime-read** — overrideable via `.soloflow/config.json` or set by `/soloflow:init` wizard. |
+| `verification.visual_web` | false | `agents/verifier.md` | Enable Playwright MCP visual verification for web. **Runtime-read** — overrideable via `.soloflow/config.json` or set by `/soloflow:init` wizard. |
 
 To enable visual verification:
 

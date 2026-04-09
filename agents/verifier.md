@@ -35,7 +35,13 @@ If the project has no test suite, type checker, or linter, note this in your rep
 
 Visual verification gives you "eyes" on the running app. It is **off by default** and must be explicitly enabled by the user.
 
-**Settings gate (check first):** Read `config/defaults.yaml` (or the project's soloflow config). If `visual_mobile` is `false`, skip Maestro entirely. If `visual_web` is `false`, skip Playwright entirely. If both are `false`, skip Level 2 completely and proceed to Level 3. Do NOT run any availability checks or MCP probes unless the setting is enabled.
+**Settings gate (check first):** Resolve `visual_mobile` and `visual_web` in this order — first hit wins:
+
+1. **Project override:** if `.soloflow/config.json` exists and defines `verification.visual_mobile` or `verification.visual_web`, use it.
+2. **Plugin default:** read `${CLAUDE_PLUGIN_ROOT}/config/defaults.yaml` (fall back to `config/defaults.yaml` if the env var isn't set) and use the `verification.visual_mobile` / `verification.visual_web` fields.
+3. **Fallback:** `false` for both.
+
+If `visual_mobile` resolves to `false`, skip Maestro entirely. If `visual_web` resolves to `false`, skip Playwright entirely. If both are `false`, skip Level 2 completely and proceed to Level 3. Do NOT run any availability checks or MCP probes unless the setting is enabled.
 
 **Decision gate (only if a setting is enabled):** Look at the task plan's `files_owned`. If they include mobile UI components/screens → use Maestro. If they include web pages/components → use Playwright. If neither → skip to Level 3.
 
