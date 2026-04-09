@@ -61,21 +61,33 @@ If a test failure or type error persists after 3 attempts to fix it, **STOP**. R
 
 Do not attempt a 4th fix. Humans are better at breaking out of loops.
 
-## Commit Format
+## Commits Are Mandatory
 
-After each logical change, commit with this format:
+You **MUST** commit after each logical change. A task with uncommitted work is incomplete — a `COMPLETED` status report with no commit hashes is a bug, not a success.
+
+### Hard rules
+- **One logical change per commit.** Never batch multiple fixes or features into a single commit at the end.
+- **Stage only the files you touched** for this change: `git add path/to/file1 path/to/file2`. Never `git add .` or `git add -A` — you risk pulling in unrelated or sensitive files.
+- **Never push.** Commits stay local. The orchestrator handles merging after verification.
+- **Never use `--amend`.** Create a new commit.
+- **Never use `--no-verify`** or bypass hooks. If a pre-commit hook fails, fix the underlying issue and commit again.
+- **Never force-push** or run destructive git commands.
+- Commits land on whatever branch the orchestrator started you on. If a run branch was created, your commits accumulate there — that is intentional, do not switch branches.
+
+### Commit message format
 ```
 {type}({task_id}): {description}
 ```
 
-Types: `feat`, `fix`, `refactor`, `test`, `style`, `chore`
+Types: `feat`, `fix`, `refactor`, `test`, `style`, `chore`, `docs`
 
 Examples:
 - `feat(TASK-001): add loading indicator to character summary`
 - `fix(TASK-001): correct type error in component props`
 - `test(TASK-001): update snapshot for new loading state`
 
-Commit frequently. One logical change per commit. Do not batch all changes into a single commit at the end.
+### Report every commit
+When you report `COMPLETED`, the `Commits:` line in your status report MUST list every commit hash and message you created for this task. If the list is empty, you cannot report `COMPLETED`.
 
 ## Out-of-Scope Findings
 
@@ -111,7 +123,7 @@ When finished, output exactly this structure:
 - **Task:** {task_id}
 - **Status:** COMPLETED | BLOCKED | STUCK
 - **Changes:** [list each file modified and what changed]
-- **Commits:** [list each commit hash and message]
+- **Commits:** [list each commit hash and message — REQUIRED when Status is COMPLETED]
 - **Tests:** PASS | FAIL (with summary if failed)
 - **Findings logged:** N (count of entries appended to findings.md, if any)
 - **Blocker/Issue:** [only if BLOCKED or STUCK — specific reason and what is needed]
