@@ -15,18 +15,16 @@ The user's idea is: **$ARGUMENTS**
 ## Step 1: Initialize
 
 1. If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
-2. Read `.soloflow/counters.json` for current counters.
 
 ## Step 2: Extract the Idea
 
-1. Generate the next idea ID: `IDEA-{padded counters.ideas + 1}` (zero-padded to 3 digits).
+1. Generate the next idea ID by globbing `.soloflow/active/ideas/IDEA-*.md`, extracting each numeric suffix, and taking `max + 1` (zero-padded to 3 digits). See the "ID allocation" section in the project `CLAUDE.md` for the shared recipe.
 2. Spawn the **idea-extractor** agent via the Agent tool with:
    - The user's raw input
    - The idea ID to use
    - Instruction: "Extract and structure this idea. Use the provided idea ID. Output the complete IDEA file content."
 3. Capture the extractor's output.
-4. Write the idea file to `.soloflow/active/ideas/IDEA-{NNN}.md`.
-5. Update `.soloflow/counters.json`: increment `ideas`.
+4. Write the idea file to `.soloflow/active/ideas/IDEA-{NNN}.md` using `noclobber` / `wx` semantics. If the target already exists (another parallel worker raced), recompute the next ID and retry.
 
 **BUGFIX routing:** If the extractor classified the idea as BUGFIX, tell the user: "This looks like a bug. Consider `/soloflow:quick` for faster resolution." Then stop — do not proceed to research.
 

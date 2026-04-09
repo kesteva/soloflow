@@ -53,12 +53,10 @@ Valid values: `always` (create run branch silently), `never` (stay on current br
    - If `$ARGUMENTS` names an idea (`IDEA-NNN`), include all ready tasks belonging to that idea.
    - Otherwise, include all `status: "ready"` tasks up to `max_sprint_tasks` (config default: 10).
 2. If no tasks match, tell the user: "No ready tasks in backlog. Run `/soloflow:planner IDEA-NNN` first." and stop.
-3. Read `.soloflow/counters.json` for sprint counter.
-4. Generate sprint ID: `SPRINT-{padded sprints + 1}`.
-5. Create `.soloflow/active/sprint.json` with:
-   - `sprint.status: "active"`, `sprint.started: {ISO timestamp}`
+3. Compute the next sprint ID by globbing every location a sprint artifact lands — `.soloflow/archive/compound/SPRINT-*-proposal.md`, `.soloflow/archive/findings/SPRINT-*-findings.md`, `.soloflow/archive/solutions/SPRINT-*` — plus the current `sprint.json`'s `sprint.id` if populated. Take the max numeric suffix + 1, zero-padded to 3 digits. See the "ID allocation" section in the project `CLAUDE.md` for the shared recipe.
+4. Create `.soloflow/active/sprint.json` with:
+   - `sprint.id: "SPRINT-{NNN}"`, `sprint.status: "active"`, `sprint.started: {ISO timestamp}`
    - Selected tasks moved from `backlog.json` into `sprint.json`
-6. Increment `sprints` in `.soloflow/counters.json`.
 
 ## Step 2.5: Create run branch (only if `create_branch` is true)
 

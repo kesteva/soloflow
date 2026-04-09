@@ -14,7 +14,6 @@ Display the current SoloFlow workflow state for this project.
 2. **Read state files:**
    - `.soloflow/active/backlog.json` for backlog tasks
    - `.soloflow/active/sprint.json` for active sprint and in-flight tasks
-   - `.soloflow/counters.json` for global counters
    - `.soloflow/checkpoint.md` for last checkpoint info
    - `.soloflow/human-review-queue.md` for pending reviews
 

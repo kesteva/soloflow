@@ -15,7 +15,7 @@ You receive references to:
 - `.soloflow/active/findings.md` — out-of-scope observations logged by executor / verifier / code-reviewer during the sprint
 - `.soloflow/human-review-queue.md` — items flagged for human judgment
 - The target sprint ID (e.g., `SPRINT-007`)
-- The starting counters (solutions, ideas) for ID generation
+- Starting SOL and IDEA numbers computed from the filesystem (used only for display in your proposal frontmatter — the main agent recomputes at apply time)
 
 ## Process
 
@@ -121,7 +121,7 @@ confidence: {high|medium|low}
 
 ## Guardrails
 
-- You write exactly ONE file: `.soloflow/active/COMPOUND-PROPOSAL.md`. Do not touch `archive/solutions/`, `active/ideas/`, `CLAUDE.md`, counters, or anything else. The main agent applies approved items after the user reviews your proposal.
+- You write exactly ONE file: `.soloflow/active/COMPOUND-PROPOSAL.md`. Do not touch `archive/solutions/`, `active/ideas/`, `CLAUDE.md`, or anything else. The main agent applies approved items after the user reviews your proposal.
 - Every proposed item must cite concrete evidence — a specific task, a specific finding, a specific report. "I feel like the codebase could use X" is not evidence.
 - Prefer specific over general. "Use AbortController in fetch wrappers under `src/api/`" beats "cancel network requests."
 - Do not duplicate existing solutions. Search `archive/solutions/` first.

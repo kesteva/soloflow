@@ -30,11 +30,11 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
 
 ## Step 2: Spawn the compounder
 
-1. Read `.soloflow/counters.json` for the starting `solutions` and `ideas` counters.
+1. Compute starting `solutions` and `ideas` counters from the filesystem (see "ID allocation" in the project `CLAUDE.md`): glob `.soloflow/archive/solutions/**/SOL-*.md` and `.soloflow/active/ideas/IDEA-*.md` for the respective maxes.
 2. Spawn the **compounder** agent via the Agent tool with:
    - The target sprint ID
    - Paths to all done reports, stuck reports, findings.md, and human-review-queue.md
-   - Starting counters
+   - Starting counters (computed from filesystem above — used only for display in the proposal; the main agent recomputes at apply time)
    - Instruction: "Produce `.soloflow/active/COMPOUND-PROPOSAL.md` with four buckets (A clean-ups, B backlog ideas, C CLAUDE.md improvements, D reusable patterns). Do not apply anything. Cite concrete evidence for every item."
 3. Wait for the compounder to finish. Read the resulting `COMPOUND-PROPOSAL.md`.
 
@@ -61,8 +61,8 @@ For each approved A-item:
 
 ### Bucket B — backlog ideas
 For each approved B-item:
-1. Increment the `ideas` counter in `.soloflow/counters.json`.
-2. Write `.soloflow/active/ideas/IDEA-{NNN}.md` using the standard idea frontmatter and the body from the proposal.
+1. Recompute the next IDEA ID from the filesystem (glob `.soloflow/active/ideas/IDEA-*.md`, max + 1) — do this per-item so sequential writes don't collide.
+2. Write `.soloflow/active/ideas/IDEA-{NNN}.md` using the standard idea frontmatter and the body from the proposal, with `noclobber`/`wx` semantics. Retry with the next ID on collision.
 3. Commit `feat({sprint}): queue IDEA-{NNN} from compound` after the batch of idea files (one commit for all B-items is fine — ideas are just files).
 
 ### Bucket C — CLAUDE.md improvements
@@ -73,8 +73,8 @@ For each approved C-item:
 ### Bucket D — reusable patterns
 For each approved D-item:
 1. Create `.soloflow/archive/solutions/SPRINT-{NNN}/` if it doesn't exist.
-2. Increment the `solutions` counter in `.soloflow/counters.json` for each item.
-3. Write `.soloflow/archive/solutions/SPRINT-{NNN}/SOL-{NNN}.md` with the SOL body from the proposal.
+2. Recompute the next SOL ID from the filesystem (glob `.soloflow/archive/solutions/**/SOL-*.md`, max + 1) — do this per-item.
+3. Write `.soloflow/archive/solutions/SPRINT-{NNN}/SOL-{NNN}.md` with the SOL body from the proposal, using `noclobber`/`wx`. Retry with the next ID on collision.
 4. Commit `docs({sprint}): archive SOL-{NNN}..SOL-{MMM}` for the batch.
 
 If any application step fails (e.g., a diff doesn't apply cleanly because the target file changed), stop that item, log the error to the summary, and continue with the rest. Never roll back committed items.

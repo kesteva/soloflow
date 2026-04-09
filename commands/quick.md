@@ -25,7 +25,7 @@ This step is critical — the plan you create must reference real files and real
 
 ## Step 3: Create the Plan
 
-Read `.soloflow/counters.json` to get the current task counter. Generate the next task ID by incrementing `tasks` (zero-padded to 3 digits: TASK-001, TASK-002, etc.).
+Compute the next task ID by globbing every TASK file location (`.soloflow/active/plans/**/TASK-*-plan.md`, `.soloflow/active/stuck/**/TASK-*-stuck.md`, `.soloflow/archive/done/**/TASK-*-done.md`), extracting numeric suffixes, and taking `max + 1` (zero-padded to 3 digits). See the "ID allocation" section in the project `CLAUDE.md` for the shared recipe.
 
 Write a plan file to `.soloflow/active/plans/TASK-{NNN}-plan.md` with this exact format:
 
@@ -62,8 +62,7 @@ estimated_complexity: low|medium|high
 {Restate each criterion with clear pass/fail definition}
 ```
 
-Then update state files:
-- Increment `tasks` in `.soloflow/counters.json`
+Write the plan file with `noclobber`/`wx` semantics; if it already exists (a parallel worker raced), recompute the next ID and retry. Then:
 - Add the task entry with `status: "in_progress"` to `.soloflow/active/sprint.json` (quick path skips backlog)
 
 ## Step 4: Spawn Executor

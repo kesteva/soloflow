@@ -21,7 +21,7 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
 1. Parse `$ARGUMENTS` as an idea ID (e.g., `IDEA-001`). If empty or malformed, list `.soloflow/active/ideas/` and use the **AskUserQuestion** tool to let the user pick which idea to refine — pass the discovered idea IDs as options rather than printing them as prose.
 2. Read `.soloflow/active/ideas/IDEA-{NNN}.md`. If missing, report the error and stop.
 3. Check for `.soloflow/active/research/IDEA-{NNN}-research.md` — if present, it will be passed to the refiner.
-4. Read `.soloflow/counters.json` for the starting task counter: `tasks + 1`.
+4. Compute the starting task counter by globbing every TASK file location (`.soloflow/active/plans/**/TASK-*-plan.md`, `.soloflow/active/stuck/**/TASK-*-stuck.md`, `.soloflow/archive/done/**/TASK-*-done.md`), extracting numeric suffixes, and taking `max + 1`. See the "ID allocation" section in the project `CLAUDE.md` for the shared recipe.
 5. Discover existing epics: glob `.soloflow/active/plans/*/EPIC.md` and collect each epic slug (parent folder name) and `EPIC.md` contents. Pass these to the refiner so it can reuse epics instead of duplicating them.
 
 ## Step 2: Refine
@@ -38,8 +38,7 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
    - If `epic: <slug>` is set → write to `.soloflow/active/plans/{slug}/TASK-{NNN}-plan.md`, creating the folder if missing.
    - If `epic` is absent or `null` → write to `.soloflow/active/plans/TASK-{NNN}-plan.md` (flat, orphan).
 5. For each **new** epic slug the refiner introduced, write its EPIC.md body to `.soloflow/active/plans/{slug}/EPIC.md`. Do NOT overwrite an existing EPIC.md — if one already exists for that slug, leave it alone (optionally append the current idea ID to its `originating_ideas` frontmatter list).
-6. Update `.soloflow/counters.json`: increment `tasks` by the number of plans.
-7. Add each task to `.soloflow/active/backlog.json` with `status: "ready"` and its `depends_on` list. (Do not add `epic` to backlog entries — the JSON state stays epic-unaware; task IDs remain globally unique.)
+6. Add each task to `.soloflow/active/backlog.json` with `status: "ready"` and its `depends_on` list. (Do not add `epic` to backlog entries — the JSON state stays epic-unaware; task IDs remain globally unique.) IDs are derived from the filesystem — no counter file to update. Write each plan file with `noclobber` / `wx` semantics; if a collision occurs (another parallel planner raced), recompute the next ID for the remaining plans and retry.
 
 ## Step 3: Human Checkpoint — Plan Review
 
