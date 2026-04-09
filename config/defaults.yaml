@@ -10,6 +10,7 @@ models:
   code_reviewer: opus
 
 phases:
+  clarify: true   # enable conversational clarification before extraction when input is ambiguous
   research: true  # enable external research after idea approval
 
 limits:
