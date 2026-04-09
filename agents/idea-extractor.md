@@ -51,6 +51,7 @@ id: {idea_id}
 type: {FEATURE|BUGFIX|REFACTOR|EXPLORATION}
 status: draft
 created: {ISO timestamp}
+epics: [{slug}, ...]  # optional — hint list of epic slugs this idea might contribute to. May be empty or omitted.
 slices:
   - title: "{slice title}"
     description: "{what it does}"
@@ -94,3 +95,4 @@ assumptions:
 - Every file path referenced must come from an actual Glob/Grep search.
 - If the user's input is too vague to produce meaningful slices, output the idea with the vague areas as open questions rather than guessing.
 - For BUGFIX classification, note prominently that this should be routed to `/soloflow:quick`.
+- The `epics` field is an **optional hint** for the downstream task-refiner. Not every idea needs epics — leave it empty for small/isolated work. The refiner may override, extend, or ignore these hints, and may split one idea's slices across multiple epics. Do not treat epics as a required taxonomy.

@@ -50,6 +50,8 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 
 State is split into 3 JSON files (backlog, sprint, counters) to enable parallel worktree execution without merge conflicts. Completed tasks are removed from `sprint.json` and their reports move to `archive/done/`.
 
+**Epics.** Tasks may optionally be grouped into epics via nested folders: `plans/<epic>/TASK-NNN-plan.md`, `stuck/<epic>/TASK-NNN-stuck.md`, `done/<epic>/TASK-NNN-done.md`. Each epic folder contains an `EPIC.md` manifest (objective, scope, success signal) authored by the task-refiner when the epic is first created. Epics are **optional** — orphan tasks live flat at the state-root level (e.g. `plans/TASK-NNN-plan.md`), and a single idea may produce tasks across multiple epics + orphans. Task IDs remain **globally unique**; `backlog.json` / `sprint.json` / `counters.json` are epic-unaware. The source of truth for a task's epic is its plan frontmatter `epic: <slug>` field (absent/null for orphans); the folder is a convenience mirror. When all tasks in an epic complete, the executor prompts the user to archive the epic (moves `EPIC.md` to `archive/done/<epic>/` and flips its status to `complete`); archival is never automatic.
+
 State format: Markdown with YAML frontmatter (optimized for LLM parsing + git diffs).
 
 ## Agent Model Strategy

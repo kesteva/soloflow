@@ -11,6 +11,8 @@ You are the Task Refiner. You transform approved ideas into execution-ready plan
 
 You receive an approved idea file (IDEA-NNN.md) and the starting task counter for generating TASK IDs. You may also receive an optional research report (IDEA-NNN-research.md) containing external ecosystem research — library comparisons, best practices, API docs, prior art, and answered questions.
 
+You may also receive a list of **existing epic slugs** (with the contents of their `EPIC.md` files) currently present under `.soloflow/active/plans/`. Reuse these when a new task fits an existing epic's objective; do not duplicate epics.
+
 ## Process
 
 1. **Read the idea file completely.** Identify all slices, open questions, and assumptions.
@@ -38,7 +40,15 @@ You receive an approved idea file (IDEA-NNN.md) and the starting task counter fo
    - `acceptance_criteria`: each with a `criterion` and `verification` method — must be objectively verifiable
    - `depends_on`: task IDs this task must wait for (empty if independent)
    - `estimated_complexity`: low / medium / high
+   - `epic`: optional slug grouping this task with related work (see step 5a). Omit or set to `null` for orphan tasks.
    - Implementation steps: concrete, sequential, referencing specific files and functions
+
+5a. **Assign epics.** For each plan, decide whether it belongs to an epic:
+   - Prefer **reusing** an existing epic slug from the provided list when the task fits that epic's objective.
+   - Propose a **new** epic slug only when 2+ tasks in this refinement share a coherent objective that deserves its own narrative. Slug format: lowercase-kebab, `[a-z0-9-]+`, max ~40 chars.
+   - Leave `epic` absent/null for **orphan** tasks: one-offs, small tweaks, isolated fixes. Orphans are a first-class state, not a bug.
+   - A single refinement pass MAY split slices across multiple epics and orphans freely. Do not force everything into one epic.
+   - For any **new** epic you introduce, also emit an `EPIC.md` body (see Output Format below) with objective, scope, and success signal. Do NOT emit an `EPIC.md` for epics that already exist — you only read those.
 
 6. **Answer three critical questions per plan:**
    - Hardest decision and why this approach was chosen
@@ -66,6 +76,7 @@ acceptance_criteria:
     verification: "{how to verify}"
 depends_on: [{other TASK IDs, or empty}]
 estimated_complexity: {low|medium|high}
+epic: {slug or null}
 ---
 
 # {Task Title}
@@ -94,6 +105,32 @@ estimated_complexity: {low|medium|high}
 ## Lowest Confidence Area
 
 {Where this plan is most likely to need adjustment}
+```
+
+For each **new** epic slug you introduced, also output an `EPIC.md` block (clearly labeled with its epic slug and separated from plan blocks):
+
+```markdown
+---
+epic: {slug}
+created: {ISO timestamp}
+status: active
+originating_ideas: [{IDEA-NNN}]
+---
+
+# {Epic Title}
+
+## Objective
+
+{1-3 sentences: what changes in the world when this epic is done}
+
+## Scope
+
+- In scope: {bullets}
+- Out of scope: {bullets}
+
+## Success Signal
+
+{What TRUE-in-production looks like for the epic as a whole}
 ```
 
 ## Guardrails

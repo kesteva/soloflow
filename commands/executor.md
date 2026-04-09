@@ -42,12 +42,14 @@ Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDE
 
    a. Set task `status: "in_progress"` in `sprint.json`.
 
+   a2. **Locate the plan file** by globbing `.soloflow/active/plans/**/TASK-{NNN}-plan.md` (matches both nested epic folders and flat orphan paths; excludes `EPIC.md`). Read the plan's `epic` frontmatter field — it may be a slug or absent/null. This determines where downstream reports go.
+
    b. Spawn **executor** agent with the plan content. Wait for result.
 
    c. Handle executor result:
       - **COMPLETED** → proceed to verification.
       - **BLOCKED** → update status to `"blocked"` in `sprint.json`, continue to next task.
-      - **STUCK** → write stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md`, update status in `sprint.json`, continue.
+      - **STUCK** → write stuck report to `.soloflow/active/stuck/{epic}/TASK-{NNN}-stuck.md` if the plan has an epic, else flat at `.soloflow/active/stuck/TASK-{NNN}-stuck.md`. Create the folder if missing. Update status in `sprint.json`, continue.
 
    d. Spawn **verifier** with plan + executor report. Wait for verdict.
 
@@ -57,7 +59,7 @@ Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDE
       - **HUMAN_NEEDED** → add to `.soloflow/human-review-queue.md`, update status in `sprint.json`.
 
    f. Spawn **code-reviewer** with the plan + executor's changed files list. Wait for verdict.
-      - **CLEAN** → write done report to `.soloflow/archive/done/TASK-{NNN}-done.md`, remove task from `sprint.json`.
+      - **CLEAN** → write done report to `.soloflow/archive/done/{epic}/TASK-{NNN}-done.md` if the plan has an epic (create the folder if missing), else flat at `.soloflow/archive/done/TASK-{NNN}-done.md`. Remove task from `sprint.json`. Then perform the **epic archival check**: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no tasks from that epic remain in `sprint.json`, flag the epic for the Step 4 human review with an "archive this epic?" prompt. On user approval (not automatic), move `.soloflow/active/plans/{epic}/EPIC.md` → `.soloflow/archive/done/{epic}/EPIC.md` and flip its frontmatter `status` from `active` to `complete`.
       - **IMPROVEMENTS_NEEDED** (first time only) → re-spawn executor with review feedback, then re-verify. Does NOT consume the executor retry budget.
       - **SECURITY_ISSUE** → escalate to HUMAN_NEEDED. Add to `.soloflow/human-review-queue.md`, update status in `sprint.json`.
 

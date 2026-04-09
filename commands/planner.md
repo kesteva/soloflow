@@ -22,6 +22,7 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
 2. Read `.soloflow/active/ideas/IDEA-{NNN}.md`. If missing, report the error and stop.
 3. Check for `.soloflow/active/research/IDEA-{NNN}-research.md` — if present, it will be passed to the refiner.
 4. Read `.soloflow/counters.json` for the starting task counter: `tasks + 1`.
+5. Discover existing epics: glob `.soloflow/active/plans/*/EPIC.md` and collect each epic slug (parent folder name) and `EPIC.md` contents. Pass these to the refiner so it can reuse epics instead of duplicating them.
 
 ## Step 2: Refine
 
@@ -29,17 +30,22 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
    - The approved idea file content
    - If a research report exists, include it with: "A research report is provided below. Use it to inform your approach selection, library choices, and to resolve open questions before doing your own research."
    - The starting task counter
-   - Instruction: "Refine this idea into execution-ready plans. Start task numbering at TASK-{NNN}. Output each plan file's content clearly separated."
+   - The list of existing epics discovered in Step 1.5 (slug + `EPIC.md` contents). Instruct: "Reuse these existing epics when a task fits their objective. Propose new epic slugs only when 2+ tasks share a coherent objective. Leave `epic` null for orphan tasks."
+   - Instruction: "Refine this idea into execution-ready plans. Start task numbering at TASK-{NNN}. Output each plan file's content clearly separated. For any new epic slugs you introduce, also output an EPIC.md block."
 2. Capture the refiner's output.
-3. Parse the output into individual plan files.
-4. Write each plan to `.soloflow/active/plans/TASK-{NNN}-plan.md`.
-5. Update `.soloflow/counters.json`: increment `tasks` by the number of plans.
-6. Add each task to `.soloflow/active/backlog.json` with `status: "ready"` and its `depends_on` list.
+3. Parse the output into individual plan files and any new EPIC.md blocks.
+4. Write each plan based on its `epic` frontmatter field:
+   - If `epic: <slug>` is set → write to `.soloflow/active/plans/{slug}/TASK-{NNN}-plan.md`, creating the folder if missing.
+   - If `epic` is absent or `null` → write to `.soloflow/active/plans/TASK-{NNN}-plan.md` (flat, orphan).
+5. For each **new** epic slug the refiner introduced, write its EPIC.md body to `.soloflow/active/plans/{slug}/EPIC.md`. Do NOT overwrite an existing EPIC.md — if one already exists for that slug, leave it alone (optionally append the current idea ID to its `originating_ideas` frontmatter list).
+6. Update `.soloflow/counters.json`: increment `tasks` by the number of plans.
+7. Add each task to `.soloflow/active/backlog.json` with `status: "ready"` and its `depends_on` list. (Do not add `epic` to backlog entries — the JSON state stays epic-unaware; task IDs remain globally unique.)
 
 ## Step 3: Human Checkpoint — Plan Review
 
 Present all plans to the user with:
 - Task count and dependency graph
+- **Epic groupings**: for each epic slug, list its tasks and (for new epics) its objective. Call out orphan tasks separately. The user may override epic assignments before approval.
 - Total estimated complexity
 - Decisions made and tradeoffs resolved
 - Open questions requiring human input (if any were escalated)
