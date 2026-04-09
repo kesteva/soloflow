@@ -12,11 +12,12 @@ fi
 mkdir -p "$TASKS_DIR"/active/{ideas,research,plans,stuck}
 
 # Archive — never read during execution
-mkdir -p "$TASKS_DIR"/archive/{done,reviews,solutions}
+mkdir -p "$TASKS_DIR"/archive/{done,reviews,solutions,findings,compound}
 
 # .gitkeep files so empty subdirs get tracked by git
 for sub in active/ideas active/research active/plans active/stuck \
-           archive/done archive/reviews archive/solutions; do
+           archive/done archive/reviews archive/solutions \
+           archive/findings archive/compound; do
   touch "$TASKS_DIR/$sub/.gitkeep"
 done
 
@@ -70,6 +71,31 @@ items: []
 # Human Review Queue
 
 No items pending review.
+EOF
+
+# Findings queue — out-of-scope observations logged by executor/verifier/reviewer
+# during a sprint. Consumed by the compounder at learning time.
+cat > "$TASKS_DIR/active/findings.md" << 'EOF'
+---
+pending_count: 0
+last_updated: null
+---
+
+# Findings Queue
+
+Append out-of-scope observations here during a sprint. Each entry:
+
+```
+## FIND-{sprint}-{n}
+- **source:** TASK-NNN (executor|verifier|code-reviewer)
+- **type:** bug | cleanup | improvement | claude-md | anti-pattern
+- **severity:** low | medium | high
+- **location:** path/to/file.ext:line (optional)
+- **description:** one-paragraph observation
+- **suggested_action:** (optional)
+```
+
+No findings yet.
 EOF
 
 echo "Initialized SoloFlow at $TASKS_DIR"

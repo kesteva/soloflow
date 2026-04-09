@@ -27,6 +27,7 @@ const backlogPath = path.join(tasksDir, 'active', 'backlog.json');
 const sprintPath = path.join(tasksDir, 'active', 'sprint.json');
 const checkpointPath = path.join(tasksDir, 'checkpoint.md');
 const reviewQueuePath = path.join(tasksDir, 'human-review-queue.md');
+const findingsPath = path.join(tasksDir, 'active', 'findings.md');
 const doneDir = path.join(tasksDir, 'archive', 'done');
 
 let lines = ['## SoloFlow Status'];
@@ -95,6 +96,20 @@ if (fs.existsSync(reviewQueuePath)) {
     const count = match ? parseInt(match[1], 10) : 0;
     if (count > 0) {
       lines.push(`Human review queue: ${count} item${count > 1 ? 's' : ''} pending`);
+    }
+  } catch (e) {
+    // Ignore read errors for optional file
+  }
+}
+
+// Check for pending out-of-scope findings
+if (fs.existsSync(findingsPath)) {
+  try {
+    const content = fs.readFileSync(findingsPath, 'utf8');
+    const match = content.match(/pending_count:\s*(\d+)/);
+    const count = match ? parseInt(match[1], 10) : 0;
+    if (count > 0) {
+      lines.push(`Findings queue: ${count} out-of-scope item${count > 1 ? 's' : ''} awaiting next compound`);
     }
   } catch (e) {
     // Ignore read errors for optional file
