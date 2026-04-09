@@ -12,13 +12,39 @@ Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDE
 
 ---
 
+## Config resolution — `git.branch_per_run`
+
+This command reads the branching preference at runtime. Resolve in this order (first hit wins):
+
+1. **Project override:** if `.soloflow/config.json` exists and contains `git.branch_per_run`, use it.
+2. **Plugin default:** read `${CLAUDE_PLUGIN_ROOT}/config/defaults.yaml` (via `echo $CLAUDE_PLUGIN_ROOT` in Bash) and grep for `branch_per_run:` under the `git:` block.
+3. **Fallback:** `prompt` if neither file has the key.
+
+Valid values: `always` (create run branch silently), `never` (stay on current branch), `prompt` (ask the user at Step 1.5).
+
+---
+
 ## Step 1: Initialize
 
 1. If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
 2. Read `.soloflow/checkpoint.md` — if it indicates an active sprint mid-execution, use the **AskUserQuestion** tool (question: "Sprint {SPRINT-NNN} is in progress. Resume it or start fresh?", options: **Resume** / **Start fresh**). Do not print the choice as prose.
    - If resume: load `sprint.json` and continue the execution loop below.
    - If fresh: archive the stale sprint and continue.
-3. Read `.soloflow/active/backlog.json`.
+3. **Run branch resume check:** if `sprint.json` contains a `run` object (set by Step 2.5 on a previous invocation), verify `git rev-parse --abbrev-ref HEAD` matches `run.branch`. If it doesn't match, do NOT silently reattach — use `AskUserQuestion` to ask the user: **Checkout the run branch** / **Clear the run record and continue on current branch** / **Abort**. Act on the answer before proceeding.
+4. Read `.soloflow/active/backlog.json`.
+
+## Step 1.5: Resolve branching preference
+
+1. Resolve `git.branch_per_run` per the config resolution rule above.
+2. If the value is `always` → set `create_branch = true`, skip the prompt.
+3. If the value is `never` → set `create_branch = false`, skip the prompt.
+4. If the value is `prompt` → use **AskUserQuestion** with:
+   - "Create a run branch (recommended)" — isolates this run so `main` stays clean until human review.
+   - "Stay on current branch" — commits land on the current branch directly.
+   - "Create a run branch and remember this choice" — same as option 1, plus write `{"git":{"branch_per_run":"always"}}` to `.soloflow/config.json` (merging with any existing content).
+5. **Guardrails (applied after `create_branch` is set):**
+   - If `create_branch = true` and `git status --porcelain` is non-empty, stop and tell the user to commit or stash their working tree before starting a run.
+   - If `create_branch = false`, current branch is `main` or `master`, and the sprint-to-be has more than one task, warn the user and re-prompt — they can still explicitly choose "Stay on current branch" to override.
 
 ## Step 2: Create Sprint
 
@@ -33,6 +59,28 @@ Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDE
    - `sprint.status: "active"`, `sprint.started: {ISO timestamp}`
    - Selected tasks moved from `backlog.json` into `sprint.json`
 6. Increment `sprints` in `.soloflow/counters.json`.
+
+## Step 2.5: Create run branch (only if `create_branch` is true)
+
+1. Capture base state via Bash:
+   - `base_branch=$(git rev-parse --abbrev-ref HEAD)`
+   - `base_sha=$(git rev-parse HEAD)`
+2. Generate the branch name from the `branch_name_format` config value:
+   - `{timestamp}` → `date +%Y%m%d-%H%M%S`
+   - `{sprint_id}` → the sprint ID created in Step 2 (e.g. `SPRINT-007`)
+3. `git checkout -b <branch_name>`.
+4. Write a `run` object into `.soloflow/active/sprint.json`:
+   ```json
+   "run": {
+     "branch": "soloflow/run-20260409-142200-SPRINT-007",
+     "base_branch": "main",
+     "base_sha": "abc123…",
+     "created_at": "2026-04-09T14:22:00Z"
+   }
+   ```
+5. Print a single line: `Run branch: <branch_name> (base: <base_branch>@<short_sha>)`.
+
+If any git command fails, stop and report the failure — do NOT silently fall back to the current branch.
 
 ## Step 3: Execute the Loop
 
@@ -79,6 +127,22 @@ Present a consolidated review:
 
 **PAUSE HERE.** The user's job is taste-level review — everything functional has already been verified.
 
+## Step 4.5: Merge run branch (only if Step 2.5 created one)
+
+1. Use **AskUserQuestion** to ask: "Merge run branch `<branch_name>` into `<base_branch>`?" with options:
+   - **Merge** — merge with `--no-ff` and leave the branch in place for inspection.
+   - **Keep branch open** — stay on the run branch and let the user merge manually later.
+   - **Delete without merging** — discard everything in this run (destructive).
+2. On **Merge**:
+   - `git checkout <base_branch>`
+   - `git merge --no-ff <branch_name> -m "soloflow: merge run <branch_name> (SPRINT-NNN)"` (use the `merge_strategy` value from config if different)
+   - If the merge reports conflicts, **do NOT attempt to resolve**. Leave the user on `<base_branch>` with conflict markers in place, print the conflicting paths, and stop the command.
+   - Do not delete the run branch automatically — the user may want to cherry-pick or inspect.
+3. On **Keep branch open**: stay on `<branch_name>`. Print the branch name + base so the user can merge manually later.
+4. On **Delete without merging**: re-prompt with `AskUserQuestion` to confirm (destructive action). On confirmation, `git checkout <base_branch>` then `git branch -D <branch_name>`. On cancel, fall through to Keep branch open behavior.
+
+Record the outcome (merged / kept-open / deleted) for Step 5.
+
 ## Step 5: Report
 
 ```
@@ -87,6 +151,10 @@ Sprint SPRINT-{NNN} complete.
 - Stuck: {count}
 - Human-needed: {count}
 - Total executor loops: {count}
+
+Run branch: {branch_name or "none — ran on <base_branch>"}
+  Status: {merged into <base> | kept open | deleted | n/a}
+  Head:   {short SHA at end of run}
 
 Next step: /soloflow:compound  (to extract learnings from this sprint)
 ```
@@ -120,3 +188,4 @@ next_action: "{what to do next}"
 
 - This command IS the orchestrator for Phase 3. It runs in the main session and spawns executor/verifier/code-reviewer as leaf-node subagents.
 - Config: `executor_retry_max`, `checkpoint_interval`, `max_sprint_tasks` in `config/defaults.yaml`.
+- Branching config: `git.branch_per_run` (runtime-read) in `config/defaults.yaml`, overrideable per-project via `.soloflow/config.json`.
