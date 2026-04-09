@@ -210,13 +210,16 @@ Write the result to `.soloflow/config.json` with 2-space indentation and a
 trailing newline. Use `Write` — overwriting is expected here because we just
 merged with the previous content.
 
-## Step 5: Stage in git (if applicable)
+## Step 5: Commit to git (if applicable)
 
 Run `git rev-parse --is-inside-work-tree` via Bash. If the project is inside
 a git repo AND `.soloflow/` is not gitignored (`git check-ignore -q .soloflow`
-returns non-zero), run `git add .soloflow` so task/idea history is tracked
-going forward. Do not commit — leave the files staged for the user to commit
-on their own.
+returns non-zero):
+
+1. `git add .soloflow`
+2. If `git diff --cached --quiet` reports no staged changes, skip the commit
+   (idempotent re-run).
+3. Otherwise `git commit -m "chore: initialize .soloflow state"`.
 
 If the project isn't a git repo, skip this step silently.
 
