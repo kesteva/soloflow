@@ -19,8 +19,6 @@ process.stdin.on('data', chunk => { input += chunk; });
 process.stdin.on('end', () => {
   try {
     const event = JSON.parse(input);
-    const sprintPath = path.join(soloflowDir, 'active', 'sprint.json');
-    const now = new Date().toISOString();
 
     // Extract agent info from event
     const agentName = event.agent_name || event.teammate_name || '';
@@ -46,14 +44,11 @@ process.stdin.on('end', () => {
     }
 
     if (context) {
-      // Update last activity timestamp in sprint state
-      if (fs.existsSync(sprintPath)) {
-        const sprintData = JSON.parse(fs.readFileSync(sprintPath, 'utf8'));
-        if (sprintData.sprint && sprintData.sprint.status === 'active') {
-          sprintData.sprint.last_activity = now;
-          fs.writeFileSync(sprintPath, JSON.stringify(sprintData, null, 2));
-        }
-      }
+      // Note: we intentionally do not mutate sprint.json here. A cosmetic
+      // last_activity timestamp would churn state on every subagent stop and
+      // either leak uncommitted state or force a noisy commit from a hook
+      // running inside executor worktrees. The orchestrator owns state
+      // commits; this hook is injection-only.
 
       console.log(JSON.stringify({
         hookSpecificOutput: {
