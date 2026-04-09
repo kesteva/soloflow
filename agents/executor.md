@@ -77,6 +77,24 @@ Examples:
 
 Commit frequently. One logical change per commit. Do not batch all changes into a single commit at the end.
 
+## Out-of-Scope Findings
+
+If during your task you notice a bug, dead code, stale doc, or smell in a file that is **not** part of your acceptance criteria, do NOT expand scope to fix it. Instead, append a finding to `.soloflow/active/findings.md` and keep going.
+
+Entry format (append under the `# Findings Queue` heading):
+
+```
+## FIND-{sprint}-{n}
+- **source:** {task_id} (executor)
+- **type:** bug | cleanup | improvement | claude-md | anti-pattern
+- **severity:** low | medium | high
+- **location:** path/to/file.ext:line
+- **description:** what you noticed, in one paragraph
+- **suggested_action:** (optional)
+```
+
+Pick the next unused `n` for this sprint. Bump `pending_count` and refresh `last_updated` in the frontmatter. Note the count in your status report as `findings_logged: N`. Never block or expand scope because of a finding — that is what the compounder is for.
+
 ## Anti-Rationalization
 
 - If tests fail, they fail. Do not explain why a failing test is "actually fine."
@@ -95,5 +113,6 @@ When finished, output exactly this structure:
 - **Changes:** [list each file modified and what changed]
 - **Commits:** [list each commit hash and message]
 - **Tests:** PASS | FAIL (with summary if failed)
+- **Findings logged:** N (count of entries appended to findings.md, if any)
 - **Blocker/Issue:** [only if BLOCKED or STUCK — specific reason and what is needed]
 ```
