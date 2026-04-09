@@ -1,12 +1,12 @@
 ---
-description: Extract reusable patterns and learnings from a completed sprint
+description: Propose learnings from a completed sprint in four buckets (clean-ups, backlog ideas, CLAUDE.md improvements, reusable patterns), then apply what the user approves
 argument-hint: [optional: SPRINT-NNN]
-allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent]
+allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 
 # /soloflow:compound
 
-Phase 5 of the SoloFlow pipeline. Reads done reports and stuck reports from a completed sprint and extracts reusable solutions, decisions, and anti-patterns.
+Phase 6 of the SoloFlow pipeline. Reads done reports, stuck reports, human review notes, and the out-of-scope findings queue from a completed sprint, then produces a four-bucket proposal for the user to approve. The main agent (you) applies approved items directly — no new tasks are created for clean-ups or CLAUDE.md edits.
 
 Target sprint: **$ARGUMENTS** (optional — defaults to the most recently completed sprint)
 
@@ -16,40 +16,97 @@ Target sprint: **$ARGUMENTS** (optional — defaults to the most recently comple
 
 If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
 
-## Step 1: Identify the Sprint
+## Step 1: Identify the sprint
 
 1. If `$ARGUMENTS` names a sprint (`SPRINT-NNN`), use it.
-2. Otherwise, read `.soloflow/active/sprint.json`. If `sprint.status == "complete"`, use it. Otherwise find the most recently completed sprint from archive.
-3. Collect all relevant reports:
-   - Done reports from `.soloflow/archive/done/` belonging to this sprint
-   - Stuck reports from `.soloflow/active/stuck/` belonging to this sprint
-4. If no reports are found, tell the user: "No completed tasks to learn from. Run `/soloflow:executor` first." and stop.
+2. Otherwise read `.soloflow/active/sprint.json`. If `sprint.status == "complete"`, use it. Otherwise find the most recently completed sprint (check `archive/compound/` for prior proposals to infer, or ask the user).
+3. **Idempotency guard:** If `.soloflow/archive/compound/SPRINT-{NNN}-proposal.md` already exists, this sprint has already been compounded. Report that and stop (unless the user explicitly re-requests).
+4. Collect relevant reports:
+   - Done reports under `.soloflow/archive/done/` (recursive — may be under epic subfolders)
+   - Stuck reports under `.soloflow/active/stuck/`
+   - `.soloflow/active/findings.md`
+   - `.soloflow/human-review-queue.md`
+5. If nothing was done and nothing was logged, tell the user: "No completed tasks or findings to learn from." and stop.
 
-## Step 2: Extract Learnings
+## Step 2: Spawn the compounder
 
-1. Read `.soloflow/counters.json` for the starting solution counter: `solutions + 1`.
+1. Read `.soloflow/counters.json` for the starting `solutions` and `ideas` counters.
 2. Spawn the **compounder** agent via the Agent tool with:
-   - Paths and contents of all done reports and stuck reports for this sprint
-   - The starting solution counter
-   - Instruction: "Extract reusable patterns from this sprint. Write SOL files to `.soloflow/archive/solutions/`. Categorize each as solution, decision, anti-pattern, or process."
-3. The compounder writes solution files directly.
-4. Update `.soloflow/counters.json`: increment `solutions` by the number of solutions produced.
+   - The target sprint ID
+   - Paths to all done reports, stuck reports, findings.md, and human-review-queue.md
+   - Starting counters
+   - Instruction: "Produce `.soloflow/active/COMPOUND-PROPOSAL.md` with four buckets (A clean-ups, B backlog ideas, C CLAUDE.md improvements, D reusable patterns). Do not apply anything. Cite concrete evidence for every item."
+3. Wait for the compounder to finish. Read the resulting `COMPOUND-PROPOSAL.md`.
 
-## Step 3: Report
+## Step 3: Present proposal and collect approvals
+
+Summarize the proposal to the user in a compact format — for each bucket, show item counts and one-line titles. Point them to `COMPOUND-PROPOSAL.md` for full detail.
+
+Then use `AskUserQuestion` to gather approval. Offer, at minimum:
+- **Approve all** — apply every item in every bucket
+- **Approve some** — user lists which items to accept (`A1, A3, B1, C1, D1-D3` style)
+- **Reject all** — archive the proposal, apply nothing
+
+If the user chooses "Approve some," collect the list of accepted item IDs and treat anything not listed as rejected.
+
+## Step 4: Apply approved items
+
+For each approved item, apply directly — do NOT spawn a subagent, do NOT create new tasks. Use atomic commits per the global atomic-commits rule.
+
+### Bucket A — clean-ups
+For each approved A-item:
+1. Make the edits described in the proposal using `Edit` / `Write`.
+2. Commit with `chore({sprint}): {title}` including only the files touched by this item.
+3. Do not batch multiple A-items into one commit.
+
+### Bucket B — backlog ideas
+For each approved B-item:
+1. Increment the `ideas` counter in `.soloflow/counters.json`.
+2. Write `.soloflow/active/ideas/IDEA-{NNN}.md` using the standard idea frontmatter and the body from the proposal.
+3. Commit `feat({sprint}): queue IDEA-{NNN} from compound` after the batch of idea files (one commit for all B-items is fine — ideas are just files).
+
+### Bucket C — CLAUDE.md improvements
+For each approved C-item:
+1. Apply the diff to the target CLAUDE.md file using `Edit`.
+2. Commit with `docs({sprint}): {title}` per item.
+
+### Bucket D — reusable patterns
+For each approved D-item:
+1. Create `.soloflow/archive/solutions/SPRINT-{NNN}/` if it doesn't exist.
+2. Increment the `solutions` counter in `.soloflow/counters.json` for each item.
+3. Write `.soloflow/archive/solutions/SPRINT-{NNN}/SOL-{NNN}.md` with the SOL body from the proposal.
+4. Commit `docs({sprint}): archive SOL-{NNN}..SOL-{MMM}` for the batch.
+
+If any application step fails (e.g., a diff doesn't apply cleanly because the target file changed), stop that item, log the error to the summary, and continue with the rest. Never roll back committed items.
+
+## Step 5: Archive & sweep
+
+1. Move `.soloflow/active/findings.md` → `.soloflow/archive/findings/SPRINT-{NNN}-findings.md`.
+2. Recreate an empty findings file at `.soloflow/active/findings.md` with `pending_count: 0` and `last_updated: null`.
+3. Move `.soloflow/active/COMPOUND-PROPOSAL.md` → `.soloflow/archive/compound/SPRINT-{NNN}-proposal.md` (preserves rejected items for later reference).
+4. Commit `chore({sprint}): archive findings + compound proposal`.
+
+## Step 6: Report
+
+Print a one-screen summary:
 
 ```
-Learning complete for SPRINT-{NNN}.
-- Solutions captured: {count}
-- Categories: {solutions: N, decisions: N, anti-patterns: N, process: N}
+Compound complete for SPRINT-{NNN}.
 
-Files written:
-  .soloflow/archive/solutions/SOL-{NNN}.md
-  ...
+Applied:
+  A. Clean-ups       : {N applied} / {M proposed}  (commits: {hashes})
+  B. Backlog ideas   : {N queued}  / {M proposed}  (IDEA-{first}..IDEA-{last})
+  C. CLAUDE.md edits : {N applied} / {M proposed}  ({files touched})
+  D. SOL archived    : {N written} / {M proposed}  (SPRINT-{NNN}/SOL-{first}..SOL-{last})
+
+Rejected : {N} (preserved in archive/compound/SPRINT-{NNN}-proposal.md)
+Findings : archived → archive/findings/SPRINT-{NNN}-findings.md
 ```
 
 ---
 
 ## Notes
 
-- This command does NOT modify any code or task state — it is purely extractive.
-- Compounded knowledge is read by future `/soloflow:planner` runs to inform approach selection.
+- This command mutates the codebase only for approved clean-ups and CLAUDE.md edits. Everything else is additive to `.soloflow/`.
+- The compounder agent is read-only except for `COMPOUND-PROPOSAL.md` — it never writes directly to solutions, ideas, or CLAUDE.md.
+- Rejected items are preserved in the archived proposal so they can be revisited manually.

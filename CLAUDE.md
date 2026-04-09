@@ -17,7 +17,7 @@ Six-phase workflow orchestrated via Claude Code hooks and agent definitions:
 3. **Task Refinement** (Opus) — idea + research → execution-ready `.soloflow/active/plans/TASK-NNN-plan.md`
 4. **Execution Sprint** — Orchestrator (Opus) coordinates parallel Executor (Sonnet) + Verifier (Opus) + Code Reviewer (Opus) subagents via worktrees
 5. **Human Review** — batched taste-level review (functional verification already done)
-6. **Compound Learning** (Sonnet) — extract reusable patterns → `.soloflow/archive/solutions/SOL-NNN.md`
+6. **Compound Learning** (Sonnet, interactive) — analyzes done reports + stuck reports + `.soloflow/active/findings.md` and produces a four-bucket proposal (`COMPOUND-PROPOSAL.md`): (A) clean-ups to apply immediately, (B) backlog ideas → `active/ideas/IDEA-NNN.md`, (C) CLAUDE.md improvements to apply directly, (D) reusable patterns → `archive/solutions/SPRINT-NNN/SOL-NNN.md`. The user approves per-item; the main agent applies approved items (clean-ups as direct edits, not new tasks) with atomic commits, then archives the proposal and findings file.
 
 **Key constraint:** Subagents cannot spawn subagents. Orchestrator is main agent; executors/verifiers/reviewers are leaf nodes only.
 
@@ -39,14 +39,20 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 - `ideas/`, `research/`, `plans/`, `stuck/` — in-flight task files
 - `backlog.json` — tasks awaiting execution (written by refinement, read by execution)
 - `sprint.json` — active sprint + in-flight tasks (written/read by execution)
+- `findings.md` — append-only queue of out-of-scope observations logged by executor / verifier / code-reviewer during a sprint. Consumed and archived by the compounder.
+- `COMPOUND-PROPOSAL.md` — transient file written by the compounder during `/soloflow:compound`, archived after the user approves/rejects items.
 
 **`.soloflow/archive/`** — never read during execution:
-- `done/`, `reviews/`, `solutions/` — completed task reports and learnings
+- `done/`, `reviews/`, `solutions/` — completed task reports and learnings (solutions are nested under `solutions/SPRINT-NNN/` to keep the archive navigable)
+- `findings/` — archived findings files, one per compounded sprint
+- `compound/` — archived compound proposals (including rejected items) for later reference
 
 **`.soloflow/`** root:
 - `counters.json` — global ID counters (ideas, tasks, sprints, solutions)
 - `checkpoint.md` — context restoration after compaction
 - `human-review-queue.md` — batched items for human review
+
+**Findings queue.** Executor / verifier / code-reviewer agents append an entry to `active/findings.md` whenever they notice something out of scope for their current task (a bug elsewhere, stale docs, a CLAUDE.md gap). They never expand scope to fix it. The compounder consumes the queue at learning time and uses it as the primary seed for clean-up, backlog, and CLAUDE.md proposals.
 
 State is split into 3 JSON files (backlog, sprint, counters) to enable parallel worktree execution without merge conflicts. Completed tasks are removed from `sprint.json` and their reports move to `archive/done/`.
 
