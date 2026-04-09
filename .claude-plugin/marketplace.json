@@ -1,0 +1,15 @@
+{
+  "name": "soloflow",
+  "owner": {
+    "name": "Krishna Esteva"
+  },
+  "plugins": [
+    {
+      "name": "soloflow",
+      "source": {
+        "source": "github",
+        "repo": "kesteva/soloflow"
+      }
+    }
+  ]
+}

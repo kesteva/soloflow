@@ -6,10 +6,11 @@ Automates the full product development lifecycle: **idea extraction → refineme
 
 ## Quick Start
 
-Install the plugin inside Claude Code:
+Install the plugin inside Claude Code (two steps — add the marketplace, then install):
 
 ```
-/plugin install soloflow
+/plugin marketplace add kesteva/soloflow
+/plugin install soloflow@soloflow
 ```
 
 Start a Claude Code session in your project and initialize state:
@@ -32,17 +33,16 @@ For full features, run the pipeline stage by stage:
 
 ### Plugin (recommended)
 
-```
-/plugin install soloflow
-```
-
-Or, from a git URL:
+SoloFlow ships as a self-hosted plugin marketplace. From inside Claude Code:
 
 ```
-claude plugin install https://github.com/kesteva/soloflow
+/plugin marketplace add kesteva/soloflow
+/plugin install soloflow@soloflow
 ```
 
-The plugin auto-discovers agents, commands, hooks, and skills from the repo layout and registers everything automatically. Updates are handled with `/plugin update soloflow`. On first session in a project, SoloFlow prompts you to run `/soloflow:init` — nothing is written to your project until you opt in explicitly.
+The first command registers this repo as a marketplace (reading `.claude-plugin/marketplace.json`). The second installs the `soloflow` plugin from that marketplace.
+
+The plugin auto-discovers agents, commands, hooks, and skills from the repo layout and registers everything automatically. Updates are handled with `/plugin update soloflow@soloflow`. On first session in a project, SoloFlow prompts you to run `/soloflow:init` — nothing is written to your project until you opt in explicitly.
 
 ### Script fallback (vendored install)
 
