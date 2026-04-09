@@ -80,6 +80,16 @@ Valid values: `always` (create run branch silently), `never` (stay on current br
 
 If any git command fails, stop and report the failure — do NOT silently fall back to the current branch.
 
+## Step 2.6: Commit sprint start
+
+Commit the newly written sprint state before entering the execution loop.
+
+1. `git add .soloflow/active/sprint.json .soloflow/active/backlog.json`
+2. If `git diff --cached --quiet` reports no staged changes, skip.
+3. Otherwise `git commit -m "chore(SPRINT-{NNN}): start sprint"`.
+
+Stage only the listed paths — never `git add .` / `git add -A`. Skip silently if not in a git repo or `.soloflow/` is gitignored. If a run branch was created in Step 2.5, this commit lands on the run branch.
+
 ## Step 3: Execute the Loop
 
 1. **Build dependency graph** from tasks' `depends_on` fields. Tasks with no dependencies are immediately ready.
@@ -111,6 +121,13 @@ If any git command fails, stop and report the failure — do NOT silently fall b
 
    g. Every `checkpoint_interval` completed tasks (config default: 3), write checkpoint to `.soloflow/checkpoint.md`.
 
+   h. **Commit state for this task.** After the task has fully settled (done, stuck, blocked, or human-needed) and all state files for it have been written, commit the `.soloflow/` state changes via Bash. This is a **state-only** commit and is separate from any code commits the executor subagent made.
+      - `git add` only the specific state paths that changed for this task: `.soloflow/active/sprint.json`, the new done report (`.soloflow/archive/done/**/TASK-{NNN}-done.md`) or stuck report (`.soloflow/active/stuck/**/TASK-{NNN}-stuck.md`), `.soloflow/active/findings.md` if it was appended to during this task, `.soloflow/human-review-queue.md` if it was updated, and `.soloflow/checkpoint.md` if Step 3.g wrote one.
+      - Never `git add .` / `git add -A`.
+      - If `git diff --cached --quiet` reports no staged changes, skip.
+      - Otherwise commit with a verdict-scoped message: `chore(TASK-{NNN}): done` / `chore(TASK-{NNN}): stuck` / `chore(TASK-{NNN}): blocked` / `chore(TASK-{NNN}): human-needed`.
+      - Skip silently if not in a git repo or `.soloflow/` is gitignored.
+
 3. **Complete sprint** — set `sprint.status: "complete"` in `sprint.json`.
 
 ## Step 4: Human Review
@@ -124,6 +141,16 @@ Present a consolidated review:
 - **Sprint statistics:** completed, stuck, human-needed, total executor loops
 
 **PAUSE HERE.** The user's job is taste-level review — everything functional has already been verified.
+
+## Step 4.4: Commit sprint close
+
+Commit the sprint-closing state (sprint.json marked complete plus any final queue/checkpoint updates) before the run-branch merge decision.
+
+1. `git add .soloflow/active/sprint.json .soloflow/human-review-queue.md .soloflow/checkpoint.md` (include only the paths that actually changed).
+2. If `git diff --cached --quiet` reports no staged changes, skip.
+3. Otherwise `git commit -m "chore(SPRINT-{NNN}): close sprint"`.
+
+Never `git add .` / `git add -A`. Skip silently if not in a git repo or `.soloflow/` is gitignored.
 
 ## Step 4.5: Merge run branch (only if Step 2.5 created one)
 
