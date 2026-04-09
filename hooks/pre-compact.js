@@ -5,6 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execFileSync } = require('child_process');
 
 const cwd = process.cwd();
 const soloflowDir = path.join(cwd, '.soloflow');
@@ -81,6 +82,29 @@ Next: ${nextAction}
 `;
 
   fs.writeFileSync(checkpointPath, checkpoint);
+
+  // Commit the checkpoint if we're inside a git repo and .soloflow/ is tracked.
+  // Never `git add .` — stage only the checkpoint file. Swallow all errors so
+  // we never block compaction on git state.
+  try {
+    execFileSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd, stdio: 'ignore' });
+    // Refuse to commit if .soloflow/ is gitignored (check-ignore exits 0 if ignored).
+    let ignored = false;
+    try {
+      execFileSync('git', ['check-ignore', '-q', '.soloflow'], { cwd, stdio: 'ignore' });
+      ignored = true;
+    } catch (_) { /* not ignored */ }
+    if (!ignored) {
+      execFileSync('git', ['add', '.soloflow/checkpoint.md'], { cwd, stdio: 'ignore' });
+      // Only commit if there are staged changes for the checkpoint.
+      try {
+        execFileSync('git', ['diff', '--cached', '--quiet', '--', '.soloflow/checkpoint.md'], { cwd, stdio: 'ignore' });
+        // exit 0 → no staged changes → skip
+      } catch (_) {
+        execFileSync('git', ['commit', '-m', 'chore: checkpoint before compact', '--', '.soloflow/checkpoint.md'], { cwd, stdio: 'ignore' });
+      }
+    }
+  } catch (_) { /* ignore all git errors */ }
 
   console.log(JSON.stringify({
     hookSpecificOutput: {
