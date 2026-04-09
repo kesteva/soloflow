@@ -1,12 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# SoloFlow scaffold + repair script.
+#
+# This script is idempotent: running it on an already-initialized project will
+# create any missing directories or state files without touching files that
+# already exist. Use it as the shell fallback when you can't invoke
+# /soloflow:init from inside Claude Code.
+
 TASKS_DIR="${1:-.soloflow}"
 
+MODE="fresh"
 if [ -d "$TASKS_DIR" ]; then
-  echo "SoloFlow already initialized at $TASKS_DIR"
-  exit 0
+  MODE="repair"
 fi
+
+# write_if_missing <path> <<EOF ... EOF
+# Writes heredoc content to <path> only if the file does not already exist.
+write_if_missing() {
+  local path=$1
+  if [ -e "$path" ]; then
+    return 0
+  fi
+  # Read heredoc from stdin into the file.
+  cat > "$path"
+}
 
 # Active state — read during execution
 mkdir -p "$TASKS_DIR"/active/{ideas,research,plans,stuck}
@@ -18,11 +36,11 @@ mkdir -p "$TASKS_DIR"/archive/{done,reviews,solutions,findings,compound}
 for sub in active/ideas active/research active/plans active/stuck \
            archive/done archive/reviews archive/solutions \
            archive/findings archive/compound; do
-  touch "$TASKS_DIR/$sub/.gitkeep"
+  [ -e "$TASKS_DIR/$sub/.gitkeep" ] || touch "$TASKS_DIR/$sub/.gitkeep"
 done
 
 # Backlog — tasks awaiting execution (written by refinement, read by execution)
-cat > "$TASKS_DIR/active/backlog.json" << 'EOF'
+write_if_missing "$TASKS_DIR/active/backlog.json" << 'EOF'
 {
   "version": 2,
   "tasks": {}
@@ -30,7 +48,7 @@ cat > "$TASKS_DIR/active/backlog.json" << 'EOF'
 EOF
 
 # Sprint — active sprint state and in-flight tasks (written/read by execution)
-cat > "$TASKS_DIR/active/sprint.json" << 'EOF'
+write_if_missing "$TASKS_DIR/active/sprint.json" << 'EOF'
 {
   "version": 2,
   "sprint": null,
@@ -39,7 +57,7 @@ cat > "$TASKS_DIR/active/sprint.json" << 'EOF'
 EOF
 
 # Context restoration after compaction
-cat > "$TASKS_DIR/checkpoint.md" << 'EOF'
+write_if_missing "$TASKS_DIR/checkpoint.md" << 'EOF'
 ---
 last_updated: null
 active_sprint: null
@@ -52,7 +70,7 @@ No checkpoint data yet. Updated by the pre-compact hook to preserve state across
 EOF
 
 # Batched items for human review
-cat > "$TASKS_DIR/human-review-queue.md" << 'EOF'
+write_if_missing "$TASKS_DIR/human-review-queue.md" << 'EOF'
 ---
 pending_count: 0
 items: []
@@ -65,7 +83,7 @@ EOF
 
 # Findings queue — out-of-scope observations logged by executor/verifier/reviewer
 # during a sprint. Consumed by the compounder at learning time.
-cat > "$TASKS_DIR/active/findings.md" << 'EOF'
+write_if_missing "$TASKS_DIR/active/findings.md" << 'EOF'
 ---
 pending_count: 0
 last_updated: null
@@ -88,4 +106,8 @@ Append out-of-scope observations here during a sprint. Each entry:
 No findings yet.
 EOF
 
-echo "Initialized SoloFlow at $TASKS_DIR"
+if [ "$MODE" = "fresh" ]; then
+  echo "Initialized SoloFlow at $TASKS_DIR"
+else
+  echo "Repaired SoloFlow at $TASKS_DIR (missing directories/files created; existing files preserved)"
+fi
