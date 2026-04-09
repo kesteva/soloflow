@@ -112,6 +112,17 @@ Check the loop counter (starts at 1, max 3 from config `executor_retry_max`):
 2. Update `.soloflow/active/sprint.json` to `status: "human_needed"`
 3. Report to the user that the fix works technically but needs their review for product judgment
 
+## Step 7.5: Commit state
+
+After the task settles (APPROVED, STUCK, or HUMAN_NEEDED), commit the `.soloflow/` state changes via Bash. This is a state-only commit, separate from the executor's code commits.
+
+1. `git add` only the specific state paths touched in this run: the plan file (`.soloflow/active/plans/TASK-{NNN}-plan.md`), `.soloflow/active/sprint.json`, and whichever of these apply — `.soloflow/archive/done/TASK-{NNN}-done.md`, `.soloflow/active/stuck/TASK-{NNN}-stuck.md`, `.soloflow/human-review-queue.md`, `.soloflow/active/findings.md`.
+2. Never `git add .` / `git add -A`.
+3. If `git diff --cached --quiet` reports no staged changes, skip.
+4. Otherwise commit with a verdict-scoped message: `chore(TASK-{NNN}): done` / `chore(TASK-{NNN}): stuck` / `chore(TASK-{NNN}): human-needed`.
+
+Skip silently if not in a git repo or `.soloflow/` is gitignored.
+
 ## Step 8: Final Summary
 
 Report to the user:
