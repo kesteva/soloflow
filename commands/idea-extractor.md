@@ -56,6 +56,16 @@ If the user chose "Approve + Research":
 2. Capture the researcher's output.
 3. Write the research report to `.soloflow/active/research/IDEA-{NNN}-research.md`.
 
+## Step 4.5: Commit state
+
+Commit the newly written state files via Bash. Stage only the specific paths you wrote in this run — never `git add .` / `git add -A`.
+
+1. `git add .soloflow/active/ideas/IDEA-{NNN}.md` (and `.soloflow/active/research/IDEA-{NNN}-research.md` if Step 4 ran).
+2. If `git diff --cached --quiet` reports no staged changes, skip (idempotent re-run).
+3. Otherwise `git commit -m "chore: capture IDEA-{NNN}"`.
+
+Skip this step silently if the project is not inside a git repo (`git rev-parse --is-inside-work-tree`) or if `.soloflow/` is gitignored.
+
 ## Step 5: Report
 
 Tell the user:
