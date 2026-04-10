@@ -43,6 +43,7 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 - `COMPOUND-PROPOSAL.md` — transient file written by the compounder during `/soloflow:compound`, archived after the user approves/rejects items.
 
 **`.soloflow/archive/`** — never read during execution:
+- `ideas/` — ideas that have been refined into plans (moved from `active/ideas/` by the planner)
 - `done/`, `reviews/`, `solutions/` — completed task reports and learnings (solutions are nested under `solutions/SPRINT-NNN/` to keep the archive navigable)
 - `findings/` — archived findings files, one per compounded sprint
 - `compound/` — archived compound proposals (including rejected items) for later reference
@@ -53,7 +54,7 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 
 **ID allocation.** `IDEA-NNN`, `TASK-NNN`, `SPRINT-NNN`, and `SOL-NNN` are derived from the filesystem — there is no `counters.json`. To allocate the next ID, glob every location an ID of that kind could live, extract the numeric suffix, take `max + 1`, zero-pad to 3 digits. Reference globs:
 
-- **IDEA:** `.soloflow/active/ideas/IDEA-*.md` (+ any future archive location)
+- **IDEA:** `.soloflow/active/ideas/IDEA-*.md` ∪ `.soloflow/archive/ideas/IDEA-*.md`
 - **TASK:** `.soloflow/active/plans/**/TASK-*-plan.md` ∪ `.soloflow/active/stuck/**/TASK-*-stuck.md` ∪ `.soloflow/archive/done/**/TASK-*-done.md`
 - **SPRINT:** `.soloflow/archive/compound/SPRINT-*-proposal.md` ∪ `.soloflow/archive/findings/SPRINT-*-findings.md` ∪ `.soloflow/archive/solutions/SPRINT-*/` ∪ the active `sprint.json`'s `sprint.id`
 - **SOL:** `.soloflow/archive/solutions/**/SOL-*.md`
