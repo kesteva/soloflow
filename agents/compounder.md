@@ -29,7 +29,7 @@ You receive references to:
    | Bucket | Test question | Examples |
    |---|---|---|
    | **A. Clean-up** | Is this a concrete, bounded, safe edit I could apply right now? | Stale TODO, dead import, fix a typo in a comment, remove a vestigial file |
-   | **B. Backlog idea** | Is this feature- or refactor-shaped — does it need refinement before execution? | "Extract the polling loop into a hook", "Add optimistic updates to the cart" |
+   | **B. Backlog task** | Is this feature- or refactor-shaped — does it need refinement into an execution-ready plan? | "Extract the polling loop into a hook", "Add optimistic updates to the cart" |
    | **C. CLAUDE.md improvement** | Is this a rule, convention, or piece of context the agents should have known upfront? | "Verifier had to guess how to run tests", "Executor missed that module X has its own conventions" |
    | **D. Reusable pattern (SOL)** | Is this a cross-task insight worth remembering verbatim? | A working approach, an anti-pattern, a decision with rationale, a process improvement |
    | **E. SoloFlow improvements** *(tester mode only)* | Is this a problem with SoloFlow itself — its agents, commands, hooks, config, or workflow — that the SoloFlow maintainers should know about? | Agent gave bad advice, command step was confusing, hook misfired, missing config option, workflow bottleneck, verification gap |
@@ -51,7 +51,7 @@ counters_start:
   ideas: {N}
 summary:
   cleanups: {count}
-  ideas: {count}
+  backlog_tasks: {count}
   claude_md: {count}
   solutions: {count}
   soloflow_improvements: {count}  # 0 when tester mode is off
@@ -72,13 +72,15 @@ For each item:
   # or a clear prose description of the edit, file path + before/after
   ```
 
-## B. Backlog ideas (add to idea pipeline)
+## B. Backlog tasks (refine into execution-ready plans)
 
 For each item:
 
 ### B{n}. {short title}
 - **Source:** finding(s) or task(s) that surfaced this
-- **Idea body:** one paragraph in the IDEA-NNN.md style — problem, proposed direction, rough scope. Do NOT write acceptance criteria; refinement will produce those.
+- **Problem:** what is wrong or missing, with specific file paths and evidence
+- **Proposed direction:** one paragraph describing the fix or feature at a high level — enough context for the task-refiner to produce a plan. Include relevant file paths, function names, and any constraints.
+- **Scope:** small | medium | large (rough estimate — helps the refiner gauge complexity)
 
 ## C. CLAUDE.md improvements (apply now)
 

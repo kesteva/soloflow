@@ -61,11 +61,17 @@ For each approved A-item:
 2. Commit with `chore({sprint}): {title}` including only the files touched by this item.
 3. Do not batch multiple A-items into one commit.
 
-### Bucket B — backlog ideas
-For each approved B-item:
-1. Recompute the next IDEA ID from the filesystem (glob `.soloflow/active/ideas/IDEA-*.md`, max + 1) — do this per-item so sequential writes don't collide.
-2. Write `.soloflow/active/ideas/IDEA-{NNN}.md` using the standard idea frontmatter and the body from the proposal, with `noclobber`/`wx` semantics. Retry with the next ID on collision.
-3. Commit `feat({sprint}): queue IDEA-{NNN} from compound` after the batch of idea files (one commit for all B-items is fine — ideas are just files).
+### Bucket B — backlog tasks (refine into plans)
+For the set of approved B-items, produce execution-ready task plans by spawning the **task-refiner** agent:
+
+1. Compute the starting task counter from the filesystem (see "ID allocation" in the project `CLAUDE.md`).
+2. Discover existing epics (glob `.soloflow/active/plans/*/EPIC.md`).
+3. Assemble the approved B-items into a single brief: for each item include its title, problem, proposed direction, scope, and source. Prefix with: *"These work items were surfaced by the compounder during SPRINT-{NNN}. Refine each into an execution-ready task plan."*
+4. Spawn the **task-refiner** agent via the Agent tool with the brief, starting task counter, and existing epics — same interface as `/soloflow:planner` Step 2.
+5. Capture the output. Parse into individual plan files and any new EPIC.md blocks.
+6. Write each plan file to `.soloflow/active/plans/` (respecting epic subfolders), using `noclobber`/`wx` semantics. Retry on collision.
+7. Add each task to `.soloflow/active/backlog.json` with `status: "ready"`.
+8. Commit `feat({sprint}): plan TASK-{NNN}..TASK-{MMM} from compound` including all plan files and backlog.json.
 
 ### Bucket C — CLAUDE.md improvements
 For each approved C-item:
