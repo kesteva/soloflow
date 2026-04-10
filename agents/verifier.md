@@ -45,7 +45,9 @@ Visual verification gives you "eyes" on the running app. It is **off by default*
 
 If `visual_mobile` resolves to `false`, skip Maestro entirely. If `visual_web` resolves to `false`, skip Playwright entirely. If both are `false`, skip Level 2 completely and proceed to Level 3. Do NOT run any availability checks or MCP probes unless the setting is enabled.
 
-**Decision gate (only if a setting is enabled):** Look at the task plan's `files_owned`. If they include mobile UI components/screens → use Maestro. If they include web pages/components → use Playwright. If neither → skip to Level 3.
+**Anti-skip guardrail:** You MUST NOT report visual verification as SKIPPED unless you have actually read the config and it resolved to `false`. Self-reporting "SKIPPED — visual_mobile disabled" without reading `.soloflow/config.json` is a verification failure. If you cannot read the file (error, missing), default to ENABLED and attempt the check.
+
+**Decision gate (only if a setting is enabled):** Look at the task plan's `files_owned` AND the acceptance criteria. If the changed files include UI components/screens, OR if the task modifies a store/state shape that feeds UI, OR if any acceptance criterion describes user-visible behavior → visual verification applies. For mobile: use Maestro. For web: use Playwright. If neither UI files nor UI-visible state are involved → skip to Level 3.
 
 **Availability check (only if settings gate and decision gate both pass):**
 1. Run `which maestro` (for mobile) or `which npx` (for web) via Bash
@@ -68,6 +70,14 @@ If `visual_mobile` resolves to `false`, skip Maestro entirely. If `visual_web` r
 4. Map results to acceptance criteria
 
 **Port conflict guard:** NEVER run `maestro test` via Bash while using Maestro MCP tools. Both use port 7001 and cannot run simultaneously.
+
+**Flow-scoped verification:** Visual verification tests the **full user flow** the task participates in, not just the files in `files_owned`. A task that modifies a store shape, removes a field, or changes a state transition must be verified by running the UI flow that *reads* from that store — even if the consuming screen is outside `files_owned`. Before running visual checks:
+
+1. Grep for all consumers of any store/state the task modified.
+2. Identify the user flow(s) that exercise those consumers.
+3. Run the visual check through the complete flow (e.g., wizard entry → intermediate screens → confirm screen), not just the screen the task directly changed.
+
+A file-scoped visual check that only tests `files_owned` is insufficient when the task has cross-cutting side effects.
 
 **Graceful degradation:** If any MCP tool call returns an error during verification, do NOT fail the task. Log the error, mark Level 2 as "SKIPPED — {reason}", and proceed to Level 3.
 
