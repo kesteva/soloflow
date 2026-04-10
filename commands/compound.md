@@ -74,9 +74,13 @@ For the set of approved B-items, produce execution-ready task plans by spawning 
 8. Commit `feat({sprint}): plan TASK-{NNN}..TASK-{MMM} from compound` including all plan files and backlog.json.
 
 ### Bucket C — CLAUDE.md improvements
-For each approved C-item:
-1. Apply the diff to the target CLAUDE.md file using `Edit`.
-2. Commit with `docs({sprint}): {title}` per item.
+Spawn the **claude-md-reviewer** agent to review and tighten the approved C-items before applying:
+
+1. Pass all approved C-items to the claude-md-reviewer agent with instruction: *"Review these proposed CLAUDE.md improvements against the existing codebase and CLAUDE.md files. Produce tightly scoped diffs at the lowest appropriate directory level. Reject redundant, stale, or overly broad proposals."*
+2. Wait for the reviewer's output. For each item it marks `ready`:
+   - Apply the diff to the target file using `Edit`. If the target file doesn't exist (e.g., a new scoped CLAUDE.md or CODE-PATTERNS.md), create it with `Write`.
+   - Commit with `docs({sprint}): {title}` per item.
+3. For items the reviewer rejects (redundant / stale / too-broad / belongs-in-code-patterns): skip them. Note in the final report which were rejected and why.
 
 ### Bucket D — reusable patterns
 For each approved D-item:
