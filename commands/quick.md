@@ -96,9 +96,10 @@ Wait for the verifier's verdict.
 Read the verifier's verification report:
 
 ### If APPROVED
-1. Write a done report to `.soloflow/archive/done/TASK-{NNN}-done.md` using the verifier's report
-2. Remove the task from `.soloflow/active/sprint.json`
-3. Report success to the user with a summary of changes
+1. Spawn **test-writer** with the plan, executor's changed files, and "no code-review report" (quick path skips code review). If `TESTS_WRITTEN`, run the test suite to confirm. One retry on failure; if still failing, log a finding and proceed.
+2. Write a done report to `.soloflow/archive/done/TASK-{NNN}-done.md` using the verifier's report
+3. Remove the task from `.soloflow/active/sprint.json`
+4. Report success to the user with a summary of changes
 
 ### If NEEDS_CHANGES
 Check the loop counter (starts at 1, max 3 from config `executor_retry_max`):
