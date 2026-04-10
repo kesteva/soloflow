@@ -63,9 +63,13 @@ Then make a **single batched `AskUserQuestion` call** whose questions list is bu
    - `question`: the `question` field verbatim
    - `header`: a short label derived from the question (≤20 chars)
    - `options`: the extractor's `candidates` array if present (2–4 concrete candidate answers). Always rely on the `AskUserQuestion` tool's built-in free-form fallback so the user can type their own answer. If `candidates` is absent or empty, pass an empty options list and the user will answer free-form.
-2. **Final question — the proceed picker.** Question: "How should we proceed with IDEA-{NNN}?" with options:
-   - **Approve + Research** — run external research next (default when `phases.research: true` in config)
-   - **Approve (skip research)** — stop here; idea is ready for `/soloflow:planner`
+2. **Final question — the proceed picker.** Read the extractor's `research_recommendation` and `research_rationale` from the idea file frontmatter. Print a one-line recommendation before the question:
+   - If `recommended`: *"Research recommended — {research_rationale}"*
+   - If `not_needed`: *"Research likely not needed — {research_rationale}"*
+
+   Question: "How should we proceed with IDEA-{NNN}?" with options:
+   - **Approve + Research** — run external research next. Label with `(recommended)` if `research_recommendation` is `recommended`.
+   - **Approve (skip research)** — stop here; idea is ready for `/soloflow:planner`. Label with `(recommended)` if `research_recommendation` is `not_needed`.
    - **Modify** — update slices, answer questions, add constraints
    - **Reject** — delete the idea file and stop
 

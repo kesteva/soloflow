@@ -45,7 +45,12 @@ You also receive the idea ID to use (e.g., IDEA-001).
    - Context about why it matters for the implementation
    - *(Optional)* `candidates` — 2 to 4 short, concrete, mutually distinct candidate answers you'd propose. The command will surface these as a structured picker to the user, with a free-form fallback. **Omit `candidates` if you genuinely cannot propose distinct options** (the question is too open) — the command will fall back to a free-form prompt. Do not invent filler candidates.
 
-7. **Output the structured idea file** matching the format below exactly.
+7. **Assess whether external research would add value.** Set `research_recommendation`:
+   - `recommended` — when open questions require external ecosystem knowledge (library choices, API docs, best practices), assumptions have low confidence and can't be validated from the codebase alone, or the idea involves unfamiliar technology.
+   - `not_needed` — when the idea is well-grounded in existing codebase patterns, all questions are answerable from code, or the idea is a straightforward refactor/bugfix.
+   - Write a one-line `research_rationale` explaining your reasoning.
+
+8. **Output the structured idea file** matching the format below exactly.
 
 ## Output Format
 
@@ -72,6 +77,8 @@ assumptions:
   - assumption: "{what is assumed}"
     confidence: {high|medium|low}
     validation: "{how to check}"
+research_recommendation: {recommended|not_needed}
+research_rationale: "{one-line explanation}"
 ---
 
 # {Idea Title}
