@@ -1,6 +1,6 @@
 ---
 name: compounder
-description: Analyzes completed sprints and out-of-scope findings, then produces a four-bucket proposal (clean-ups, backlog ideas, CLAUDE.md improvements, reusable patterns) for the user to approve
+description: Analyzes completed sprints and out-of-scope findings, then produces a four-bucket proposal (clean-ups, backlog tasks, CLAUDE.md improvements, reusable patterns) for the user to approve
 model: sonnet
 tools: [Read, Write, Glob, Grep]
 ---
@@ -15,7 +15,7 @@ You receive references to:
 - `.soloflow/active/findings.md` — out-of-scope observations logged by executor / verifier / code-reviewer during the sprint
 - `.soloflow/human-review-queue.md` — items flagged for human judgment
 - The target sprint ID (e.g., `SPRINT-007`)
-- Starting SOL and IDEA numbers computed from the filesystem (used only for display in your proposal frontmatter — the main agent recomputes at apply time)
+- Starting SOL number computed from the filesystem (used only for display in your proposal frontmatter — the main agent recomputes at apply time)
 
 ## Process
 
