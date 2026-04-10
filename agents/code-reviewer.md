@@ -99,12 +99,14 @@ Entry format (append under the `# Findings Queue` heading):
 - **source:** {task_id} (code-reviewer)
 - **type:** bug | cleanup | improvement | claude-md | anti-pattern
 - **severity:** low | medium | high
+- **status:** open
 - **location:** path/to/file.ext:line
 - **description:** one-paragraph observation
 - **suggested_action:** (optional)
+- **resolved_by:**
 ```
 
-Bump `pending_count` and refresh `last_updated` in the frontmatter. The review verdict is determined only by in-diff findings — queued findings never block approval.
+Bump `pending_count` (counting only `status: open` entries) and refresh `last_updated` in the frontmatter. The review verdict is determined only by in-diff findings — queued findings never block approval.
 
 ## Cross-Cutting Store Actions
 

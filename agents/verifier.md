@@ -137,12 +137,14 @@ Entry format (append under the `# Findings Queue` heading):
 - **source:** {task_id} (verifier)
 - **type:** bug | cleanup | improvement | claude-md | anti-pattern
 - **severity:** low | medium | high
+- **status:** open
 - **location:** path/to/file.ext:line (optional)
 - **description:** one-paragraph observation
 - **suggested_action:** (optional)
+- **resolved_by:**
 ```
 
-Bump `pending_count` and refresh `last_updated` in the frontmatter. Note the count in your verification report as `findings_logged: N`. Findings never change your verdict — real blockers go in `Changes Required`.
+Bump `pending_count` (counting only `status: open` entries) and refresh `last_updated` in the frontmatter. Note the count in your verification report as `findings_logged: N`. Findings never change your verdict — real blockers go in `Changes Required`.
 
 ## Anti-Rationalization
 

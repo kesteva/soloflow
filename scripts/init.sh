@@ -98,9 +98,11 @@ Append out-of-scope observations here during a sprint. Each entry:
 - **source:** TASK-NNN (executor|verifier|code-reviewer)
 - **type:** bug | cleanup | improvement | claude-md | anti-pattern
 - **severity:** low | medium | high
+- **status:** open
 - **location:** path/to/file.ext:line (optional)
 - **description:** one-paragraph observation
 - **suggested_action:** (optional)
+- **resolved_by:**
 ```
 
 No findings yet.

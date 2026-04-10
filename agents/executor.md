@@ -108,12 +108,25 @@ Entry format (append under the `# Findings Queue` heading):
 - **source:** {task_id} (executor)
 - **type:** bug | cleanup | improvement | claude-md | anti-pattern
 - **severity:** low | medium | high
+- **status:** open
 - **location:** path/to/file.ext:line
 - **description:** what you noticed, in one paragraph
 - **suggested_action:** (optional)
+- **resolved_by:**
 ```
 
-Pick the next unused `n` for this sprint. Bump `pending_count` and refresh `last_updated` in the frontmatter. Note the count in your status report as `findings_logged: N`. Never block or expand scope because of a finding — that is what the compounder is for.
+Pick the next unused `n` for this sprint. Bump `pending_count` (counting only `status: open` entries) and refresh `last_updated` in the frontmatter. Note the count in your status report as `findings_logged: N`. Never block or expand scope because of a finding — that is what the compounder is for.
+
+### Resolving Existing Findings
+
+Before reporting your status, scan `.soloflow/active/findings.md` for any `status: open` entries whose `location` falls within your `files_owned`. If your task's changes fix the issue described in a finding:
+
+1. Edit that finding's `- **status:** open` to `- **status:** resolved`
+2. Set `- **resolved_by:** {your task_id}` (e.g., `TASK-012`)
+3. Decrement `pending_count` in the frontmatter for each finding you resolve
+4. Refresh `last_updated`
+
+Only mark a finding resolved if your changes **directly address** the described issue. Do not resolve findings speculatively. Include resolved finding IDs in your status report.
 
 ## Anti-Rationalization
 
@@ -134,5 +147,6 @@ When finished, output exactly this structure:
 - **Commits:** [list each commit hash and message — REQUIRED when Status is COMPLETED]
 - **Tests:** PASS | FAIL (with summary if failed)
 - **Findings logged:** N (count of entries appended to findings.md, if any)
+- **Findings resolved:** [FIND IDs resolved, if any]
 - **Blocker/Issue:** [only if BLOCKED or STUCK — specific reason and what is needed]
 ```

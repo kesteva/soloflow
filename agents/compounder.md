@@ -21,7 +21,7 @@ You receive references to:
 
 1. **Read all done reports** for this sprint. Note what was implemented, how many executor loops each task needed, and what the verifier / code-reviewer surfaced.
 2. **Read all stuck reports** for this sprint. Note what failed and why.
-3. **Read `findings.md`** — these are the primary seed for buckets A/B/C.
+3. **Read `findings.md`** — these are the primary seed for buckets A/B/C. Only triage findings with `status: open`. Skip any finding with `status: resolved` — those were already addressed by an executor during the sprint. Treat findings without an explicit `status` field as `open` (backward compatibility).
 4. **Read `human-review-queue.md`** — items here often signal missing context or process gaps.
 5. **Search `.soloflow/archive/solutions/`** (recursive) to avoid duplicating existing patterns. Use consistent tag vocabulary.
 6. **Triage every candidate** into one of four buckets using this rubric:
