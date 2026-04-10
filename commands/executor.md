@@ -115,9 +115,16 @@ Stage only the listed paths — never `git add .` / `git add -A`. Skip silently 
       - **HUMAN_NEEDED** → add to `.soloflow/human-review-queue.md`, update status in `sprint.json`.
 
    f. Spawn **code-reviewer** with the plan + executor's changed files list. Wait for verdict.
-      - **CLEAN** → write done report to `.soloflow/archive/done/{epic}/TASK-{NNN}-done.md` if the plan has an epic (create the folder if missing), else flat at `.soloflow/archive/done/TASK-{NNN}-done.md`. Remove task from `sprint.json`. Then perform the **epic archival check**: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no tasks from that epic remain in `sprint.json`, flag the epic for the Step 4 human review with an "archive this epic?" prompt. On user approval (not automatic), move `.soloflow/active/plans/{epic}/EPIC.md` → `.soloflow/archive/done/{epic}/EPIC.md` and flip its frontmatter `status` from `active` to `complete`.
+      - **CLEAN** → proceed to step f2 (test writing).
       - **IMPROVEMENTS_NEEDED** (first time only) → re-spawn executor with review feedback, then re-verify. Does NOT consume the executor retry budget.
       - **SECURITY_ISSUE** → escalate to HUMAN_NEEDED. Add to `.soloflow/human-review-queue.md`, update status in `sprint.json`.
+
+   f2. **Test writing.** Spawn the **test-writer** agent with the plan, executor's changed files list, and code-reviewer's report. Wait for result.
+      - **TESTS_WRITTEN** → run the project's test suite via Bash to confirm no regressions. If the new tests pass, proceed. If they fail, re-spawn the test-writer with the failure output (one retry). If still failing after retry, log a finding and proceed — do not block the task on test issues.
+      - **NO_TESTS_NEEDED** → proceed (the test-writer determined nothing warranted new tests).
+      - **NO_TEST_INFRA** → proceed (no test framework is set up in this project).
+
+   f3. Write done report to `.soloflow/archive/done/{epic}/TASK-{NNN}-done.md` if the plan has an epic (create the folder if missing), else flat at `.soloflow/archive/done/TASK-{NNN}-done.md`. Remove task from `sprint.json`. Then perform the **epic archival check**: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no tasks from that epic remain in `sprint.json`, flag the epic for the Step 4 human review with an "archive this epic?" prompt. On user approval (not automatic), move `.soloflow/active/plans/{epic}/EPIC.md` → `.soloflow/archive/done/{epic}/EPIC.md` and flip its frontmatter `status` from `active` to `complete`.
 
    g. Every `checkpoint_interval` completed tasks (config default: 3), write checkpoint to `.soloflow/checkpoint.md`.
 
@@ -129,6 +136,14 @@ Stage only the listed paths — never `git add .` / `git add -A`. Skip silently 
       - Skip silently if not in a git repo or `.soloflow/` is gitignored.
 
 3. **Complete sprint** — set `sprint.status: "complete"` in `sprint.json`.
+
+## Step 3.5: End-of-sprint verification
+
+Spawn the **sprint-verifier** agent with the sprint ID, base SHA (from `sprint.json`'s `run.base_sha` or the commit before sprint start), the list of completed tasks with their plans and changed files, and the resolved visual verification config. Wait for its report.
+
+Handle the report:
+- If regressions were found (visual or integration), add each to `.soloflow/human-review-queue.md` with the failure details, evidence, and suspected responsible task.
+- Commit any `.soloflow/` state changes with `chore(SPRINT-{NNN}): end-of-sprint verification`.
 
 ## Step 4: Human Review
 
