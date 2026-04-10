@@ -46,7 +46,6 @@ empty `.gitkeep` file into it.
 - `.soloflow/archive/ideas`
 - `.soloflow/archive/done`
 - `.soloflow/archive/reviews`
-- `.soloflow/archive/solutions`
 - `.soloflow/archive/findings`
 - `.soloflow/archive/compound`
 

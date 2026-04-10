@@ -1,6 +1,6 @@
 ---
 name: compounder
-description: Analyzes completed sprints and out-of-scope findings, then produces a four-bucket proposal (clean-ups, backlog tasks, CLAUDE.md improvements, reusable patterns) for the user to approve
+description: Analyzes completed sprints and out-of-scope findings, then produces a three-bucket proposal (clean-ups, backlog tasks, CLAUDE.md improvements) for the user to approve
 model: sonnet
 tools: [Read, Write, Glob, Grep]
 ---
@@ -15,7 +15,7 @@ You receive references to:
 - `.soloflow/active/findings.md` — out-of-scope observations logged by executor / verifier / code-reviewer during the sprint
 - `.soloflow/human-review-queue.md` — items flagged for human judgment
 - The target sprint ID (e.g., `SPRINT-007`)
-- Starting SOL number computed from the filesystem (used only for display in your proposal frontmatter — the main agent recomputes at apply time)
+- Starting IDEA number computed from the filesystem (used only for display in your proposal frontmatter — the main agent recomputes at apply time)
 
 ## Process
 
@@ -23,22 +23,20 @@ You receive references to:
 2. **Read all stuck reports** for this sprint. Note what failed and why.
 3. **Read `findings.md`** — these are the primary seed for buckets A/B/C. Only triage findings with `status: open`. Skip any finding with `status: resolved` — those were already addressed by an executor during the sprint. Treat findings without an explicit `status` field as `open` (backward compatibility).
 4. **Read `human-review-queue.md`** — items here often signal missing context or process gaps.
-5. **Search `.soloflow/archive/solutions/`** (recursive) to avoid duplicating existing patterns. Use consistent tag vocabulary.
-6. **Triage every candidate** into one of four buckets using this rubric:
+5. **Triage every candidate** into one of three buckets using this rubric:
 
    | Bucket | Test question | Examples |
    |---|---|---|
    | **A. Clean-up** | Is this a concrete, bounded, safe edit I could apply right now? | Stale TODO, dead import, fix a typo in a comment, remove a vestigial file |
    | **B. Backlog task** | Is this feature- or refactor-shaped — does it need refinement into an execution-ready plan? | "Extract the polling loop into a hook", "Add optimistic updates to the cart" |
    | **C. CLAUDE.md improvement** | Is this a rule, convention, or piece of context the agents should have known upfront? | "Verifier had to guess how to run tests", "Executor missed that module X has its own conventions" |
-   | **D. Reusable pattern (SOL)** | Is this a cross-task insight worth remembering verbatim? | A working approach, an anti-pattern, a decision with rationale, a process improvement |
-   | **E. SoloFlow improvements** *(tester mode only)* | Is this a problem with SoloFlow itself — its agents, commands, hooks, config, or workflow — that the SoloFlow maintainers should know about? | Agent gave bad advice, command step was confusing, hook misfired, missing config option, workflow bottleneck, verification gap |
+   | **D. SoloFlow improvements** *(tester mode only)* | Is this a problem with SoloFlow itself — its agents, commands, hooks, config, or workflow — that the SoloFlow maintainers should know about? | Agent gave bad advice, command step was confusing, hook misfired, missing config option, workflow bottleneck, verification gap |
 
-   When in doubt between A and B, prefer B — clean-ups must be small and low-risk. When in doubt between C and D, prefer C — rules that the agents should follow belong in CLAUDE.md, not in a solutions archive that may never be read.
+   When in doubt between A and B, prefer B — clean-ups must be small and low-risk.
 
-   **Bucket E** only appears when `tester: true` is passed in your input. If absent, ignore this bucket entirely — do not write the section header.
+   **Bucket D** only appears when `tester: true` is passed in your input. If absent, ignore this bucket entirely — do not write the section header.
 
-7. **Write `.soloflow/active/COMPOUND-PROPOSAL.md`** using the format below. Populate every bucket; if a bucket is empty, write `_No items._` — do not invent content.
+6. **Write `.soloflow/active/COMPOUND-PROPOSAL.md`** using the format below. Populate every bucket; if a bucket is empty, write `_No items._` — do not invent content.
 
 ## Output Format
 
@@ -47,13 +45,11 @@ You receive references to:
 sprint: SPRINT-{NNN}
 created: {ISO timestamp}
 counters_start:
-  solutions: {N}
   ideas: {N}
 summary:
   cleanups: {count}
   backlog_tasks: {count}
   claude_md: {count}
-  solutions: {count}
   soloflow_improvements: {count}  # 0 when tester mode is off
 ---
 
@@ -94,38 +90,7 @@ For each item:
   # diff-style before/after, or a clear insertion point + new content
   ```
 
-## D. Reusable patterns (archive as SOL)
-
-For each item, provide a ready-to-save SOL entry:
-
-### D{n}. {SOL title}
-```markdown
----
-id: SOL-{NNN}
-category: {solution|anti-pattern|decision|process}
-tags: [{tag1}, {tag2}]
-created: {ISO timestamp}
-source_tasks: [TASK-NNN, ...]
-confidence: {high|medium|low}
----
-
-# {Solution Title}
-
-## Context
-{When does this apply?}
-
-## Content
-{The pattern / decision / anti-pattern}
-
-## Evidence
-{Which tasks demonstrated this and how}
-
-## Applicability
-{When to use, when NOT to use}
-```
-```
-
-## E. SoloFlow improvements (tester mode only)
+## D. SoloFlow improvements (tester mode only)
 
 **Only include this section when `tester: true` was passed in your input.** If tester mode is off, omit this section entirely — do not even write the header.
 
@@ -133,7 +98,7 @@ This bucket captures problems and recommendations for the SoloFlow plugin itself
 
 For each item:
 
-### E{n}. {short title}
+### D{n}. {short title}
 - **Component:** which SoloFlow component is affected (e.g., `agents/executor.md`, `hooks/pre-compact.js`, `commands/planner.md`, config, workflow design)
 - **Problem:** what went wrong or was suboptimal, with concrete evidence from this sprint (task IDs, findings, stuck reports, or specific agent behavior observed)
 - **Impact:** how this affected the sprint (wasted loops, bad output, user friction, missed verification, etc.)
@@ -142,10 +107,9 @@ For each item:
 
 ## Guardrails
 
-- You write exactly ONE file: `.soloflow/active/COMPOUND-PROPOSAL.md`. Do not touch `archive/solutions/`, `active/ideas/`, `CLAUDE.md`, or anything else. The main agent applies approved items after the user reviews your proposal.
+- You write exactly ONE file: `.soloflow/active/COMPOUND-PROPOSAL.md`. Do not touch `active/ideas/`, `CLAUDE.md`, or anything else. The main agent applies approved items after the user reviews your proposal.
 - Every proposed item must cite concrete evidence — a specific task, a specific finding, a specific report. "I feel like the codebase could use X" is not evidence.
 - Prefer specific over general. "Use AbortController in fetch wrappers under `src/api/`" beats "cancel network requests."
-- Do not duplicate existing solutions. Search `archive/solutions/` first.
 - Clean-ups (bucket A) must be small and low-risk — if you're tempted to write "this should probably be tested first," it belongs in bucket B instead.
 - CLAUDE.md proposals (bucket C) must name the exact target file and provide the exact text to add/change. No hand-waving.
 - If a sprint had genuinely nothing noteworthy, say so — write `_No items._` in each bucket rather than forcing content.

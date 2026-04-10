@@ -30,11 +30,11 @@ write_if_missing() {
 mkdir -p "$TASKS_DIR"/active/{ideas,research,plans,stuck}
 
 # Archive — never read during execution
-mkdir -p "$TASKS_DIR"/archive/{done,reviews,solutions,findings,compound}
+mkdir -p "$TASKS_DIR"/archive/{done,reviews,findings,compound}
 
 # .gitkeep files so empty subdirs get tracked by git
 for sub in active/ideas active/research active/plans active/stuck \
-           archive/done archive/reviews archive/solutions \
+           archive/done archive/reviews \
            archive/findings archive/compound; do
   [ -e "$TASKS_DIR/$sub/.gitkeep" ] || touch "$TASKS_DIR/$sub/.gitkeep"
 done

@@ -17,7 +17,7 @@ Six-phase workflow orchestrated via Claude Code hooks and agent definitions:
 3. **Task Refinement** (Opus) — idea + research → execution-ready `.soloflow/active/plans/TASK-NNN-plan.md`
 4. **Execution Sprint** — Orchestrator (Opus) coordinates parallel Executor (Sonnet) + Verifier (Opus) + Code Reviewer (Opus) subagents via worktrees
 5. **Human Review** — batched taste-level review (functional verification already done)
-6. **Compound Learning** (Sonnet, interactive) — analyzes done reports + stuck reports + `.soloflow/active/findings.md` and produces a four-bucket proposal (`COMPOUND-PROPOSAL.md`): (A) clean-ups to apply immediately, (B) backlog ideas → `active/ideas/IDEA-NNN.md`, (C) CLAUDE.md improvements to apply directly, (D) reusable patterns → `archive/solutions/SPRINT-NNN/SOL-NNN.md`. The user approves per-item; the main agent applies approved items (clean-ups as direct edits, not new tasks) with atomic commits, then archives the proposal and findings file.
+6. **Compound Learning** (Sonnet, interactive) — analyzes done reports + stuck reports + `.soloflow/active/findings.md` and produces a three-bucket proposal (`COMPOUND-PROPOSAL.md`): (A) clean-ups to apply immediately, (B) backlog ideas → `active/ideas/IDEA-NNN.md`, (C) CLAUDE.md improvements to apply directly. The user approves per-item; the main agent applies approved items (clean-ups as direct edits, not new tasks) with atomic commits, then archives the proposal and findings file.
 
 **Key constraint:** Subagents cannot spawn subagents. Orchestrator is main agent; executors/verifiers/reviewers are leaf nodes only.
 
@@ -44,7 +44,7 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 
 **`.soloflow/archive/`** — never read during execution:
 - `ideas/` — ideas that have been refined into plans (moved from `active/ideas/` by the planner)
-- `done/`, `reviews/`, `solutions/` — completed task reports and learnings (solutions are nested under `solutions/SPRINT-NNN/` to keep the archive navigable)
+- `done/`, `reviews/` — completed task reports and learnings
 - `findings/` — archived findings files, one per compounded sprint
 - `compound/` — archived compound proposals (including rejected items) for later reference
 
@@ -52,12 +52,11 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 - `checkpoint.md` — context restoration after compaction
 - `human-review-queue.md` — batched items for human review
 
-**ID allocation.** `IDEA-NNN`, `TASK-NNN`, `SPRINT-NNN`, and `SOL-NNN` are derived from the filesystem — there is no `counters.json`. To allocate the next ID, glob every location an ID of that kind could live, extract the numeric suffix, take `max + 1`, zero-pad to 3 digits. Reference globs:
+**ID allocation.** `IDEA-NNN`, `TASK-NNN`, and `SPRINT-NNN` are derived from the filesystem — there is no `counters.json`. To allocate the next ID, glob every location an ID of that kind could live, extract the numeric suffix, take `max + 1`, zero-pad to 3 digits. Reference globs:
 
 - **IDEA:** `.soloflow/active/ideas/IDEA-*.md` ∪ `.soloflow/archive/ideas/IDEA-*.md`
 - **TASK:** `.soloflow/active/plans/**/TASK-*-plan.md` ∪ `.soloflow/active/stuck/**/TASK-*-stuck.md` ∪ `.soloflow/archive/done/**/TASK-*-done.md`
-- **SPRINT:** `.soloflow/archive/compound/SPRINT-*-proposal.md` ∪ `.soloflow/archive/findings/SPRINT-*-findings.md` ∪ `.soloflow/archive/solutions/SPRINT-*/` ∪ the active `sprint.json`'s `sprint.id`
-- **SOL:** `.soloflow/archive/solutions/**/SOL-*.md`
+- **SPRINT:** `.soloflow/archive/compound/SPRINT-*-proposal.md` ∪ `.soloflow/archive/findings/SPRINT-*-findings.md` ∪ the active `sprint.json`'s `sprint.id`
 
 Recipe (bash):
 ```bash

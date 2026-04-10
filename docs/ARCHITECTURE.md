@@ -76,7 +76,7 @@ SoloFlow is a set of Claude Code hooks, agent definitions, slash commands, and s
 ### Phase 5: Compound Learning
 - **Agent:** `compounder` (Sonnet)
 - **Input:** Done reports and stuck reports from the sprint
-- **Output:** `SOL-NNN.md` files in `.soloflow/archive/solutions/`
+- **Output:** `COMPOUND-PROPOSAL.md` with three buckets (clean-ups, backlog tasks, CLAUDE.md improvements)
 
 ## Hook System
 
@@ -116,7 +116,7 @@ All workflow state lives in `.soloflow/`, created by `scripts/init.sh`:
 ├── archive/                    # Never read during execution
 │   ├── done/                   # TASK-NNN-done.md (completed tasks)
 │   ├── reviews/                # Human review reports
-│   └── solutions/              # SOL-NNN.md (Phase 5 output)
+│   └── compound/               # SPRINT-NNN-proposal.md (Phase 5 output)
 ├── active/backlog.json         # Ready tasks awaiting execution
 ├── active/sprint.json          # Active sprint + in-flight tasks
 ├── checkpoint.md               # Context restoration after compaction

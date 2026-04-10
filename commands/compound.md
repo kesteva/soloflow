@@ -1,12 +1,12 @@
 ---
-description: Propose learnings from a completed sprint in four buckets (clean-ups, backlog tasks, CLAUDE.md improvements, reusable patterns) plus optional SoloFlow self-improvement feedback (tester mode), then apply what the user approves
+description: Propose learnings from a completed sprint in three buckets (clean-ups, backlog tasks, CLAUDE.md improvements) plus optional SoloFlow self-improvement feedback (tester mode), then apply what the user approves
 argument-hint: [optional: SPRINT-NNN]
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 
 # /soloflow:compound
 
-Phase 6 of the SoloFlow pipeline. Reads done reports, stuck reports, human review notes, and the out-of-scope findings queue from a completed sprint, then produces a four-bucket proposal for the user to review one bucket at a time. The main agent (you) applies approved items directly for clean-ups and CLAUDE.md edits, spawns the task-refiner for backlog tasks, and archives patterns and feedback.
+Phase 6 of the SoloFlow pipeline. Reads done reports, stuck reports, human review notes, and the out-of-scope findings queue from a completed sprint, then produces a three-bucket proposal for the user to review one bucket at a time. The main agent (you) applies approved items directly for clean-ups and CLAUDE.md edits, and spawns the task-refiner for backlog tasks.
 
 Target sprint: **$ARGUMENTS** (optional — defaults to the most recently completed sprint)
 
@@ -30,14 +30,12 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
 
 ## Step 2: Spawn the compounder
 
-1. Compute the starting `solutions` counter from the filesystem (see "ID allocation" in the project `CLAUDE.md`): glob `.soloflow/archive/solutions/**/SOL-*.md` for the max.
-2. **Resolve `tester` flag.** Check `.soloflow/config.json` first, then `config/defaults.yaml` (via `${CLAUDE_PLUGIN_ROOT}`). If `tester: true`, pass `tester: true` to the compounder so it produces bucket E (SoloFlow improvements). Otherwise omit it.
-3. Spawn the **compounder** agent via the Agent tool with:
+1. **Resolve `tester` flag.** Check `.soloflow/config.json` first, then `config/defaults.yaml` (via `${CLAUDE_PLUGIN_ROOT}`). If `tester: true`, pass `tester: true` to the compounder so it produces bucket D (SoloFlow improvements). Otherwise omit it.
+2. Spawn the **compounder** agent via the Agent tool with:
    - The target sprint ID
    - Paths to all done reports, stuck reports, findings.md, and human-review-queue.md
-   - Starting SOL counter (computed from filesystem above — used only for display in the proposal; the main agent recomputes at apply time)
    - If tester mode is on: `tester: true`
-   - Instruction: "Produce `.soloflow/active/COMPOUND-PROPOSAL.md` with four buckets (A clean-ups, B backlog tasks, C CLAUDE.md improvements, D reusable patterns). {If tester: Also produce bucket E (SoloFlow improvements).} Do not apply anything. Cite concrete evidence for every item."
+   - Instruction: "Produce `.soloflow/active/COMPOUND-PROPOSAL.md` with three buckets (A clean-ups, B backlog tasks, C CLAUDE.md improvements). {If tester: Also produce bucket D (SoloFlow improvements).} Do not apply anything. Cite concrete evidence for every item."
 3. Wait for the compounder to finish. Read the resulting `COMPOUND-PROPOSAL.md`.
 
 ## Step 3: Present proposal and collect approvals — one bucket at a time
@@ -87,23 +85,16 @@ Spawn the **claude-md-reviewer** agent to review and tighten the approved C-item
    - Commit with `docs({sprint}): {title}` per item.
 3. For items the reviewer rejects (redundant / stale / too-broad / belongs-in-code-patterns): skip them. Note in the final report which were rejected and why.
 
-### Bucket D — reusable patterns
-For each approved D-item:
-1. Create `.soloflow/archive/solutions/SPRINT-{NNN}/` if it doesn't exist.
-2. Recompute the next SOL ID from the filesystem (glob `.soloflow/archive/solutions/**/SOL-*.md`, max + 1) — do this per-item.
-3. Write `.soloflow/archive/solutions/SPRINT-{NNN}/SOL-{NNN}.md` with the SOL body from the proposal, using `noclobber`/`wx`. Retry with the next ID on collision.
-4. Commit `docs({sprint}): archive SOL-{NNN}..SOL-{MMM}` for the batch.
-
-### Bucket E — SoloFlow improvements (tester mode only)
+### Bucket D — SoloFlow improvements (tester mode only)
 
 This bucket is NOT applied to the current project. It is a self-contained write-up of problems and recommendations for the SoloFlow plugin itself, meant to be passed back to the SoloFlow maintainer (the user, in the SoloFlow plugin project).
 
-For each approved E-item:
+For each approved D-item:
 1. No edits are made — this bucket is informational only.
 
-After all E-items are reviewed, write the approved items to `.soloflow/archive/solutions/SPRINT-{NNN}/SOLOFLOW-FEEDBACK.md` as a standalone document that can be copy-pasted into a SoloFlow project conversation. Commit with `docs({sprint}): archive soloflow tester feedback`.
+After all D-items are reviewed, write the approved items to `.soloflow/archive/compound/SPRINT-{NNN}-feedback.md` as a standalone document that can be copy-pasted into a SoloFlow project conversation. Commit with `docs({sprint}): archive soloflow tester feedback`.
 
-If no E-items exist (tester mode off), skip this entirely.
+If no D-items exist (tester mode off), skip this entirely.
 
 ---
 
@@ -127,8 +118,7 @@ Applied:
   A. Clean-ups       : {N applied} / {M proposed}  (commits: {hashes})
   B. Backlog tasks   : {N planned} / {M proposed}  (TASK-{first}..TASK-{last})
   C. CLAUDE.md edits : {N applied} / {M proposed}  ({files touched})
-  D. SOL archived    : {N written} / {M proposed}  (SPRINT-{NNN}/SOL-{first}..SOL-{last})
-  E. SoloFlow feedback: {N archived} / {M proposed}  (SPRINT-{NNN}/SOLOFLOW-FEEDBACK.md)  {only if tester mode}
+  D. SoloFlow feedback: {N archived} / {M proposed}  (SPRINT-{NNN}-feedback.md)  {only if tester mode}
 
 Rejected : {N} (preserved in archive/compound/SPRINT-{NNN}-proposal.md)
 Findings : archived → archive/findings/SPRINT-{NNN}-findings.md
@@ -138,7 +128,7 @@ Findings : archived → archive/findings/SPRINT-{NNN}-findings.md
 
 ## Notes
 
-- This command mutates the codebase for approved clean-ups and CLAUDE.md edits. Bucket B spawns the task-refiner to produce plans. Everything else is additive to `.soloflow/`.
-- The compounder agent is read-only except for `COMPOUND-PROPOSAL.md` — it never writes directly to solutions, plans, or CLAUDE.md.
+- This command mutates the codebase for approved clean-ups and CLAUDE.md edits. Bucket B spawns the task-refiner to produce plans.
+- The compounder agent is read-only except for `COMPOUND-PROPOSAL.md` — it never writes directly to plans or CLAUDE.md.
 - The claude-md-reviewer agent is read-only — it reviews proposals and produces diffs; the main agent applies them.
 - Rejected items are preserved in the archived proposal so they can be revisited manually.

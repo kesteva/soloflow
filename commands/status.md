@@ -19,7 +19,7 @@ Display the current SoloFlow workflow state for this project.
 
 3. **Count archive files:**
    - Count `.md` files in `.soloflow/archive/done/` for completed tasks
-   - Count `.md` files in `.soloflow/archive/solutions/` for captured solutions
+   - Count `.md` files in `.soloflow/archive/compound/` for compound proposals
 
 4. **Display the report:**
 
@@ -40,7 +40,7 @@ Display the current SoloFlow workflow state for this project.
 
 ### Archive
 - **Completed:** {count from archive/done/}
-- **Solutions:** {count from archive/solutions/}
+- **Sprints compounded:** {count from archive/compound/}
 
 ### Human Review Queue
 - **Pending:** {count or "Empty"}
