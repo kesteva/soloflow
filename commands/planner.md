@@ -68,6 +68,20 @@ After the user responds (approval, subset, or rejection), commit the resulting s
 
 Skip this step silently if the project is not inside a git repo or `.soloflow/` is gitignored.
 
+## Step 3.6: Archive the source idea
+
+Once plans are committed (approved or partially approved — not rejected), archive the source idea so it no longer sits in `active/ideas/`:
+
+1. `mkdir -p .soloflow/archive/ideas`
+2. Move `.soloflow/active/ideas/IDEA-{NNN}.md` → `.soloflow/archive/ideas/IDEA-{NNN}.md`.
+3. If a research report exists at `.soloflow/active/research/IDEA-{NNN}-research.md`, move it to `.soloflow/archive/ideas/IDEA-{NNN}-research.md`.
+4. `git add` the moved files (both old and new paths). If `git diff --cached --quiet` reports no changes, skip.
+5. Commit with `chore: archive IDEA-{NNN}`.
+
+On rejection (all plans rejected), leave the idea in `active/ideas/` — it may be re-refined later.
+
+Skip silently if not in a git repo or `.soloflow/` is gitignored.
+
 ## Step 4: Report
 
 ```

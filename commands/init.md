@@ -43,6 +43,7 @@ empty `.gitkeep` file into it.
 - `.soloflow/active/research`
 - `.soloflow/active/plans`
 - `.soloflow/active/stuck`
+- `.soloflow/archive/ideas`
 - `.soloflow/archive/done`
 - `.soloflow/archive/reviews`
 - `.soloflow/archive/solutions`
