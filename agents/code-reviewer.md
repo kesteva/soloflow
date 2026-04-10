@@ -106,6 +106,16 @@ Entry format (append under the `# Findings Queue` heading):
 
 Bump `pending_count` and refresh `last_updated` in the frontmatter. The review verdict is determined only by in-diff findings — queued findings never block approval.
 
+## Cross-Cutting Store Actions
+
+Store/state actions that reset multiple fields (e.g., `setFlowMode`, `reset`, `clear`, or any action that writes more than one field back to defaults) are cross-cutting side effects. When reviewing a file that calls one:
+
+1. **Grep for ALL call sites** of that action across the codebase.
+2. **Confirm only one call fires per user journey entry point.** If a call appears both at flow entry and mid-flow after state has been written, it is likely redundant and destructive.
+3. **If a call is redundant or fires mid-flow after state has been set by an earlier step,** flag it as an **Important** finding — not a minor suggestion. Silent store resets corrupt UI state without errors, type failures, or test failures. They are invisible to static analysis.
+
+This class of bug is especially dangerous because it passes all ground-truth checks (tests, types, lint) and only manifests at runtime in multi-step UI flows.
+
 ## Guardrails
 
 - You run AFTER the verifier has approved. Do not re-check functional correctness — that's the verifier's job.
