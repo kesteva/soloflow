@@ -1,0 +1,13 @@
+{
+  "name": "soloflow",
+  "owner": {
+    "name": "Krishna Esteva"
+  },
+  "plugins": [
+    {
+      "name": "soloflow",
+      "source": "./",
+      "description": "Hooks-based workflow orchestration for solo product development with Claude Code"
+    }
+  ]
+}
