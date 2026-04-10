@@ -32,8 +32,11 @@ You receive references to:
    | **B. Backlog idea** | Is this feature- or refactor-shaped — does it need refinement before execution? | "Extract the polling loop into a hook", "Add optimistic updates to the cart" |
    | **C. CLAUDE.md improvement** | Is this a rule, convention, or piece of context the agents should have known upfront? | "Verifier had to guess how to run tests", "Executor missed that module X has its own conventions" |
    | **D. Reusable pattern (SOL)** | Is this a cross-task insight worth remembering verbatim? | A working approach, an anti-pattern, a decision with rationale, a process improvement |
+   | **E. SoloFlow improvements** *(tester mode only)* | Is this a problem with SoloFlow itself — its agents, commands, hooks, config, or workflow — that the SoloFlow maintainers should know about? | Agent gave bad advice, command step was confusing, hook misfired, missing config option, workflow bottleneck, verification gap |
 
    When in doubt between A and B, prefer B — clean-ups must be small and low-risk. When in doubt between C and D, prefer C — rules that the agents should follow belong in CLAUDE.md, not in a solutions archive that may never be read.
+
+   **Bucket E** only appears when `tester: true` is passed in your input. If absent, ignore this bucket entirely — do not write the section header.
 
 7. **Write `.soloflow/active/COMPOUND-PROPOSAL.md`** using the format below. Populate every bucket; if a bucket is empty, write `_No items._` — do not invent content.
 
@@ -51,6 +54,7 @@ summary:
   ideas: {count}
   claude_md: {count}
   solutions: {count}
+  soloflow_improvements: {count}  # 0 when tester mode is off
 ---
 
 # Compound Proposal — SPRINT-{NNN}
@@ -118,6 +122,21 @@ confidence: {high|medium|low}
 {When to use, when NOT to use}
 ```
 ```
+
+## E. SoloFlow improvements (tester mode only)
+
+**Only include this section when `tester: true` was passed in your input.** If tester mode is off, omit this section entirely — do not even write the header.
+
+This bucket captures problems and recommendations for the SoloFlow plugin itself — its agents, commands, hooks, config, or workflow design. These are **not** project-specific; they are issues the SoloFlow maintainers should address in the plugin repo. The write-up must be self-contained so it can be copy-pasted into a conversation in the SoloFlow project without losing context.
+
+For each item:
+
+### E{n}. {short title}
+- **Component:** which SoloFlow component is affected (e.g., `agents/executor.md`, `hooks/pre-compact.js`, `commands/planner.md`, config, workflow design)
+- **Problem:** what went wrong or was suboptimal, with concrete evidence from this sprint (task IDs, findings, stuck reports, or specific agent behavior observed)
+- **Impact:** how this affected the sprint (wasted loops, bad output, user friction, missed verification, etc.)
+- **Recommended fix:** a specific, actionable suggestion — not "make it better" but "add X to Y because Z"
+- **Severity:** `low` (annoyance) | `medium` (workaround needed) | `high` (blocked or produced wrong results)
 
 ## Guardrails
 

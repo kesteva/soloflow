@@ -9,6 +9,8 @@ models:
   researcher: sonnet
   code_reviewer: opus
 
+tester: false  # enable soloflow self-improvement feedback in /soloflow:compound (bucket E)
+
 phases:
   clarify: true   # enable conversational clarification before extraction when input is ambiguous
   research: true  # enable external research after idea approval
