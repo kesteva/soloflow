@@ -161,9 +161,15 @@ Present a consolidated review:
 
 Commit the sprint-closing state (sprint.json marked complete plus any final queue/checkpoint updates) before the run-branch merge decision.
 
-1. `git add .soloflow/active/sprint.json .soloflow/human-review-queue.md .soloflow/checkpoint.md` (include only the paths that actually changed).
-2. If `git diff --cached --quiet` reports no staged changes, skip.
-3. Otherwise `git commit -m "chore(SPRINT-{NNN}): close sprint"`.
+1. **Archive stale compound proposal.** If `.soloflow/active/COMPOUND-PROPOSAL.md` exists:
+   a. Read its YAML frontmatter to extract the `sprint:` field (e.g., `SPRINT-005`).
+   b. Move it to `.soloflow/archive/compound/{sprint}-proposal.md`.
+   c. If the destination already exists (already archived by a prior compound run), skip — do not overwrite.
+   d. If the frontmatter lacks a `sprint:` field, skip with a warning.
+   e. Include the moved file in the `git add` below.
+2. `git add .soloflow/active/sprint.json .soloflow/human-review-queue.md .soloflow/checkpoint.md` — also add `.soloflow/archive/compound/{sprint}-proposal.md` if step 1 moved a file (include only the paths that actually changed).
+3. If `git diff --cached --quiet` reports no staged changes, skip.
+4. Otherwise `git commit -m "chore(SPRINT-{NNN}): close sprint"`.
 
 Never `git add .` / `git add -A`. Skip silently if not in a git repo or `.soloflow/` is gitignored.
 
