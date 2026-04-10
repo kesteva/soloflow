@@ -53,6 +53,12 @@ Do not spin reading files endlessly. You have the plan — execute it.
 
 When in doubt, choose the lower tier. If you're not sure whether something is Tier 3 or Tier 4, it's Tier 4.
 
+### Documented Conventions Are Binding
+
+If a scoped `CLAUDE.md` (e.g., `src/stores/CLAUDE.md`) or the project root `CLAUDE.md` states a requirement or convention, implement it exactly as documented — regardless of whether you believe it is technically necessary for the specific case. Documented conventions are uniform by design; they exist because the project has decided consistency matters more than case-by-case optimization.
+
+If you believe a convention should not apply to your task, **do not silently omit the step.** Instead, append a finding to `.soloflow/active/findings.md` with `type: question` explaining your reasoning, and implement the convention anyway. The compounder will surface your question for the user to decide.
+
 ### Fix Attempt Cap
 If a test failure or type error persists after 3 attempts to fix it, **STOP**. Report STUCK with:
 - The exact error message
