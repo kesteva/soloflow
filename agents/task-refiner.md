@@ -41,6 +41,7 @@ You may also receive a list of **existing epic slugs** (with the contents of the
    - `depends_on`: task IDs this task must wait for (empty if independent)
    - `estimated_complexity`: low / medium / high
    - `epic`: optional slug grouping this task with related work (see step 5a). Omit or set to `null` for orphan tasks.
+   - `test_strategy`: what tests to write or update for this task (see step 5b). May be omitted for tasks that don't warrant new tests.
    - Implementation steps: concrete, sequential, referencing specific files and functions
 
 5a. **Assign epics.** For each plan, decide whether it belongs to an epic:
@@ -49,6 +50,15 @@ You may also receive a list of **existing epic slugs** (with the contents of the
    - Leave `epic` absent/null for **orphan** tasks: one-offs, small tweaks, isolated fixes. Orphans are a first-class state, not a bug.
    - A single refinement pass MAY split slices across multiple epics and orphans freely. Do not force everything into one epic.
    - For any **new** epic you introduce, also emit an `EPIC.md` body (see Output Format below) with objective, scope, and success signal. Do NOT emit an `EPIC.md` for epics that already exist — you only read those.
+
+5b. **Define test strategy (when warranted).** For each plan, determine whether new or updated tests are needed:
+   - Search for existing test files adjacent to `files_owned` (glob for `*.test.*`, `*.spec.*`, `__tests__/`).
+   - If the task modifies **state logic, conditional behavior, error paths, or integration points**, specify what to test:
+     - Which behaviors / acceptance criteria should have test cases
+     - Which existing test files to update vs. new ones to create
+     - Any mocking or fixture setup required
+   - If the task is purely config, docs, or trivial wiring, note `test_strategy: none` with a one-line justification.
+   - The test-writer agent uses this section after execution — make it concrete enough to act on.
 
 6. **Answer three critical questions per plan:**
    - Hardest decision and why this approach was chosen
@@ -77,6 +87,13 @@ acceptance_criteria:
 depends_on: [{other TASK IDs, or empty}]
 estimated_complexity: {low|medium|high}
 epic: {slug or null}
+test_strategy:
+  needed: {true|false}
+  justification: "{why tests are/aren't needed}"
+  targets:                   # omit if needed: false
+    - behavior: "{what to test}"
+      test_file: "{path to existing or new test file}"
+      type: {unit|component|integration}
 ---
 
 # {Task Title}
@@ -93,6 +110,11 @@ epic: {slug or null}
 ## Acceptance Criteria
 
 {Each criterion restated with clear pass/fail definition}
+
+## Test Strategy
+
+{If test_strategy.needed is true: describe which behaviors to test, which test files to create or update, and any mocking/fixture setup. Reference the targets from the frontmatter.}
+{If test_strategy.needed is false: one-line justification for why no tests are needed.}
 
 ## Hardest Decision
 
