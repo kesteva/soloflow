@@ -61,7 +61,7 @@ The user's input is: **$ARGUMENTS**
 
 ## Step 3: Roadmap Generation
 
-1. Discover existing epics by globbing `.soloflow/active/plans/*/EPIC.md`. Read each to build a list of existing epic slugs and their objectives.
+1. Discover existing epics by globbing `.soloflow/active/plans/*/EPIC-*.md`. Read each to build a list of existing epic slugs and their objectives.
 
 2. Spawn the **roadmap-generator** agent via the Agent tool with:
    - The roadmap brief
@@ -196,16 +196,16 @@ The user's input is: **$ARGUMENTS**
       - The relevant research reports (all 4 dimension reports)
       - The starting task counter (TASK-{NNN})
       - The existing epics list (including any epics created by earlier iterations in this loop)
-      - Instruction: "Refine this idea into execution-ready plans. Start task numbering at TASK-{NNN}. Output each plan file's content clearly separated. For any new epic slugs, also output an EPIC.md block."
+      - Instruction: "Refine this idea into execution-ready plans. Start task numbering at TASK-{NNN}. Output each plan file's content clearly separated. For any new epic slugs, also output an EPIC-{slug}.md block."
 
-   c. Parse the refiner output into individual plan files + EPIC.md blocks.
+   c. Parse the refiner output into individual plan files + EPIC-{slug}.md blocks.
 
    d. For each plan:
       - If `epic: <slug>` -> write to `.soloflow/active/plans/{slug}/TASK-{NNN}-plan.md` (create folder if missing)
       - If `epic: null` or absent -> write to `.soloflow/active/plans/TASK-{NNN}-plan.md`
       - Use noclobber semantics
 
-   e. For each new epic: write `EPIC.md` to `.soloflow/active/plans/{slug}/EPIC.md` (do NOT overwrite existing)
+   e. For each new epic: write `EPIC-{slug}.md` to `.soloflow/active/plans/{slug}/EPIC-{slug}.md` (do NOT overwrite existing)
 
    f. Add each task to `.soloflow/active/backlog.json` with `status: "ready"` and `depends_on` list.
 
@@ -224,7 +224,7 @@ The user's input is: **$ARGUMENTS**
    - `.soloflow/active/roadmaps/ROADMAP-{NNN}.md`
    - `.soloflow/active/research/ROADMAP-{NNN}-research-*.md`
    - All created idea files (`.soloflow/active/ideas/IDEA-*.md`)
-   - If Path B: all created plan files, EPIC.md files, `.soloflow/active/backlog.json`
+   - If Path B: all created plan files, EPIC-{slug}.md files, `.soloflow/active/backlog.json`
 
 2. Commit:
    - If materialized as ideas: `chore: generate ROADMAP-{NNN} and materialize as ideas`

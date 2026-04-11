@@ -52,7 +52,7 @@ if (fs.existsSync(backlogPath) && fs.existsSync(sprintPath)) {
       });
 
       // Count archived completions (recursive — tasks may live under epic subfolders).
-      // Only count TASK-*.md files so EPIC.md manifests don't inflate the total.
+      // Only count TASK-*.md files so EPIC-*.md manifests don't inflate the total.
       let doneCount = 0;
       if (fs.existsSync(doneDir)) {
         const walk = (dir) => {

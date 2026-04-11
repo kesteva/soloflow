@@ -98,7 +98,7 @@ Stage only the listed paths — never `git add .` / `git add -A`. Skip silently 
 
    a. Set task `status: "in_progress"` in `sprint.json`.
 
-   a2. **Locate the plan file** by globbing `.soloflow/active/plans/**/TASK-{NNN}-plan.md` (matches both nested epic folders and flat orphan paths; excludes `EPIC.md`). Read the plan's `epic` frontmatter field — it may be a slug or absent/null. This determines where downstream reports go.
+   a2. **Locate the plan file** by globbing `.soloflow/active/plans/**/TASK-{NNN}-plan.md` (matches both nested epic folders and flat orphan paths; excludes `EPIC-*.md`). Read the plan's `epic` frontmatter field — it may be a slug or absent/null. This determines where downstream reports go.
 
    b. Spawn **executor** agent with the plan content. Wait for result.
 
@@ -124,7 +124,7 @@ Stage only the listed paths — never `git add .` / `git add -A`. Skip silently 
       - **NO_TESTS_NEEDED** → proceed (the test-writer determined nothing warranted new tests).
       - **NO_TEST_INFRA** → proceed (no test framework is set up in this project).
 
-   f3. Write done report to `.soloflow/archive/done/{epic}/TASK-{NNN}-done.md` if the plan has an epic (create the folder if missing), else flat at `.soloflow/archive/done/TASK-{NNN}-done.md`. Remove task from `sprint.json`. Then perform the **epic archival check**: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no tasks from that epic remain in `sprint.json`, flag the epic for the Step 4 human review with an "archive this epic?" prompt. On user approval (not automatic), move `.soloflow/active/plans/{epic}/EPIC.md` → `.soloflow/archive/done/{epic}/EPIC.md` and flip its frontmatter `status` from `active` to `complete`.
+   f3. Write done report to `.soloflow/archive/done/{epic}/TASK-{NNN}-done.md` if the plan has an epic (create the folder if missing), else flat at `.soloflow/archive/done/TASK-{NNN}-done.md`. Remove task from `sprint.json`. Then perform the **epic archival check**: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no tasks from that epic remain in `sprint.json`, flag the epic for the Step 4 human review with an "archive this epic?" prompt. On user approval (not automatic), move `.soloflow/active/plans/{epic}/EPIC-{epic}.md` → `.soloflow/archive/done/{epic}/EPIC-{epic}.md` and flip its frontmatter `status` from `active` to `complete`.
 
    g. Every `checkpoint_interval` completed tasks (config default: 3), write checkpoint to `.soloflow/checkpoint.md`.
 

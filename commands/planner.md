@@ -22,7 +22,7 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
 2. Read `.soloflow/active/ideas/IDEA-{NNN}.md`. If missing, report the error and stop.
 3. Check for `.soloflow/active/research/IDEA-{NNN}-research.md` — if present, it will be passed to the refiner.
 4. Compute the starting task counter by globbing every TASK file location (`.soloflow/active/plans/**/TASK-*-plan.md`, `.soloflow/active/stuck/**/TASK-*-stuck.md`, `.soloflow/archive/done/**/TASK-*-done.md`), extracting numeric suffixes, and taking `max + 1`. See the "ID allocation" section in the project `CLAUDE.md` for the shared recipe.
-5. Discover existing epics: glob `.soloflow/active/plans/*/EPIC.md` and collect each epic slug (parent folder name) and `EPIC.md` contents. Pass these to the refiner so it can reuse epics instead of duplicating them.
+5. Discover existing epics: glob `.soloflow/active/plans/*/EPIC-*.md` and collect each epic slug (parent folder name) and `EPIC-{slug}.md` contents. Pass these to the refiner so it can reuse epics instead of duplicating them.
 
 ## Step 2: Refine
 
@@ -30,14 +30,14 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
    - The approved idea file content
    - If a research report exists, include it with: "A research report is provided below. Use it to inform your approach selection, library choices, and to resolve open questions before doing your own research."
    - The starting task counter
-   - The list of existing epics discovered in Step 1.5 (slug + `EPIC.md` contents). Instruct: "Reuse these existing epics when a task fits their objective. Propose new epic slugs only when 2+ tasks share a coherent objective. Leave `epic` null for orphan tasks."
-   - Instruction: "Refine this idea into execution-ready plans. Start task numbering at TASK-{NNN}. Output each plan file's content clearly separated. For any new epic slugs you introduce, also output an EPIC.md block."
+   - The list of existing epics discovered in Step 1.5 (slug + `EPIC-{slug}.md` contents). Instruct: "Reuse these existing epics when a task fits their objective. Propose new epic slugs only when 2+ tasks share a coherent objective. Leave `epic` null for orphan tasks."
+   - Instruction: "Refine this idea into execution-ready plans. Start task numbering at TASK-{NNN}. Output each plan file's content clearly separated. For any new epic slugs you introduce, also output an EPIC-{slug}.md block."
 2. Capture the refiner's output.
-3. Parse the output into individual plan files and any new EPIC.md blocks.
+3. Parse the output into individual plan files and any new EPIC-{slug}.md blocks.
 4. Write each plan based on its `epic` frontmatter field:
    - If `epic: <slug>` is set → write to `.soloflow/active/plans/{slug}/TASK-{NNN}-plan.md`, creating the folder if missing.
    - If `epic` is absent or `null` → write to `.soloflow/active/plans/TASK-{NNN}-plan.md` (flat, orphan).
-5. For each **new** epic slug the refiner introduced, write its EPIC.md body to `.soloflow/active/plans/{slug}/EPIC.md`. Do NOT overwrite an existing EPIC.md — if one already exists for that slug, leave it alone (optionally append the current idea ID to its `originating_ideas` frontmatter list).
+5. For each **new** epic slug the refiner introduced, write its EPIC-{slug}.md body to `.soloflow/active/plans/{slug}/EPIC-{slug}.md`. Do NOT overwrite an existing EPIC-{slug}.md — if one already exists for that slug, leave it alone (optionally append the current idea ID to its `originating_ideas` frontmatter list).
 6. Add each task to `.soloflow/active/backlog.json` with `status: "ready"` and its `depends_on` list. (Do not add `epic` to backlog entries — the JSON state stays epic-unaware; task IDs remain globally unique.) IDs are derived from the filesystem — no counter file to update. Write each plan file with `noclobber` / `wx` semantics; if a collision occurs (another parallel planner raced), recompute the next ID for the remaining plans and retry.
 
 ## Step 3: Human Checkpoint — Plan Review
@@ -62,7 +62,7 @@ The tool call blocks until the user responds — do not proceed until it returns
 
 After the user responds (approval, subset, or rejection), commit the resulting state via Bash. Stage only the specific paths touched in this run — never `git add .` / `git add -A`.
 
-1. `git add` each plan file written (or removed) plus `.soloflow/active/backlog.json` plus any new/modified `EPIC.md` files. For rejections, `git rm` the deleted plans.
+1. `git add` each plan file written (or removed) plus `.soloflow/active/backlog.json` plus any new/modified `EPIC-{slug}.md` files. For rejections, `git rm` the deleted plans.
 2. If `git diff --cached --quiet` reports no staged changes, skip (idempotent re-run).
 3. Otherwise commit with a message of the form `chore: queue TASK-{NNN}..TASK-{MMM} from IDEA-{NNN}` (adjust for single-task runs or rejection: `chore: reject plans for IDEA-{NNN}`).
 
