@@ -48,6 +48,8 @@ empty `.gitkeep` file into it.
 - `.soloflow/archive/reviews`
 - `.soloflow/archive/findings`
 - `.soloflow/archive/compound`
+- `.soloflow/active/roadmaps`
+- `.soloflow/archive/roadmaps`
 
 Increment `dirs_created` for every directory you actually created.
 

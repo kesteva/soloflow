@@ -8,12 +8,15 @@ models:
   compounder: sonnet
   researcher: sonnet
   code_reviewer: opus
+  roadmap_researcher: sonnet
+  roadmap_generator: opus
 
 tester: false  # enable soloflow self-improvement feedback in /soloflow:compound (bucket E)
 
 phases:
   clarify: true   # enable conversational clarification before extraction when input is ambiguous
   research: true  # enable external research after idea approval
+  roadmap_clarify: true  # enable deep clarification before roadmap generation
 
 limits:
   executor_retry_max: 3
@@ -52,6 +55,14 @@ git:
   branch_name_format: "soloflow/run-{timestamp}-{sprint_id}"
   # Merge flag passed to `git merge` when merging the run branch back.
   merge_strategy: "--no-ff"
+
+roadmap:
+  research_dimensions:    # which dimensions to research (all 4 by default)
+    - ecosystem
+    - user-needs
+    - architecture
+    - risks
+  default_output: ideas   # ideas|plans — default materialization when user approves
 
 paths:
   state_dir: .soloflow

@@ -10,8 +10,9 @@ SoloFlow is a hooks-based Claude Code workflow orchestration system that automat
 
 ## Architecture
 
-Six-phase workflow orchestrated via Claude Code hooks and agent definitions:
+Seven-phase workflow orchestrated via Claude Code hooks and agent definitions:
 
+0. **Roadmap Generation** (Sonnet researchers + Opus generator, optional) — project vision → deep questioning → parallel research → phased epics → `.soloflow/active/roadmaps/ROADMAP-NNN.md`. Materializes as ideas (for normal pipeline) or plans (for immediate execution). Pre-pipeline accelerator; does not replace any phase.
 1. **Idea Extraction** (Sonnet) — raw input → structured `.soloflow/active/ideas/IDEA-NNN.md`
 2. **Research** (Sonnet, optional) — external ecosystem research → `.soloflow/active/research/IDEA-NNN-research.md`
 3. **Task Refinement** (Opus) — idea + research → execution-ready `.soloflow/active/plans/TASK-NNN-plan.md`
@@ -25,7 +26,7 @@ Six-phase workflow orchestrated via Claude Code hooks and agent definitions:
 
 - **`agents/`** — Agent definitions as markdown with YAML frontmatter
 - **`hooks/`** — JavaScript Claude Code hooks, declared in `hooks/hooks.json` with `${CLAUDE_PLUGIN_ROOT}` paths
-- **`commands/`** — Slash command definitions, namespaced as `/soloflow:<name>`: `/soloflow:idea-extractor`, `/soloflow:planner`, `/soloflow:executor`, `/soloflow:compound`, `/soloflow:quick`, `/soloflow:status`, `/soloflow:verify`
+- **`commands/`** — Slash command definitions, namespaced as `/soloflow:<name>`: `/soloflow:roadmap`, `/soloflow:idea-extractor`, `/soloflow:planner`, `/soloflow:executor`, `/soloflow:compound`, `/soloflow:quick`, `/soloflow:status`, `/soloflow:verify`
 - **`skills/`** — Skill definitions (e.g., `visual-verify/`)
 - MCP servers (Maestro, Playwright) are **not** shipped in a plugin `.mcp.json` — `/soloflow:init` detects them via `claude mcp list` and offers per-user or per-project registration to avoid collisions with existing installs.
 - **`scripts/`** — Shell scripts for the script-install fallback (`install.sh`, `update.sh`, `uninstall.sh`, `init.sh`). Primary install path is `/plugin install soloflow`.
@@ -36,6 +37,7 @@ Six-phase workflow orchestrated via Claude Code hooks and agent definitions:
 All workflow state lives in `.soloflow/` (created per-project by `scripts/init.sh`), split into active and archive:
 
 **`.soloflow/active/`** — read during execution:
+- `roadmaps/` — roadmap files (ROADMAP-NNN.md)
 - `ideas/`, `research/`, `plans/`, `stuck/` — in-flight task files
 - `backlog.json` — tasks awaiting execution (written by refinement, read by execution)
 - `sprint.json` — active sprint + in-flight tasks (written/read by execution)
@@ -47,6 +49,7 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 - `done/`, `reviews/` — completed task reports and learnings
 - `findings/` — archived findings files, one per compounded sprint
 - `compound/` — archived compound proposals (including rejected items) for later reference
+- `roadmaps/` — archived roadmap files
 
 **`.soloflow/`** root:
 - `checkpoint.md` — context restoration after compaction
@@ -57,6 +60,7 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 - **IDEA:** `.soloflow/active/ideas/IDEA-*.md` ∪ `.soloflow/archive/ideas/IDEA-*.md`
 - **TASK:** `.soloflow/active/plans/**/TASK-*-plan.md` ∪ `.soloflow/active/stuck/**/TASK-*-stuck.md` ∪ `.soloflow/archive/done/**/TASK-*-done.md`
 - **SPRINT:** `.soloflow/archive/compound/SPRINT-*-proposal.md` ∪ `.soloflow/archive/findings/SPRINT-*-findings.md` ∪ the active `sprint.json`'s `sprint.id`
+- **ROADMAP:** `.soloflow/active/roadmaps/ROADMAP-*.md` ∪ `.soloflow/archive/roadmaps/ROADMAP-*.md`
 
 Recipe (bash):
 ```bash
@@ -87,8 +91,8 @@ State format: Markdown with YAML frontmatter (optimized for LLM parsing + git di
 
 ## Agent Model Strategy
 
-- **Opus:** Orchestrator, Verifier, Task Refiner, Code Reviewer (quality-critical roles)
-- **Sonnet:** Executor, Idea Extractor, Researcher, Compounder (cost optimization, ~60% reduction)
+- **Opus:** Orchestrator, Verifier, Task Refiner, Code Reviewer, Roadmap Generator (quality-critical roles)
+- **Sonnet:** Executor, Idea Extractor, Researcher, Roadmap Researcher, Compounder (cost optimization, ~60% reduction)
 
 ## Verification Layer
 
