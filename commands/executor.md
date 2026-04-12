@@ -111,6 +111,7 @@ Stage only the listed paths — never `git add .` / `git add -A`. Skip silently 
 
    e. Handle verifier verdict:
       - **APPROVED** → proceed to code review (step f).
+      - **APPROVED_WITH_DEFERRED** → proceed to code review (step f). The deferred checks are already queued in `.soloflow/human-review-queue.md` by the verifier — they will be re-verified in Step 4.
       - **NEEDS_CHANGES** → if loops < `executor_retry_max` (config default: 3), re-spawn executor with verifier feedback. Otherwise write stuck report.
       - **HUMAN_NEEDED** → add to `.soloflow/human-review-queue.md`, update status in `sprint.json`.
 
@@ -154,6 +155,12 @@ Present a consolidated review:
 - **Tasks needing human judgment** (HUMAN_NEEDED verdicts) with verifier notes
 - **Stuck tasks** with failure details and what was tried
 - **Sprint statistics:** completed, stuck, human-needed, total executor loops
+
+**Deferred verification.** If `human-review-queue.md` contains `type: action_required` entries, present them grouped by action. For each action, use **AskUserQuestion**: "Have you completed: {action}?" with options **Yes — re-verify now** / **Not yet — keep deferred** / **No longer needed — dismiss**.
+
+- **Yes:** Re-spawn the **verifier** (or **sprint-verifier** for sprint-level flows) with the original plan + executor report, scoped to only the previously deferred checks. Handle the verdict normally — if it passes, remove the entry from the queue and decrement `pending_count`; if it fails, convert to `NEEDS_CHANGES` and present to the user.
+- **Not yet:** Leave in the queue. The entry persists for the next session.
+- **Dismiss:** Remove from the queue and decrement `pending_count`.
 
 **PAUSE HERE.** The user's job is taste-level review — everything functional has already been verified.
 

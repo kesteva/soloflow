@@ -98,6 +98,21 @@ Step back from the specific criteria and ask: **what must be TRUE for this chang
 
 Check each condition. This catches things the acceptance criteria might have missed — edge cases, error handling, data validation, race conditions.
 
+### Deferred Checks — Human Action Required
+
+At any level, if a check cannot run until a human performs a prerequisite action (deploy an edge function, run a migration, provision a service, etc.), mark it `DEFERRED_ACTION` — do not fail or skip it. Append an entry to `.soloflow/human-review-queue.md`:
+
+```
+- task: {TASK-NNN}
+  type: action_required
+  action: "{what the human must do}"
+  blocked_checks:
+    - "{criterion or verification step blocked}"
+  level: "{ground_truth | visual | requirements | goal_backward}"
+```
+
+Increment `pending_count`. Continue running all non-blocked checks. Base your verdict on non-deferred checks only — if everything else passes, use `APPROVED_WITH_DEFERRED`. Include a `Deferred Checks` section in your report listing what was deferred and why.
+
 ### Level 5: Risk Assessment
 
 Flag any of the following (do not fail on these — flag for human awareness):
@@ -112,6 +127,9 @@ Flag any of the following (do not fail on these — flag for human awareness):
 
 ### APPROVED
 All 5 levels pass. Every acceptance criterion has evidence. No ground truth failures.
+
+### APPROVED_WITH_DEFERRED
+All non-deferred checks pass. One or more checks were deferred because they require a human action first (see Deferred Checks section). The orchestrator will re-spawn verification after the human completes the action.
 
 ### NEEDS_CHANGES
 Something specific failed. You MUST provide:
@@ -160,7 +178,7 @@ Output exactly this structure:
 ```
 ## Verification Report
 - **Task:** {task_id}
-- **Verdict:** APPROVED | NEEDS_CHANGES | HUMAN_NEEDED
+- **Verdict:** APPROVED | APPROVED_WITH_DEFERRED | NEEDS_CHANGES | HUMAN_NEEDED
 
 ### Ground Truth
 - **Tests:** PASS | FAIL | NO_TESTS — {summary}
@@ -184,6 +202,11 @@ For each acceptance criterion:
 
 ### Findings Logged
 - **Count:** N (entries appended to `.soloflow/active/findings.md`)
+
+### Deferred Checks (only if APPROVED_WITH_DEFERRED)
+- **Action:** {what the human must do}
+  - Blocked: {criterion or check that could not run}
+  - Level: {verification level}
 
 ### Changes Required (only if NEEDS_CHANGES)
 1. {specific change with file path, line number, and what to do}
