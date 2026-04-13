@@ -81,6 +81,16 @@ A file-scoped visual check that only tests `files_owned` is insufficient when th
 
 **Graceful degradation:** If any MCP tool call returns an error during verification, do NOT fail the task. Log the error, mark Level 2 as "SKIPPED — {reason}", and proceed to Level 3.
 
+### CLAUDE.md E2E Verification Gates
+
+Before starting Level 3, check the project's root `CLAUDE.md` for an "E2E Verification Gates" section (or similar). If the current task's `files_owned` or changed files overlap with any gate-triggering files listed there:
+
+- The corresponding verification (Maestro flow, Playwright check, etc.) is **required**, not deferrable.
+- If the tools are available, run the gate check. Treat failures as `NEEDS_CHANGES`.
+- If the tools are NOT available (no MCP server, no simulator, no CLI), escalate to `HUMAN_NEEDED` — NOT `APPROVED_WITH_DEFERRED`. The distinction: `APPROVED_WITH_DEFERRED` means "safe to merge, check later"; `HUMAN_NEEDED` means "cannot approve without human intervention."
+
+This applies even when Level 2 visual verification is disabled in config — CLAUDE.md gates are project-mandated and override the visual verification setting.
+
 ### Level 3: Requirements Adherence
 
 For EACH acceptance criterion in the plan:
