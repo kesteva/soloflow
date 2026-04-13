@@ -132,12 +132,31 @@ Commits: {count} ({commit range})
 Next: review the branch, then merge when satisfied.
 ```
 
+## Step 7: Merge prune branch
+
+1. Use **AskUserQuestion** to ask: "Merge prune branch `<branch_name>` into `<base_branch>`?" with options:
+   - **Merge locally** — merge with `--no-ff`, then delete the branch.
+   - **Open PR** — push the branch and open a pull request on GitHub.
+   - **Keep branch open** — stay on the prune branch for manual review/merge.
+   - **Delete without merging** — discard all pruning (destructive).
+2. On **Merge locally**:
+   - `git checkout <base_branch>`
+   - `git merge --no-ff <branch_name> -m "soloflow: merge prune <branch_name>"`
+   - If the merge reports conflicts, leave markers in place, print the conflicting paths, and stop. Do not delete the branch.
+   - On successful merge, delete the branch: `git branch -d <branch_name>`.
+3. On **Open PR**:
+   - `git push -u origin <branch_name>`
+   - Create a PR with `gh pr create --base <base_branch> --head <branch_name>` using the prune report from Step 6 as the PR body.
+   - Print the PR URL. Do not merge or delete — the user merges via GitHub.
+4. On **Keep branch open**: stay on `<branch_name>`. Print the branch name + base so the user can merge manually later.
+5. On **Delete without merging**: re-prompt with `AskUserQuestion` to confirm (destructive action). On confirmation, `git checkout <base_branch>` then `git branch -D <branch_name>`. On cancel, fall through to Keep branch open behavior.
+
 ---
 
 ## Notes
 
 - This command creates a dedicated branch so all pruning changes are isolated and reviewable.
-- The prune branch is NOT automatically merged — the user reviews and merges when ready.
+- After pruning, the user is prompted to merge locally, open a PR, keep the branch, or discard it.
 - Both analysis agents are read-only; only the main agent (you) applies changes.
 - Prefer conservative pruning — when in doubt about whether something is truly dead, ask the user rather than removing it.
 - Do NOT prune `.soloflow/` state files, test fixtures that are dynamically loaded, or framework-specific magic files (e.g., `_app.tsx`, `+page.svelte`).

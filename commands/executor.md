@@ -183,18 +183,23 @@ Never `git add .` / `git add -A`. Skip silently if not in a git repo or `.solofl
 ## Step 4.5: Merge run branch (only if Step 2.5 created one)
 
 1. Use **AskUserQuestion** to ask: "Merge run branch `<branch_name>` into `<base_branch>`?" with options:
-   - **Merge** — merge with `--no-ff` and leave the branch in place for inspection.
+   - **Merge locally** — merge with `--no-ff`, then delete the branch.
+   - **Open PR** — push the branch and open a pull request on GitHub.
    - **Keep branch open** — stay on the run branch and let the user merge manually later.
    - **Delete without merging** — discard everything in this run (destructive).
-2. On **Merge**:
+2. On **Merge locally**:
    - `git checkout <base_branch>`
    - `git merge --no-ff <branch_name> -m "soloflow: merge run <branch_name> (SPRINT-NNN)"` (use the `merge_strategy` value from config if different)
-   - If the merge reports conflicts, **do NOT attempt to resolve**. Leave the user on `<base_branch>` with conflict markers in place, print the conflicting paths, and stop the command.
-   - Do not delete the run branch automatically — the user may want to cherry-pick or inspect.
-3. On **Keep branch open**: stay on `<branch_name>`. Print the branch name + base so the user can merge manually later.
-4. On **Delete without merging**: re-prompt with `AskUserQuestion` to confirm (destructive action). On confirmation, `git checkout <base_branch>` then `git branch -D <branch_name>`. On cancel, fall through to Keep branch open behavior.
+   - If the merge reports conflicts, **do NOT attempt to resolve**. Leave the user on `<base_branch>` with conflict markers in place, print the conflicting paths, and stop. Do not delete the branch.
+   - On successful merge, delete the branch: `git branch -d <branch_name>`.
+3. On **Open PR**:
+   - `git push -u origin <branch_name>`
+   - Create a PR with `gh pr create --base <base_branch> --head <branch_name>` using the sprint report from Step 5 as the PR body.
+   - Print the PR URL. Do not merge or delete — the user merges via GitHub (branch cleanup happens via GitHub's auto-delete setting or manually).
+4. On **Keep branch open**: stay on `<branch_name>`. Print the branch name + base so the user can merge manually later.
+5. On **Delete without merging**: re-prompt with `AskUserQuestion` to confirm (destructive action). On confirmation, `git checkout <base_branch>` then `git branch -D <branch_name>`. On cancel, fall through to Keep branch open behavior.
 
-Record the outcome (merged / kept-open / deleted) for Step 5.
+Record the outcome (merged / pr-opened / kept-open / deleted) for Step 5.
 
 ## Step 5: Report
 
@@ -206,7 +211,7 @@ Sprint SPRINT-{NNN} complete.
 - Total executor loops: {count}
 
 Run branch: {branch_name or "none — ran on <base_branch>"}
-  Status: {merged into <base> | kept open | deleted | n/a}
+  Status: {merged into <base> | pr-opened | kept open | deleted | n/a}
   Head:   {short SHA at end of run}
 
 Next step: /soloflow:compound  (to extract learnings from this sprint)
