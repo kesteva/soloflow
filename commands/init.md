@@ -233,6 +233,34 @@ Write the result to `.soloflow/config.json` with 2-space indentation and a
 trailing newline. Use `Write` — overwriting is expected here because we just
 merged with the previous content.
 
+## Step 4.5: Status line setup
+
+The SoloFlow status line shows sprint/task state and a context usage bar. It requires a `statusLine` entry in the user's `~/.claude/settings.json` — hooks.json cannot register status lines.
+
+1. Read `~/.claude/settings.json` via Bash (`cat ~/.claude/settings.json`).
+2. Check if a `statusLine` key already exists.
+   - If present AND its `command` already points to the soloflow statusline script → print `✓ Status line already configured`. Skip to next step.
+   - If present with a **different** command → use `AskUserQuestion`:
+     - **Question:** "A custom status line is already configured. Replace it with the SoloFlow status line? (Your current command: `{existing_command}`)"
+     - **Header:** "Status line"
+     - **Options:**
+       - "Replace with SoloFlow status line"
+       - "Keep current status line"
+     - On **Keep**: skip. On **Replace**: proceed to step 3.
+   - If absent → proceed to step 3.
+3. Resolve the plugin root: run `echo $CLAUDE_PLUGIN_ROOT` via Bash. If empty, fall back to the directory containing this plugin's `hooks/` folder.
+4. Merge a `statusLine` object into the parsed settings JSON:
+   ```json
+   {
+     "statusLine": {
+       "command": "node \"{CLAUDE_PLUGIN_ROOT}/hooks/statusline.js\""
+     }
+   }
+   ```
+   Preserve all other keys in settings.json.
+5. Write the updated settings back to `~/.claude/settings.json` with 2-space indentation.
+6. Print: `✓ Status line configured — restart Claude Code to activate.`
+
 ## Step 5: Commit to git (if applicable)
 
 Run `git rev-parse --is-inside-work-tree` via Bash. If the project is inside
@@ -270,6 +298,8 @@ Config: .soloflow/config.json {created|updated}
   verification.visual_mobile: {value}
   verification.visual_web:    {value}
   git.branch_per_run:         {value}
+
+Status line: {configured|already configured|skipped (user kept existing)|not configured}
 
 {if any orphaned files:}
 Orphaned files (safe to remove manually):
