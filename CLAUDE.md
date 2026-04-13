@@ -22,6 +22,8 @@ Seven-phase workflow orchestrated via Claude Code hooks and agent definitions:
 
 **Key constraint:** Subagents cannot spawn subagents. Orchestrator is main agent; executors/verifiers/reviewers are leaf nodes only.
 
+**Context limit handoffs.** A statusline hook (`hooks/statusline.js`) writes context metrics to a bridge file; a PostToolUse hook (`hooks/context-monitor.js`) reads it and injects WARNING (≤35% remaining) / CRITICAL (≤25%) into the agent conversation. Subagents respond to CRITICAL by committing work and reporting `CONTEXT_LIMIT` status with an inline `### Handoff` section; the orchestrator spawns a fresh agent with the handoff context (up to `context_limit_respawn_max`, default 3). The orchestrator itself responds to CRITICAL by checkpointing and asking the user to compact-and-continue or save-and-exit.
+
 ### Components
 
 - **`agents/`** — Agent definitions as markdown with YAML frontmatter
