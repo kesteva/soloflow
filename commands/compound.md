@@ -44,8 +44,12 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
 
 Walk through each bucket sequentially. For each non-empty bucket:
 
-1. Print a compact summary: item count and one-line title per item.
-2. Use **AskUserQuestion** with the bucket name as header and these options:
+1. Build a compact summary: item count and one-line title per item.
+2. Use **AskUserQuestion** with the summary **embedded in the question text** (not printed separately before the call — text printed before AskUserQuestion gets visually cut off by the question UI). Format the question as:
+
+   `Bucket {letter} — {name} ({N} items): {one-line title per item, comma-separated}. Approve?`
+
+   Options:
    - **Approve all** — accept every item in this bucket
    - **Approve some** — user lists which items to keep (e.g., `A1, A3`); anything unlisted is rejected
    - **Reject all** — skip this bucket entirely
