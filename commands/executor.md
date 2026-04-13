@@ -106,17 +106,20 @@ Stage only the listed paths — never `git add .` / `git add -A`. Skip silently 
       - **COMPLETED** → proceed to verification.
       - **BLOCKED** → update status to `"blocked"` in `sprint.json`, continue to next task.
       - **STUCK** → write stuck report to `.soloflow/active/stuck/{epic}/TASK-{NNN}-stuck.md` if the plan has an epic, else flat at `.soloflow/active/stuck/TASK-{NNN}-stuck.md`. Create the folder if missing. Update status in `sprint.json`, continue.
-      - **CONTEXT_LIMIT** → read the `### Handoff` section from the executor's status report. Build a **structured handoff note** by combining the handoff with your own inspection:
-        1. Run `git log --oneline {base_sha}..HEAD -- {files_owned}` to list commits made so far.
-        2. Run `git status --porcelain` to identify uncommitted changes.
-        3. Construct the handoff note with these sections:
-           - **Completed steps:** which plan steps are done (from the handoff)
+      - **CONTEXT_LIMIT** → build a structured handoff note for the next executor:
+        1. **Check the executor's status report first.** The context monitor prompts the executor to produce a `### Handoff` section with completed steps, remaining steps, commits, modified files, and key context. If present, use it as the primary source.
+        2. **Supplement with git inspection** to fill any gaps or verify claims:
+           - `git log --oneline {base_sha}..HEAD -- {files_owned}` — actual commits made
+           - `git status --porcelain` — uncommitted changes the executor may not have captured
+        3. Construct the final handoff note with these sections:
+           - **Completed steps:** which plan steps are done
            - **Remaining steps:** which plan steps are NOT done
            - **Commits so far:** hash + message for each commit on this task
            - **Uncommitted changes:** files modified but not yet committed
            - **Last test state:** pass/fail from the previous executor's report
-           - **Key context:** decisions, gotchas, or state not obvious from the code (from the handoff)
-        4. If context-limit respawns for this agent on this task < `context_limit_respawn_max` (config default: 3), spawn a **fresh executor** with the original plan content prepended with the structured handoff note. Increment context-limit respawn counter (tracked separately from `executor_retry_max`). If respawn limit reached, escalate as STUCK.
+           - **Key context:** decisions, gotchas, or state not obvious from the code
+        4. If the executor's status report is missing or lacks a `### Handoff` section (e.g., the agent was terminated before it could report), reconstruct the handoff entirely from git inspection and the plan's step list.
+        5. If context-limit respawns for this agent on this task < `context_limit_respawn_max` (config default: 3), spawn a **fresh executor** with the original plan content prepended with the structured handoff note. Increment context-limit respawn counter (tracked separately from `executor_retry_max`). If respawn limit reached, escalate as STUCK.
 
    d. Spawn **verifier** with plan + executor report. Wait for verdict.
 
