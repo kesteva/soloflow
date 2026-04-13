@@ -56,6 +56,12 @@ Walk through each bucket sequentially. For each non-empty bucket:
    - **Give feedback** — user provides notes; re-run the compounder for this bucket only with the feedback appended, then re-present
 3. Record the per-bucket decisions before moving to the next bucket.
 
+**Bucket D exception (SoloFlow improvements):** Do not use the standard approve/reject flow. Instead:
+1. Write the approved feedback document to `.soloflow/archive/compound/SPRINT-{NNN}-feedback.md` immediately.
+2. Print the full write-up inline so the user can copy it directly into a SoloFlow conversation.
+3. Use **AskUserQuestion**: `SoloFlow feedback archived to SPRINT-{NNN}-feedback.md. Continue?` with a single **Continue** option.
+4. No further action needed for bucket D in Step 4.
+
 If a bucket is empty (`_No items._`), skip it silently — do not present an empty picker.
 
 After all buckets have been reviewed, print a one-line summary of accepted/rejected counts across all buckets, then proceed to Step 4.
@@ -93,14 +99,7 @@ Spawn the **claude-md-reviewer** agent to review and tighten the approved C-item
 
 ### Bucket D — SoloFlow improvements (tester mode only)
 
-This bucket is NOT applied to the current project. It is a self-contained write-up of problems and recommendations for the SoloFlow plugin itself, meant to be passed back to the SoloFlow maintainer (the user, in the SoloFlow plugin project).
-
-For each approved D-item:
-1. No edits are made — this bucket is informational only.
-
-After all D-items are reviewed, write the approved items to `.soloflow/archive/compound/SPRINT-{NNN}-feedback.md` as a standalone document that can be copy-pasted into a SoloFlow project conversation. Commit with `docs({sprint}): archive soloflow tester feedback`.
-
-If no D-items exist (tester mode off), skip this entirely.
+Bucket D is handled entirely in Step 3 (write-up presented inline, feedback file archived). No action needed here. If no D-items exist (tester mode off), skip entirely.
 
 ---
 
