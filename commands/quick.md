@@ -81,6 +81,7 @@ Read the executor's status report:
 - **If COMPLETED**: Proceed to Step 6 (verification).
 - **If BLOCKED**: Update the task in `.soloflow/active/sprint.json` to `status: "blocked"`. Report the blocker to the user. Stop here.
 - **If STUCK**: Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` with the executor's error details. Update `.soloflow/active/sprint.json` to `status: "stuck"`. Report to the user. Stop here.
+- **If CONTEXT_LIMIT**: Read the `### Handoff` section. If context-limit respawns < 3, spawn a **fresh executor** with the original plan + "Continue from previous executor's handoff: {handoff section}". Otherwise escalate as STUCK.
 
 ## Step 6: Spawn Verifier
 
@@ -142,3 +143,13 @@ Report to the user:
 - Each executor run should produce atomic commits — do not squash them.
 - If the user's bug description is too vague to create a concrete plan, ask the user for clarification BEFORE creating the plan. Do not guess. Prefer the **AskUserQuestion** tool when the clarification can be framed as a choice between candidate interpretations; use a free-form text question only when the clarification is genuinely open-ended.
 - Keep the plan focused. This is the quick path — one bug, one fix. If the bug turns out to be bigger than expected, tell the user to use `/soloflow:idea-extractor` → `/soloflow:planner` → `/soloflow:executor` instead.
+
+---
+
+## Context Limit Self-Monitoring
+
+This command runs in the main session. The context-monitor hook injects warnings when context usage is high.
+
+When you receive a **SOLOFLOW CONTEXT WARNING**: finish the current step, then write a checkpoint.
+
+When you receive a **SOLOFLOW CONTEXT CRITICAL**: finish the current subagent interaction, write a checkpoint, then use **AskUserQuestion** with options: **Compact and continue** / **Save and exit**.

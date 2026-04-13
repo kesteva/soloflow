@@ -56,6 +56,7 @@ The user's input is: **$ARGUMENTS**
    - Instruction: "Research this dimension for roadmap generation. Output the complete research report."
 
 4. Collect all research reports.
+   - If any researcher reports **CONTEXT_LIMIT**: read its `### Handoff` section. Spawn a **fresh roadmap-researcher** for the same dimension with: "Continue research from previous researcher's handoff: {handoff section}". Cap at 3 respawns per dimension.
 
 5. Write each report to `.soloflow/active/research/ROADMAP-{NNN}-research-{dimension}.md`. Use the Write tool -- these files are new, not appending to existing files.
 
@@ -71,6 +72,7 @@ The user's input is: **$ARGUMENTS**
    - Instruction: "Generate a phased roadmap with epics. Use the provided roadmap ID. Output the complete ROADMAP file content."
 
 3. Capture the generator's output.
+   - If the generator reports **CONTEXT_LIMIT**: read the `### Handoff` section. Spawn a **fresh roadmap-generator** with the original inputs + "Continue from previous generator's handoff: {handoff section}". Cap at 3 respawns.
 
 4. Write to `.soloflow/active/roadmaps/ROADMAP-{NNN}.md` using noclobber semantics. If the target already exists (collision), recompute the next ID and retry.
 
@@ -253,3 +255,13 @@ Roadmap generated: ROADMAP-{NNN} ({title})
 
   Next step: /soloflow:executor
 ```
+
+---
+
+## Context Limit Self-Monitoring
+
+This command runs in the main session. The context-monitor hook injects warnings when context usage is high.
+
+When you receive a **SOLOFLOW CONTEXT WARNING**: finish the current step, then write a checkpoint.
+
+When you receive a **SOLOFLOW CONTEXT CRITICAL**: finish the current subagent interaction, write a checkpoint, then use **AskUserQuestion** with options: **Compact and continue** / **Save and exit**.

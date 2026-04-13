@@ -106,6 +106,7 @@ Stage only the listed paths — never `git add .` / `git add -A`. Skip silently 
       - **COMPLETED** → proceed to verification.
       - **BLOCKED** → update status to `"blocked"` in `sprint.json`, continue to next task.
       - **STUCK** → write stuck report to `.soloflow/active/stuck/{epic}/TASK-{NNN}-stuck.md` if the plan has an epic, else flat at `.soloflow/active/stuck/TASK-{NNN}-stuck.md`. Create the folder if missing. Update status in `sprint.json`, continue.
+      - **CONTEXT_LIMIT** → read the `### Handoff` section from the executor's status report. If context-limit respawns for this agent on this task < `context_limit_respawn_max` (config default: 3), spawn a **fresh executor** with the original plan content prepended with: "A previous executor ran out of context. Continue from where it left off. Do NOT redo completed steps or re-commit already-committed changes. Previous executor's handoff: {handoff section}". Increment context-limit respawn counter (tracked separately from `executor_retry_max`). If respawn limit reached, escalate as STUCK.
 
    d. Spawn **verifier** with plan + executor report. Wait for verdict.
 
@@ -114,16 +115,19 @@ Stage only the listed paths — never `git add .` / `git add -A`. Skip silently 
       - **APPROVED_WITH_DEFERRED** → proceed to code review (step f). The deferred checks are already queued in `.soloflow/human-review-queue.md` by the verifier — they will be re-verified in Step 4.
       - **NEEDS_CHANGES** → if loops < `executor_retry_max` (config default: 3), re-spawn executor with verifier feedback. Otherwise write stuck report.
       - **HUMAN_NEEDED** → add to `.soloflow/human-review-queue.md`, update status in `sprint.json`.
+      - **CONTEXT_LIMIT** → read the `### Handoff` section. Spawn a **fresh verifier** with the original inputs + "Continue verification from previous verifier's handoff: {handoff section}". Same respawn budget as executor CONTEXT_LIMIT handling.
 
    f. Spawn **code-reviewer** with the plan + executor's changed files list. Wait for verdict.
       - **CLEAN** → proceed to step f2 (test writing).
       - **IMPROVEMENTS_NEEDED** (first time only) → re-spawn executor with review feedback, then re-verify. Does NOT consume the executor retry budget.
       - **SECURITY_ISSUE** → escalate to HUMAN_NEEDED. Add to `.soloflow/human-review-queue.md`, update status in `sprint.json`.
+      - **CONTEXT_LIMIT** → read the `### Handoff` section. Spawn a **fresh code-reviewer** with the original inputs + "Continue review from previous reviewer's handoff: {handoff section}". Same respawn budget.
 
    f2. **Test writing.** Spawn the **test-writer** agent with the plan, executor's changed files list, and code-reviewer's report. Wait for result.
       - **TESTS_WRITTEN** → run the project's test suite via Bash to confirm no regressions. If the new tests pass, proceed. If they fail, re-spawn the test-writer with the failure output (one retry). If still failing after retry, log a finding and proceed — do not block the task on test issues.
       - **NO_TESTS_NEEDED** → proceed (the test-writer determined nothing warranted new tests).
       - **NO_TEST_INFRA** → proceed (no test framework is set up in this project).
+      - **CONTEXT_LIMIT** → read the `### Handoff` section. Spawn a **fresh test-writer** with the original inputs + "Continue from previous test-writer's handoff: {handoff section}". Same respawn budget.
 
    f3. Write done report to `.soloflow/archive/done/{epic}/TASK-{NNN}-done.md` if the plan has an epic (create the folder if missing), else flat at `.soloflow/archive/done/TASK-{NNN}-done.md`. Remove task from `sprint.json`. Then perform the **epic archival check**: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no tasks from that epic remain in `sprint.json`, flag the epic for the Step 4 human review with an "archive this epic?" prompt. On user approval (not automatic), move `.soloflow/active/plans/{epic}/EPIC-{epic}.md` → `.soloflow/archive/done/{epic}/EPIC-{epic}.md` and flip its frontmatter `status` from `active` to `complete`.
 
@@ -245,5 +249,22 @@ next_action: "{what to do next}"
 ## Notes
 
 - This command IS the orchestrator for Phase 3. It runs in the main session and spawns executor/verifier/code-reviewer as leaf-node subagents.
-- Config: `executor_retry_max`, `checkpoint_interval`, `max_sprint_tasks` in `config/defaults.yaml`.
+- Config: `executor_retry_max`, `checkpoint_interval`, `max_sprint_tasks`, `context_limit_respawn_max` in `config/defaults.yaml`.
 - Branching config: `git.branch_per_run` (runtime-read) in `config/defaults.yaml`, overrideable per-project via `.soloflow/config.json`.
+
+---
+
+## Context Limit Self-Monitoring
+
+This command runs in the main session. The context-monitor hook injects warnings when context usage is high.
+
+When you receive a **SOLOFLOW CONTEXT WARNING**:
+1. Finish the current subagent interaction (do not abandon a running agent).
+2. Write a checkpoint to `.soloflow/checkpoint.md` with the current sprint state, which task is in progress, and what phase of the execute-verify-review loop you are in.
+
+When you receive a **SOLOFLOW CONTEXT CRITICAL**:
+1. Finish the current subagent interaction if one is running.
+2. Write a detailed checkpoint to `.soloflow/checkpoint.md`.
+3. Use **AskUserQuestion** with options:
+   - **Compact and continue** — let compaction happen, then resume from checkpoint by re-reading `.soloflow/checkpoint.md` and `.soloflow/active/sprint.json`.
+   - **Save and exit** — stop execution. The user can resume later with `/soloflow:executor` which handles checkpoint resume (Step 1.2).

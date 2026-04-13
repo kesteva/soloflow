@@ -36,7 +36,9 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
    - Paths to all done reports, stuck reports, findings.md, and human-review-queue.md
    - If tester mode is on: `tester: true`
    - Instruction: "Produce `.soloflow/active/COMPOUND-PROPOSAL.md` with three buckets (A clean-ups, B backlog tasks, C CLAUDE.md improvements). {If tester: Also produce bucket D (SoloFlow improvements).} Do not apply anything. Cite concrete evidence for every item."
-3. Wait for the compounder to finish. Read the resulting `COMPOUND-PROPOSAL.md`.
+3. Wait for the compounder to finish.
+   - If the compounder reports **CONTEXT_LIMIT**: read the `### Handoff` section. If a partial `COMPOUND-PROPOSAL.md` was written, read it. Spawn a **fresh compounder** with the remaining un-triaged inputs and the partial proposal content. Merge results. Cap at 3 respawns.
+   Read the resulting `COMPOUND-PROPOSAL.md`.
 
 ## Step 3: Present proposal and collect approvals — one bucket at a time
 
@@ -132,3 +134,13 @@ Findings : archived → archive/findings/SPRINT-{NNN}-findings.md
 - The compounder agent is read-only except for `COMPOUND-PROPOSAL.md` — it never writes directly to plans or CLAUDE.md.
 - The claude-md-reviewer agent is read-only — it reviews proposals and produces diffs; the main agent applies them.
 - Rejected items are preserved in the archived proposal so they can be revisited manually.
+
+---
+
+## Context Limit Self-Monitoring
+
+This command runs in the main session. The context-monitor hook injects warnings when context usage is high.
+
+When you receive a **SOLOFLOW CONTEXT WARNING**: finish the current step, then write a checkpoint.
+
+When you receive a **SOLOFLOW CONTEXT CRITICAL**: finish the current subagent interaction, write a checkpoint, then use **AskUserQuestion** with options: **Compact and continue** / **Save and exit**.

@@ -33,6 +33,7 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
    - The list of existing epics discovered in Step 1.5 (slug + `EPIC-{slug}.md` contents). Instruct: "Reuse these existing epics when a task fits their objective. Propose new epic slugs only when 2+ tasks share a coherent objective. Leave `epic` null for orphan tasks."
    - Instruction: "Refine this idea into execution-ready plans. Start task numbering at TASK-{NNN}. Output each plan file's content clearly separated. For any new epic slugs you introduce, also output an EPIC-{slug}.md block."
 2. Capture the refiner's output.
+   - If the task-refiner reports **CONTEXT_LIMIT**: read the `### Handoff` section to get plans produced so far. Write the completed plans to disk (same as normal flow). Spawn a **fresh task-refiner** with: the original idea, "Continue refinement from previous refiner's handoff. These tasks are already planned: {list}. Start numbering at TASK-{next}.", the handoff content, and the updated starting counter. Merge outputs. Cap at 3 context-limit respawns; after that, proceed with whatever plans exist.
 3. Parse the output into individual plan files and any new EPIC-{slug}.md blocks.
 4. Write each plan based on its `epic` frontmatter field:
    - If `epic: <slug>` is set → write to `.soloflow/active/plans/{slug}/TASK-{NNN}-plan.md`, creating the folder if missing.
@@ -98,3 +99,13 @@ Next step: /soloflow:executor
 
 - This command does NOT execute any tasks — that's `/soloflow:executor`.
 - Config reference: `executor_retry_max`, `max_sprint_tasks` in `config/defaults.yaml` apply at execution time, not here.
+
+---
+
+## Context Limit Self-Monitoring
+
+This command runs in the main session. The context-monitor hook injects warnings when context usage is high.
+
+When you receive a **SOLOFLOW CONTEXT WARNING**: finish the current step, then write a checkpoint.
+
+When you receive a **SOLOFLOW CONTEXT CRITICAL**: finish the current subagent interaction, write a checkpoint, then use **AskUserQuestion** with options: **Compact and continue** / **Save and exit**.
