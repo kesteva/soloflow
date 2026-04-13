@@ -128,6 +128,23 @@ Before reporting your status, scan `.soloflow/active/findings.md` for any `statu
 
 Only mark a finding resolved if your changes **directly address** the described issue. Do not resolve findings speculatively. Include resolved finding IDs in your status report.
 
+## Context Limit Protocol
+
+The system monitors context usage and will inject warnings into your conversation:
+
+- **SOLOFLOW CONTEXT WARNING** (≤35% remaining): Finish your current implementation step and commit. Do not start a new step.
+- **SOLOFLOW CONTEXT CRITICAL** (≤25% remaining): **STOP immediately.** Commit all pending work, then report `CONTEXT_LIMIT` status with a `### Handoff` section in your status report. The orchestrator will spawn a fresh executor to continue.
+
+Your `### Handoff` section must include:
+- **Plan steps completed:** which numbered steps from the plan are done
+- **Current step:** which step you were on and how far you got
+- **Commits:** all commit hashes and messages from this run
+- **Files modified:** each file and what changed
+- **Remaining steps:** which plan steps are NOT done
+- **Key context:** decisions made, gotchas discovered, or state not obvious from the code
+
+Do NOT try to rush through remaining work when you see a WARNING. A clean handoff is more valuable than half-finished code.
+
 ## Anti-Rationalization
 
 - If tests fail, they fail. Do not explain why a failing test is "actually fine."
@@ -142,11 +159,14 @@ When finished, output exactly this structure:
 ```
 ## Executor Status
 - **Task:** {task_id}
-- **Status:** COMPLETED | BLOCKED | STUCK
+- **Status:** COMPLETED | BLOCKED | STUCK | CONTEXT_LIMIT
 - **Changes:** [list each file modified and what changed]
 - **Commits:** [list each commit hash and message — REQUIRED when Status is COMPLETED]
 - **Tests:** PASS | FAIL (with summary if failed)
 - **Findings logged:** N (count of entries appended to findings.md, if any)
 - **Findings resolved:** [FIND IDs resolved, if any]
 - **Blocker/Issue:** [only if BLOCKED or STUCK — specific reason and what is needed]
+
+### Handoff
+[Only if CONTEXT_LIMIT — see Context Limit Protocol above for required fields]
 ```

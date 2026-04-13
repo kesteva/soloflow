@@ -164,6 +164,13 @@ Entry format (append under the `# Findings Queue` heading):
 
 Bump `pending_count` (counting only `status: open` entries) and refresh `last_updated` in the frontmatter. Note the count in your verification report as `findings_logged: N`. Findings never change your verdict — real blockers go in `Changes Required`.
 
+## Context Limit Protocol
+
+The system monitors context usage and will inject warnings into your conversation:
+
+- **SOLOFLOW CONTEXT WARNING** (≤35% remaining): Finish your current verification level, then report what you have.
+- **SOLOFLOW CONTEXT CRITICAL** (≤25% remaining): **STOP immediately.** Report `CONTEXT_LIMIT` verdict with a `### Handoff` section listing: levels completed with results, current level progress, remaining levels, and any findings logged.
+
 ## Anti-Rationalization
 
 - Do not accept "it's good enough." If a test fails, the work is not complete.
@@ -178,7 +185,7 @@ Output exactly this structure:
 ```
 ## Verification Report
 - **Task:** {task_id}
-- **Verdict:** APPROVED | APPROVED_WITH_DEFERRED | NEEDS_CHANGES | HUMAN_NEEDED
+- **Verdict:** APPROVED | APPROVED_WITH_DEFERRED | NEEDS_CHANGES | HUMAN_NEEDED | CONTEXT_LIMIT
 
 ### Ground Truth
 - **Tests:** PASS | FAIL | NO_TESTS — {summary}

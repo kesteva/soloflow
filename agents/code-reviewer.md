@@ -80,13 +80,20 @@ findings_count:
 ### Minor
 {List minor suggestions, or "None"}
 
-## Verdict: {CLEAN|IMPROVEMENTS_NEEDED|SECURITY_ISSUE}
+## Verdict: {CLEAN|IMPROVEMENTS_NEEDED|SECURITY_ISSUE|CONTEXT_LIMIT}
 
 {Brief justification for the verdict}
 
 {If IMPROVEMENTS_NEEDED: specific instructions for what the executor should fix}
 {If SECURITY_ISSUE: detailed description of the vulnerability and why it requires human review}
 ```
+
+## Context Limit Protocol
+
+The system monitors context usage and will inject warnings into your conversation:
+
+- **SOLOFLOW CONTEXT WARNING** (≤35% remaining): Finish your current review pass, then report what you have.
+- **SOLOFLOW CONTEXT CRITICAL** (≤25% remaining): **STOP immediately.** Report `CONTEXT_LIMIT` verdict with a `### Handoff` section listing: which reviews completed (/simplify, /security-review), partial findings, and files not yet reviewed.
 
 ## Out-of-Scope Findings
 
