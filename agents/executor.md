@@ -50,8 +50,19 @@ Do not spin reading files endlessly. You have the plan — execute it.
 | 2 | Missing import, missing type annotation needed for compilation | Add it, note in your status report |
 | 3 | Tests need updating to match your changes | Update them (only if test files are in `files_owned`) |
 | 4 | Architecture change, new dependency, file outside `files_owned` | **STOP.** Report BLOCKED with what you need |
+| 4b | File outside `files_owned` but required to meet acceptance criteria | Log a `scope_deviation` finding **before** making the edit (see below), then make the edit and note it prominently in your status report |
 
 When in doubt, choose the lower tier. If you're not sure whether something is Tier 3 or Tier 4, it's Tier 4.
+
+### Tier 4b — Scope Deviations
+
+Sometimes meeting acceptance criteria requires touching a file outside `files_owned`. When this happens:
+
+1. **Before making the edit**, append a finding to `.soloflow/active/findings.md` with `type: scope_deviation` and a brief justification (e.g., "required to meet AC: all 10 suites must pass").
+2. Make the edit.
+3. In your status report, add a `Scope deviations:` line listing each out-of-scope file and the finding ID.
+
+Do NOT make out-of-scope edits silently — the verifier and orchestrator need an explicit audit trail.
 
 ### Documented Conventions Are Binding
 
@@ -91,6 +102,9 @@ Examples:
 - `feat(TASK-001): add loading indicator to character summary`
 - `fix(TASK-001): correct type error in component props`
 - `test(TASK-001): update snapshot for new loading state`
+
+### Post-commit staging check
+After every `git commit`, run `git status --porcelain` and check whether any files you modified during this task remain unstaged or untracked. If they do, either create a follow-up commit to stage them or amend the previous commit (only if no other commits followed). A task with uncommitted modified files is broken — downstream merges and checkouts will produce a different state than what tests ran against.
 
 ### Report every commit
 When you report `COMPLETED`, the `Commits:` line in your status report MUST list every commit hash and message you created for this task. If the list is empty, you cannot report `COMPLETED`.
