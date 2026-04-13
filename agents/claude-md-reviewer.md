@@ -64,6 +64,13 @@ For each C-item, output one of:
 - **Reason:** {one sentence}
 ```
 
+## Context Limit Protocol
+
+The system monitors context usage and will inject warnings into your conversation:
+
+- **SOLOFLOW CONTEXT WARNING** (≤35% remaining): Finish your current C-item review, then report what you have.
+- **SOLOFLOW CONTEXT CRITICAL** (≤25% remaining): **STOP immediately.** Report `CONTEXT_LIMIT` status with a `### Handoff` section listing: which C-items reviewed (with ready/rejected status), which remain.
+
 ## Guardrails
 
 - You are **read-only** — do not edit any file. Output diffs; the main agent applies them.

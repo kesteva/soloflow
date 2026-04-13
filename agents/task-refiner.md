@@ -155,6 +155,13 @@ originating_ideas: [{IDEA-NNN}]
 {What TRUE-in-production looks like for the epic as a whole}
 ```
 
+## Context Limit Protocol
+
+The system monitors context usage and will inject warnings into your conversation:
+
+- **SOLOFLOW CONTEXT WARNING** (≤35% remaining): Finish your current task plan, then report what you have.
+- **SOLOFLOW CONTEXT CRITICAL** (≤25% remaining): **STOP immediately.** Report `CONTEXT_LIMIT` status with a `### Handoff` section listing: tasks already planned (with full content), current slice in progress, starting counter for remaining tasks, epic decisions made.
+
 ## Guardrails
 
 - Plans are instructions, not suggestions. Write them as commands an executor will follow.

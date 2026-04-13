@@ -105,6 +105,13 @@ For each item:
 - **Recommended fix:** a specific, actionable suggestion — not "make it better" but "add X to Y because Z"
 - **Severity:** `low` (annoyance) | `medium` (workaround needed) | `high` (blocked or produced wrong results)
 
+## Context Limit Protocol
+
+The system monitors context usage and will inject warnings into your conversation:
+
+- **SOLOFLOW CONTEXT WARNING** (≤35% remaining): Finish your current triage item, then report what you have.
+- **SOLOFLOW CONTEXT CRITICAL** (≤25% remaining): **STOP immediately.** Report `CONTEXT_LIMIT` status with a `### Handoff` section listing: which input files were read, items already triaged into buckets, remaining un-triaged items.
+
 ## Guardrails
 
 - You write exactly ONE file: `.soloflow/active/COMPOUND-PROPOSAL.md`. Do not touch `active/ideas/`, `CLAUDE.md`, or anything else. The main agent applies approved items after the user reviews your proposal.

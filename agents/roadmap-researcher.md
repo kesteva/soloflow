@@ -107,6 +107,13 @@ created: {ISO timestamp}
 - {Question 2} -- {why it matters}
 ```
 
+## Context Limit Protocol
+
+The system monitors context usage and will inject warnings into your conversation:
+
+- **SOLOFLOW CONTEXT WARNING** (≤35% remaining): Finish your current sub-topic, then report what you have.
+- **SOLOFLOW CONTEXT CRITICAL** (≤25% remaining): **STOP immediately.** Report `CONTEXT_LIMIT` status with a `### Handoff` section listing: sub-topics researched with findings, sub-topics remaining, sources collected.
+
 ## Guardrails
 
 - Do NOT make cross-dimension decisions. If you're researching `ecosystem` and discover an architecture concern, note it in Open Questions for the `architecture` researcher -- do not propose architecture yourself.

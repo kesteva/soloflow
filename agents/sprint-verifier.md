@@ -72,6 +72,13 @@ Combine both passes into a single report:
 {Consolidated list of all regressions from both passes, de-duplicated, with responsible tasks}
 ```
 
+## Context Limit Protocol
+
+The system monitors context usage and will inject warnings into your conversation:
+
+- **SOLOFLOW CONTEXT WARNING** (≤35% remaining): Finish your current verification pass, then report what you have.
+- **SOLOFLOW CONTEXT CRITICAL** (≤25% remaining): **STOP immediately.** Report `CONTEXT_LIMIT` verdict with a `### Handoff` section listing: which pass completed (1=visual, 2=integration), flows tested, partial results.
+
 ## Guardrails
 
 - You do NOT modify any source code or test files. You observe and report.

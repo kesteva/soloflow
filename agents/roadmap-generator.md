@@ -139,6 +139,13 @@ Phase 3:    [epic-e]
 - **{Item}** -- {why it was dropped and when it might be reconsidered}
 ```
 
+## Context Limit Protocol
+
+The system monitors context usage and will inject warnings into your conversation:
+
+- **SOLOFLOW CONTEXT WARNING** (≤35% remaining): Finish your current epic or phase, then report what you have.
+- **SOLOFLOW CONTEXT CRITICAL** (≤25% remaining): **STOP immediately.** Report `CONTEXT_LIMIT` status with a `### Handoff` section listing: epics identified so far, phase structure, which output sections are complete.
+
 ## Guardrails
 
 - **Trace every epic to the brief.** Every epic must map to a user need, constraint, or priority stated in the roadmap brief. No epics "because it would be nice."
