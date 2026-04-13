@@ -57,10 +57,12 @@ Walk through each bucket sequentially. For each non-empty bucket:
 3. Record the per-bucket decisions before moving to the next bucket.
 
 **Bucket D exception (SoloFlow improvements):** Do not use the standard approve/reject flow. Instead:
-1. Write the approved feedback document to `.soloflow/archive/compound/SPRINT-{NNN}-feedback.md` immediately.
-2. Print the full write-up inline so the user can copy it directly into a SoloFlow conversation.
-3. Use **AskUserQuestion**: `SoloFlow feedback archived to SPRINT-{NNN}-feedback.md. Continue?` with a single **Continue** option.
-4. No further action needed for bucket D in Step 4.
+1. Print the full feedback write-up inline so the user can read and copy it directly.
+2. Use **AskUserQuestion**: `SoloFlow feedback ready. Archive and continue?` with options:
+   - **Approve** — archive as-is to `SPRINT-{NNN}-feedback.md`
+   - **Edit** — user provides edits; revise the write-up, re-print, and re-ask
+   - **Reject** — discard, skip archiving
+3. If approved, write to `.soloflow/archive/compound/SPRINT-{NNN}-feedback.md` and commit. No further action needed in Step 4.
 
 If a bucket is empty (`_No items._`), skip it silently — do not present an empty picker.
 
