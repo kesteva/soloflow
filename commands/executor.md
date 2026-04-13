@@ -106,20 +106,13 @@ Stage only the listed paths — never `git add .` / `git add -A`. Skip silently 
       - **COMPLETED** → proceed to verification.
       - **BLOCKED** → update status to `"blocked"` in `sprint.json`, continue to next task.
       - **STUCK** → write stuck report to `.soloflow/active/stuck/{epic}/TASK-{NNN}-stuck.md` if the plan has an epic, else flat at `.soloflow/active/stuck/TASK-{NNN}-stuck.md`. Create the folder if missing. Update status in `sprint.json`, continue.
-      - **CONTEXT_LIMIT** → build a structured handoff note for the next executor:
-        1. **Check the executor's status report first.** The context monitor prompts the executor to produce a `### Handoff` section with completed steps, remaining steps, commits, modified files, and key context. If present, use it as the primary source.
-        2. **Supplement with git inspection** to fill any gaps or verify claims:
-           - `git log --oneline {base_sha}..HEAD -- {files_owned}` — actual commits made
-           - `git status --porcelain` — uncommitted changes the executor may not have captured
-        3. Construct the final handoff note with these sections:
-           - **Completed steps:** which plan steps are done
-           - **Remaining steps:** which plan steps are NOT done
-           - **Commits so far:** hash + message for each commit on this task
-           - **Uncommitted changes:** files modified but not yet committed
-           - **Last test state:** pass/fail from the previous executor's report
-           - **Key context:** decisions, gotchas, or state not obvious from the code
-        4. If the executor's status report is missing or lacks a `### Handoff` section (e.g., the agent was terminated before it could report), reconstruct the handoff entirely from git inspection and the plan's step list.
-        5. If context-limit respawns for this agent on this task < `context_limit_respawn_max` (config default: 3), spawn a **fresh executor** with the original plan content prepended with the structured handoff note. Increment context-limit respawn counter (tracked separately from `executor_retry_max`). If respawn limit reached, escalate as STUCK.
+      - **CONTEXT_LIMIT** → pass the handoff to a fresh executor. Do NOT run git commands yourself to reconstruct state — keep orchestrator context lean.
+        1. Read the `### Handoff` section from the executor's status report (produced by the context monitor protocol).
+        2. If context-limit respawns for this agent on this task < `context_limit_respawn_max` (config default: 3), spawn a **fresh executor** with the original plan content prepended with:
+           - The previous executor's `### Handoff` section verbatim (if present).
+           - If the handoff section is **missing** (agent terminated before reporting): tell the new executor: *"The previous executor hit its context limit without producing a handoff. Before starting work, run `git log --oneline {base_sha}..HEAD -- {files_owned}` and `git status --porcelain` to determine what has already been done. Do NOT redo completed steps or re-commit already-committed changes."*
+           - In both cases, include: *"Continue from where the previous executor left off."*
+        3. Increment context-limit respawn counter (tracked separately from `executor_retry_max`). If respawn limit reached, escalate as STUCK.
 
    d. Spawn **verifier** with plan + executor report. Wait for verdict.
 
