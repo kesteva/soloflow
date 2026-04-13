@@ -43,6 +43,11 @@ process.stdin.on('end', () => {
       context = `Compounder completed. Solution files have been written to the archive.`;
     }
 
+    // Detect CONTEXT_LIMIT status and augment context hint
+    if (agentOutput && agentOutput.includes('CONTEXT_LIMIT')) {
+      context += ' Agent reported CONTEXT_LIMIT — read the handoff section from its status report and spawn a follow-up agent to continue the work.';
+    }
+
     if (context) {
       // Note: we intentionally do not mutate sprint.json here. A cosmetic
       // last_activity timestamp would churn state on every subagent stop and

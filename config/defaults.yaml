@@ -23,6 +23,7 @@ limits:
   analysis_paralysis_threshold: 5  # consecutive read-only calls before forcing write
   checkpoint_interval: 3           # tasks between progress checkpoints
   max_sprint_tasks: 10
+  context_limit_respawn_max: 3    # max context-limit respawns per agent per task
 
 code_review:
   enabled: true
