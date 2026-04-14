@@ -48,11 +48,24 @@ Valid values: `always` (create run branch silently), `never` (stay on current br
 
 ## Step 2: Create Sprint
 
-1. Select tasks:
-   - If `$ARGUMENTS` names specific task IDs, include only those.
-   - If `$ARGUMENTS` names an idea (`IDEA-NNN`), include all ready tasks belonging to that idea.
-   - Otherwise, include all `status: "ready"` tasks up to `max_sprint_tasks` (config default: 10).
-2. If no tasks match, tell the user: "No ready tasks in backlog. Run `/soloflow:planner IDEA-NNN` first." and stop.
+1. **Select tasks:**
+   - If `$ARGUMENTS` names specific task IDs, include only those — skip to step 2.
+   - If `$ARGUMENTS` names an idea (`IDEA-NNN`), include all ready tasks belonging to that idea — skip to step 2.
+   - Otherwise, read `.soloflow/active/backlog.json` and collect all `status: "ready"` tasks. If none, tell the user: "No ready tasks in backlog. Run `/soloflow:planner IDEA-NNN` first." and stop.
+
+   Determine the **natural next epic**: scan the ready tasks' plan files for `epic` frontmatter, find the first epic that has ready tasks (by lowest task ID). Use **AskUserQuestion** with the sprint scope embedded in the question text:
+
+   `{N} ready tasks in backlog. How many to include in this sprint?`
+
+   Options:
+   - **Next 5** — include the first 5 ready tasks (by task ID order)
+   - **Next 10** — include the first 10 ready tasks
+   - **All tasks in {epic name}** — include all ready tasks belonging to the natural next epic *(only show this option if an epic with ready tasks exists; use the epic slug as the name)*
+   - **Other** — user specifies task IDs or a count
+
+   If there are fewer than 5 ready tasks, omit "Next 5" and show the actual count instead. If fewer than 10, omit "Next 10".
+
+2. If no tasks were selected, stop.
 3. Compute the next sprint ID by globbing every location a sprint artifact lands — `.soloflow/archive/compound/SPRINT-*-proposal.md`, `.soloflow/archive/findings/SPRINT-*-findings.md` — plus the current `sprint.json`'s `sprint.id` if populated. Take the max numeric suffix + 1, zero-padded to 3 digits. See the "ID allocation" section in the project `CLAUDE.md` for the shared recipe.
 4. Create `.soloflow/active/sprint.json` with:
    - `sprint.id: "SPRINT-{NNN}"`, `sprint.status: "active"`, `sprint.started: {ISO timestamp}`
