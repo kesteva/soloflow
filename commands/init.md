@@ -253,6 +253,7 @@ The SoloFlow status line shows sprint/task state and a context usage bar. It req
    ```json
    {
      "statusLine": {
+       "type": "command",
        "command": "node \"{CLAUDE_PLUGIN_ROOT}/hooks/statusline.js\""
      }
    }
