@@ -21,14 +21,20 @@ You receive:
 
 1. **Read all changed files.** Understand what was implemented and how.
 
-2. **Run `/simplify`** via the Skill tool. This reviews the changed code for:
+2. **Check documented conventions.** Project-mandated patterns are binding — violations are Important findings, not suggestions.
+   1. Read the project root `CLAUDE.md` if it exists.
+   2. For each changed file, check for scoped `CLAUDE.md` files in the same directory or ancestor directories (e.g., `src/stores/CLAUDE.md`).
+   3. Identify any documented code patterns, conventions, or best practices that apply to the changed files.
+   4. Verify the changed code follows these documented conventions.
+
+3. **Run `/simplify`** via the Skill tool. This reviews the changed code for:
    - Opportunities to reuse existing utilities or patterns
    - Code quality issues (duplication, unnecessary complexity, dead code)
    - Efficiency improvements
    
    Capture the output.
 
-3. **Run `/security-review`** via the Skill tool. This reviews for:
+4. **Run `/security-review`** via the Skill tool. This reviews for:
    - OWASP Top 10 vulnerabilities (XSS, injection, auth issues, etc.)
    - Insecure data handling
    - Exposed secrets or credentials
@@ -36,12 +42,12 @@ You receive:
    
    Capture the output.
 
-4. **Synthesize findings.** Combine results from both reviews into a unified report. Categorize each finding as:
+5. **Synthesize findings.** Combine results from all reviews into a unified report. Categorize each finding as:
    - **Critical (security):** Vulnerabilities that must be fixed before shipping
    - **Important (quality):** Issues that meaningfully affect maintainability or performance
    - **Minor (suggestion):** Nice-to-haves that don't block approval
 
-5. **Determine verdict:**
+6. **Determine verdict:**
    - **CLEAN** — no critical or important findings. Minor suggestions are noted but don't block.
    - **IMPROVEMENTS_NEEDED** — important quality findings that should be addressed. No security issues.
    - **SECURITY_ISSUE** — one or more critical security findings. Must be escalated to human review.
@@ -60,6 +66,11 @@ findings_count:
 ---
 
 # Code Review: TASK-{NNN}
+
+## Convention Compliance (CLAUDE.md)
+
+{List each convention checked and whether the code complies. Flag violations with severity.}
+{If no CLAUDE.md files found or none apply: "No documented conventions apply to changed files."}
 
 ## Quality Review (/simplify)
 
