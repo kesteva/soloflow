@@ -120,6 +120,29 @@ Commit the newly written sprint state before entering the execution loop.
 
 Stage only the listed paths — never `git add .` / `git add -A`. Skip silently if not in a git repo or `.soloflow/` is gitignored. If a run branch was created in Step 2.5, this commit lands on the run branch.
 
+## Step 2.7: Pre-sprint regression smoke (new sprints only)
+
+Skip this step entirely if this sprint was resumed from a checkpoint (i.e., Step 1.2 took the "Resume" path).
+
+1. **Discover test infrastructure.** Check in order:
+   - `package.json` for `test`, `test:unit`, `test:e2e`, `test:integration` scripts
+   - Test runner configs: `jest.config.*`, `vitest.config.*`, `.mocharc.*`, `pytest.ini`, `pyproject.toml`
+   - Type checker configs: `tsconfig.json`, `mypy.ini`, `pyrightconfig.json`
+   - Linter configs: `.eslintrc.*`, `eslint.config.*`, `.flake8`, `ruff.toml`
+
+2. **Run available checks via Bash.** Run the test suite and type checker if found. Capture output. If neither tests nor type checker are found, note this explicitly.
+
+3. **Present results via AskUserQuestion.** Format the question with:
+   - Test results: `{N} tests passed, {M} failed` or `No test suite found`
+   - Type checker: `Type check passed` / `Type check failed with {N} errors` / `No type checker configured`
+   - If any ground-truth infrastructure is missing, note: `Missing: {tests / type checker / linter} — these ground-truth checks are uncovered for this sprint`
+
+   Options:
+   - **Continue sprint** — proceed to Step 3.
+   - **Abort** — stop execution so the user can investigate failures first.
+
+4. This step does NOT fix failures — it only surfaces the baseline state so the user can make an informed decision.
+
 ## Step 3: Execute the Loop
 
 1. **Build dependency graph** from tasks' `depends_on` fields. Tasks with no dependencies are immediately ready.
