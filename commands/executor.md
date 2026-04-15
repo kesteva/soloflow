@@ -208,7 +208,7 @@ Using the gathered payload, present a consolidated review:
 
 ## Step 4.4: Resolve merge choice
 
-If gathered `run` is null (no run branch was created in Step 2.5), set `merge_choice = "none"` and skip to Step 4.5.
+If gathered `run` is null (no run branch was created during sprint init), set `merge_choice = "none"` and skip to Step 4.5.
 
 Otherwise use **AskUserQuestion**: "Merge run branch `<run.branch>` into `<run.base_branch>`?" with options:
 - **Merge locally** — merge with `merge_strategy`, then delete the branch. → `merge_choice = "merge_locally"`
