@@ -29,7 +29,7 @@ For each proposed improvement:
    - GOOD: `Store actions that reset multiple fields must be called only at flow entry points — see existing pattern in src/stores/design.ts:handleComplete.`
    - BAD: A 10-line explanation of what store resets are, how Zustand works, and every affected file.
 
-4. **Check for code patterns that should live in a separate doc.** If the improvement describes detailed implementation patterns (boilerplate, file structure templates, API conventions), it should go in a `CODE-PATTERNS.md` file at the appropriate directory level, with a one-line reference from CLAUDE.md. CLAUDE.md is for rules and constraints agents must follow, not a code cookbook.
+4. **Enforce CLAUDE.md / CODE-PATTERNS.md separation.** Implementation patterns, boilerplate templates, file structure recipes, and API conventions MUST go in `CODE-PATTERNS.md` at the appropriate directory level — never in CLAUDE.md. If a C-item targets CLAUDE.md but contains pattern content, reject it with `belongs-in-code-patterns` and rewrite it as two items: a CODE-PATTERNS.md entry for the pattern, and a one-line CLAUDE.md pointer (e.g., "See CODE-PATTERNS.md for store reset pattern"). This is a hard rule, not a suggestion.
 
 5. **Check for redundancy.** If the existing CLAUDE.md already covers the proposal (perhaps under different wording), report it as redundant — do not add a near-duplicate.
 
@@ -37,7 +37,7 @@ For each proposed improvement:
 
 7. **Draft the diff.** Produce a minimal, precise change:
    - Prefer appending to an existing relevant section over creating a new section.
-   - Keep entries concise — one to three lines. If you need more, the content likely belongs in CODE-PATTERNS.md instead.
+   - Keep entries concise — one to three lines. If you need more, the content belongs in CODE-PATTERNS.md, not CLAUDE.md.
    - Reference codebase locations rather than explaining them: `See src/stores/CLAUDE.md` rather than duplicating its content.
    - Never duplicate information already derivable from the code itself.
 

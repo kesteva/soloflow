@@ -35,7 +35,7 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
    - The target sprint ID
    - Paths to all done reports, stuck reports, findings.md, and human-review-queue.md
    - If tester mode is on: `tester: true`
-   - Instruction: "Produce `.soloflow/active/COMPOUND-PROPOSAL.md` with three buckets (A clean-ups, B backlog tasks, C CLAUDE.md improvements). {If tester: Also produce bucket D (SoloFlow improvements).} Do not apply anything. Cite concrete evidence for every item."
+   - Instruction: "Produce `.soloflow/active/COMPOUND-PROPOSAL.md` with three buckets (A clean-ups, B backlog tasks, C CLAUDE.md / CODE-PATTERNS.md improvements). Route each C-item to the correct target file — rules and constraints go to CLAUDE.md, code patterns go to CODE-PATTERNS.md. {If tester: Also produce bucket D (SoloFlow improvements).} Do not apply anything. Cite concrete evidence for every item."
 3. Wait for the compounder to finish.
    - If the compounder reports **CONTEXT_LIMIT**: read the `### Handoff` section. If a partial `COMPOUND-PROPOSAL.md` was written, read it. Spawn a **fresh compounder** with the remaining un-triaged inputs and the partial proposal content. Merge results. Cap at 3 respawns.
    Read the resulting `COMPOUND-PROPOSAL.md`.
@@ -90,7 +90,7 @@ For the set of approved B-items, produce execution-ready task plans by spawning 
 7. Add each task to `.soloflow/active/backlog.json` with `status: "ready"`.
 8. Commit `feat({sprint}): plan TASK-{NNN}..TASK-{MMM} from compound` including all plan files and backlog.json.
 
-### Bucket C — CLAUDE.md improvements
+### Bucket C — CLAUDE.md / CODE-PATTERNS.md improvements
 Spawn the **claude-md-reviewer** agent to review and tighten the approved C-items before applying:
 
 1. Pass all approved C-items to the claude-md-reviewer agent with instruction: *"Review these proposed CLAUDE.md improvements against the existing codebase and CLAUDE.md files. Produce tightly scoped diffs at the lowest appropriate directory level. Reject redundant, stale, or overly broad proposals."*

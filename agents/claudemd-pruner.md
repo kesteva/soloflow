@@ -34,7 +34,7 @@ For each CLAUDE.md file, evaluate:
 
 #### C. Content that doesn't belong in CLAUDE.md
 CLAUDE.md is for **rules, constraints, and context agents must know upfront**. Move to specialized files:
-- **Reusable code patterns / templates** → `CODE-PATTERNS.md` (at appropriate directory level)
+- **Reusable code patterns / templates** → `CODE-PATTERNS.md` (at appropriate directory level) — this is mandatory, not optional
 - **Architecture diagrams / detailed system descriptions** → `ARCHITECTURE.md`
 - **API conventions / endpoint documentation** → `API-CONVENTIONS.md`
 - **Setup / onboarding instructions** → `CONTRIBUTING.md` or `docs/`
