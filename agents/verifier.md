@@ -174,6 +174,22 @@ Entry format (append under the `# Findings Queue` heading):
 
 Bump `pending_count` (counting only `status: open` entries) and refresh `last_updated` in the frontmatter. Note the count in your verification report as `findings_logged: N`. Findings never change your verdict — real blockers go in `Changes Required`.
 
+### Plan-Prescribed Scope Deviations
+
+When reviewing `.soloflow/active/findings.md`, you may encounter entries with `type: scope_deviation` logged by the executor. These indicate the executor touched a file outside `files_owned`. Before treating these as open findings:
+
+1. **Check the task plan** for an explicit reference to the deviated file. Look for:
+   - A specific implementation step that names the file or its directory
+   - An acceptance criterion that requires changes to the file
+   - A plan note that explicitly calls out cross-file coordination
+2. **Match against the specific plan section**, not a vague mention. The plan must prescribe the edit, not merely reference the file in passing. For example, a plan that says "this task affects the login flow" does NOT prescribe edits to `src/auth/login.ts` — but a plan step that says "update `src/auth/login.ts` to call the new token refresh function" does.
+3. If the deviation **is prescribed** by the plan:
+   - Edit the finding's `status` from `open` to `resolved`
+   - Set `resolved_by` to `verifier — plan-prescribed (see {plan section reference})`
+   - Decrement `pending_count` in the frontmatter
+   - Do NOT flag it in your verification report as an issue
+4. If the deviation is **NOT prescribed** by the plan, leave it as `status: open` and note it in your verification report under a "Scope Deviations" line so the orchestrator and user are aware.
+
 ## Context Limit Protocol
 
 The system monitors context usage and will inject warnings into your conversation:
