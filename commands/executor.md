@@ -120,9 +120,11 @@ Commit the newly written sprint state before entering the execution loop.
 
 Stage only the listed paths — never `git add .` / `git add -A`. Skip silently if not in a git repo or `.soloflow/` is gitignored. If a run branch was created in Step 2.5, this commit lands on the run branch.
 
-## Step 2.7: Pre-sprint regression smoke (new sprints only)
+## Step 2.7: Pre-sprint regression smoke (first sprint only)
 
-Skip this step entirely if this sprint was resumed from a checkpoint (i.e., Step 1.2 took the "Resume" path).
+Skip this step if:
+- This sprint was resumed from a checkpoint (Step 1.2 "Resume" path), OR
+- Prior sprint archives exist (glob `.soloflow/archive/done/**/TASK-*-done.md` — if any match, a previous sprint already established a passing baseline)
 
 1. **Discover test infrastructure.** Check in order:
    - `package.json` for `test`, `test:unit`, `test:e2e`, `test:integration` scripts
