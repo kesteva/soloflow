@@ -22,10 +22,9 @@ You receive:
 1. **Read all changed files.** Understand what was implemented and how.
 
 2. **Check documented conventions.** Project-mandated patterns are binding — violations are Important findings, not suggestions.
-   1. Read the project root `CLAUDE.md` if it exists.
-   2. For each changed file, check for scoped `CLAUDE.md` files in the same directory or ancestor directories (e.g., `src/stores/CLAUDE.md`).
-   3. Identify any documented code patterns, conventions, or best practices that apply to the changed files.
-   4. Verify the changed code follows these documented conventions.
+   1. For each changed file, check for scoped `CLAUDE.md` files in the same directory or ancestor directories (e.g., `src/stores/CLAUDE.md`).
+   2. Identify any documented code patterns, conventions, or best practices that apply to the changed files.
+   3. Verify the changed code follows these documented conventions.
 
 3. **Run `/simplify`** via the Skill tool. This reviews the changed code for:
    - Opportunities to reuse existing utilities or patterns

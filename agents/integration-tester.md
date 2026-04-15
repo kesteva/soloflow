@@ -15,7 +15,7 @@ You are the Integration Tester. You run the project's full integration and E2E t
 ## Process
 
 1. **Discover integration / E2E test commands.** Check in order:
-   - Project root `CLAUDE.md` for documented test commands
+   - Project CLAUDE.md (loaded in context) for documented test commands
    - `package.json` scripts: look for `test:e2e`, `test:integration`, `e2e`, `integration`
    - `maestro/`, `.maestro/`, `test/maestro/` for Maestro flow files (mobile)
    - `e2e/`, `tests/e2e/`, `cypress/`, `playwright/` for web E2E tests

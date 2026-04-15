@@ -83,7 +83,7 @@ A file-scoped visual check that only tests `files_owned` is insufficient when th
 
 ### CLAUDE.md E2E Verification Gates
 
-Before starting Level 3, check the project's root `CLAUDE.md` for an "E2E Verification Gates" section (or similar). If the current task's `files_owned` or changed files overlap with any gate-triggering files listed there:
+Before starting Level 3, check for an "E2E Verification Gates" section (or similar) in the project's CLAUDE.md (already loaded in your context). If the current task's `files_owned` or changed files overlap with any gate-triggering files listed there:
 
 - The corresponding verification (Maestro flow, Playwright check, etc.) is **required**, not deferrable.
 - If the tools are available, run the gate check. Treat failures as `NEEDS_CHANGES`.
