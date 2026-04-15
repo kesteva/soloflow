@@ -12,138 +12,109 @@ Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDE
 
 ---
 
-## Config resolution — `git.branch_per_run`
+## Sprint Initiation (Steps 0.5–2.8)
 
-This command reads the branching preference at runtime. Resolve in this order (first hit wins):
+Sprint initiation uses the **sprint-initiator** sub-agent in two phases to keep orchestrator context lean. The agent handles file I/O, config resolution, git operations, and test runs; the orchestrator handles all user prompts between phases.
 
-1. **Project override:** if `.soloflow/config.json` exists and contains `git.branch_per_run`, use it.
-2. **Plugin default:** read `${CLAUDE_PLUGIN_ROOT}/config/defaults.yaml` (via `echo $CLAUDE_PLUGIN_ROOT` in Bash) and grep for `branch_per_run:` under the `git:` block.
-3. **Fallback:** `prompt` if neither file has the key.
+## Step 0.5: Checkpoint & branch resume
 
-Valid values: `always` (create run branch silently), `never` (stay on current branch), `prompt` (ask the user at Step 1.5).
+These checks happen in the orchestrator before any agent spawn — they may skip initiation entirely.
 
----
-
-## Step 1: Initialize
-
-1. If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
-2. Read `.soloflow/checkpoint.md` — if it indicates an active sprint mid-execution, use the **AskUserQuestion** tool (question: "Sprint {SPRINT-NNN} is in progress. Resume it or start fresh?", options: **Resume** / **Start fresh**). Do not print the choice as prose.
-   - If resume: load `sprint.json` and continue the execution loop below.
+1. Read `.soloflow/checkpoint.md` — if it indicates an active sprint mid-execution, use **AskUserQuestion** (question: "Sprint {SPRINT-NNN} is in progress. Resume it or start fresh?", options: **Resume** / **Start fresh**). Do not print the choice as prose.
+   - If resume: load `sprint.json` and skip directly to Step 3.
    - If fresh: archive the stale sprint and continue.
-3. **Run branch resume check:** if `sprint.json` contains a `run` object (set by Step 2.5 on a previous invocation), verify `git rev-parse --abbrev-ref HEAD` matches `run.branch`. If it doesn't match, do NOT silently reattach — use `AskUserQuestion` to ask the user: **Checkout the run branch** / **Clear the run record and continue on current branch** / **Abort**. Act on the answer before proceeding.
-4. Read `.soloflow/active/backlog.json`.
+2. **Run branch resume check:** if `.soloflow/active/sprint.json` exists and contains a `run` object, verify `git rev-parse --abbrev-ref HEAD` matches `run.branch`. If it doesn't match, do NOT silently reattach — use **AskUserQuestion**: **Checkout the run branch** / **Clear the run record and continue on current branch** / **Abort**. Act on the answer before proceeding.
 
-## Step 1.5: Resolve branching preference
+## Step 1: Gather sprint context
 
-1. Resolve `git.branch_per_run` per the config resolution rule above.
-2. If the value is `always` → set `create_branch = true`, skip the prompt.
-3. If the value is `never` → set `create_branch = false`, skip the prompt.
-4. If the value is `prompt` → use **AskUserQuestion** with:
+Spawn the **sprint-initiator** agent with:
+```
+Phase: gather
+```
+
+Parse its structured output. Handle:
+- If `status: ERROR` → report the error and stop.
+- If `initialized: false` → report "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
+- If `backlog.ready_count == 0` → report "No ready tasks in backlog. Run `/soloflow:planner IDEA-NNN` first." and stop.
+
+The gathered data contains: ready tasks (with epic info), resolved `branch_per_run` config, worktree status, parsed deferred items, next sprint ID, and smoke eligibility.
+
+## Step 1.5: Resolve interactive decisions
+
+Use the gathered data to run all user prompts. These stay in the orchestrator because sub-agents cannot use AskUserQuestion.
+
+### 1.5a: Branching preference
+
+1. Read `branch_per_run` from gathered data.
+2. If `always` → set `create_branch = true`, skip prompt.
+3. If `never` → set `create_branch = false`, skip prompt.
+4. If `prompt` → use **AskUserQuestion** with:
    - "Create a run branch (recommended)" — isolates this run so `main` stays clean until human review.
    - "Stay on current branch" — commits land on the current branch directly.
-   - "Create a run branch and remember this choice" — same as option 1, plus write `{"git":{"branch_per_run":"always"}}` to `.soloflow/config.json` (merging with any existing content).
-5. **Guardrails (applied after `create_branch` is set):**
-   - If `create_branch = true` and `git status --porcelain` is non-empty, stop and tell the user to commit or stash their working tree before starting a run.
-   - If `create_branch = false`, current branch is `main` or `master`, and the sprint-to-be has more than one task, warn the user and re-prompt — they can still explicitly choose "Stay on current branch" to override.
+   - "Create a run branch and remember this choice" — same as option 1; sets `remember_branch_choice = true`.
 
-## Step 1.8: Check deferred ground-truth items
+### 1.5b: Guardrails
 
-1. Read `.soloflow/human-review-queue.md`. If the file does not exist or has no entries, skip to Step 2.
-2. Parse all entries. Separate into two groups:
-   - **Blocking:** entries where `level: ground_truth` and `type: action_required` (skip entries already marked `type: overridden`)
-   - **Advisory:** entries where `level` is `visual`, `requirements`, or `goal_backward`
-3. If there are **blocking** entries, use **AskUserQuestion**:
+- If `create_branch = true` and gathered `worktree.is_dirty = true`, stop and tell the user to commit or stash their working tree before starting a run.
+- If `create_branch = false`, gathered `worktree.current_branch` is `main` or `master`, and the sprint-to-be has more than one task, warn the user and re-prompt — they can still explicitly choose "Stay on current branch" to override.
+
+### 1.5c: Deferred ground-truth items
+
+1. If gathered `deferred_items.blocking` is non-empty, use **AskUserQuestion**:
 
    `{N} deferred ground-truth check(s) from prior sprints remain unresolved:`
 
    List each blocking entry: task ID, action, and blocked checks. Options:
    - **Resolve now** — the user resolves the items before continuing. After they confirm, re-read `human-review-queue.md` and re-check. If blocking items remain, re-prompt.
-   - **Override with justification** — the user provides a one-line justification. For each overridden entry, append `override: "{justification}"` and `override_at: {ISO timestamp}`, and flip `type` from `action_required` to `overridden`. Proceed to Step 2.
+   - **Override with justification** — the user provides a one-line justification. Collect `overrides` list (task_id + justification pairs) for phase 2.
    - **Abort** — stop execution.
 
-4. If there are **advisory** entries (non-blocking), print a one-line summary: `{N} advisory deferred item(s) from prior sprints (non-blocking).` No prompt — proceed automatically.
+2. If gathered `deferred_items.advisory_count > 0`, print: `{N} advisory deferred item(s) from prior sprints (non-blocking).`
 
-## Step 2: Create Sprint
+### 1.5d: Sprint scope
 
-1. **Select tasks:**
-   - If `$ARGUMENTS` names specific task IDs, include only those — skip to step 2.
-   - If `$ARGUMENTS` names an idea (`IDEA-NNN`), include all ready tasks belonging to that idea — skip to step 2.
-   - Otherwise, read `.soloflow/active/backlog.json` and collect all `status: "ready"` tasks. If none, tell the user: "No ready tasks in backlog. Run `/soloflow:planner IDEA-NNN` first." and stop.
+Use gathered backlog data. If `$ARGUMENTS` names specific task IDs or an `IDEA-NNN`, use those directly. Otherwise, use **AskUserQuestion** with the sprint scope:
 
-   Determine the **natural next epic**: scan the ready tasks' plan files for `epic` frontmatter, find the first epic that has ready tasks (by lowest task ID). Use **AskUserQuestion** with the sprint scope embedded in the question text:
+`{ready_count} ready tasks in backlog. How many to include in this sprint?`
 
-   `{N} ready tasks in backlog. How many to include in this sprint?`
+Options:
+- **Next 5** — first 5 ready tasks by ID order *(omit if fewer than 5; show actual count instead)*
+- **Next 10** — first 10 ready tasks *(omit if fewer than 10)*
+- **All tasks in {epic name}** — all ready tasks in the natural next epic *(only if an epic with ready tasks exists)*
+- **Other** — user specifies task IDs or a count
 
-   Options:
-   - **Next 5** — include the first 5 ready tasks (by task ID order)
-   - **Next 10** — include the first 10 ready tasks
-   - **All tasks in {epic name}** — include all ready tasks belonging to the natural next epic *(only show this option if an epic with ready tasks exists; use the epic slug as the name)*
-   - **Other** — user specifies task IDs or a count
+If no tasks were selected, stop.
 
-   If there are fewer than 5 ready tasks, omit "Next 5" and show the actual count instead. If fewer than 10, omit "Next 10".
+## Step 2: Execute sprint initiation
 
-2. If no tasks were selected, stop.
-3. Compute the next sprint ID by globbing every location a sprint artifact lands — `.soloflow/archive/compound/SPRINT-*-proposal.md`, `.soloflow/archive/findings/SPRINT-*-findings.md` — plus the current `sprint.json`'s `sprint.id` if populated. Take the max numeric suffix + 1, zero-padded to 3 digits. See the "ID allocation" section in the project `CLAUDE.md` for the shared recipe.
-4. Create `.soloflow/active/sprint.json` with:
-   - `sprint.id: "SPRINT-{NNN}"`, `sprint.status: "active"`, `sprint.started: {ISO timestamp}`
-   - Selected tasks moved from `backlog.json` into `sprint.json`
+Spawn the **sprint-initiator** agent with:
+```
+Phase: execute
+Decisions:
+  create_branch: {resolved value}
+  selected_task_ids: [TASK-NNN, ...]
+  sprint_id: "{gathered sprint_id_next}"
+  overrides: [{task_id, justification}, ...]  # empty if no overrides
+  remember_branch_choice: {true|false}
+  skip_smoke: {gathered skip_smoke value}
+```
 
-## Step 2.5: Create run branch (only if `create_branch` is true)
+Parse its structured output. Handle:
+- If `status: ERROR` → report the error and stop.
+- If `run` is non-null, print: `Run branch: {run.branch} (base: {run.base_branch}@{run.base_sha short})`.
 
-1. Capture base state via Bash:
-   - `base_branch=$(git rev-parse --abbrev-ref HEAD)`
-   - `base_sha=$(git rev-parse HEAD)`
-2. Generate the branch name from the `branch_name_format` config value:
-   - `{timestamp}` → `date +%Y%m%d-%H%M%S`
-   - `{sprint_id}` → the sprint ID created in Step 2 (e.g. `SPRINT-007`)
-3. `git checkout -b <branch_name>`.
-4. Write a `run` object into `.soloflow/active/sprint.json`:
-   ```json
-   "run": {
-     "branch": "soloflow/run-20260409-142200-SPRINT-007",
-     "base_branch": "main",
-     "base_sha": "abc123…",
-     "created_at": "2026-04-09T14:22:00Z"
-   }
-   ```
-5. Print a single line: `Run branch: <branch_name> (base: <base_branch>@<short_sha>)`.
+## Step 2.8: Smoke test decision
 
-If any git command fails, stop and report the failure — do NOT silently fall back to the current branch.
+If the phase 2 output includes `smoke_results` (non-null), present results via **AskUserQuestion**:
+- Test results: `{passed} tests passed, {failed} failed` or `No test suite found`
+- Type checker: `Type check passed` / `Type check failed` / `No type checker configured`
+- If `missing_infra` is non-empty: `Missing: {list} — these ground-truth checks are uncovered for this sprint`
 
-## Step 2.6: Commit sprint start
+Options:
+- **Continue sprint** — proceed to Step 3.
+- **Abort** — stop execution so the user can investigate failures first.
 
-Commit the newly written sprint state before entering the execution loop.
-
-1. `git add .soloflow/active/sprint.json .soloflow/active/backlog.json` — also add `.soloflow/human-review-queue.md` if it was modified by Step 1.8.
-2. If `git diff --cached --quiet` reports no staged changes, skip.
-3. Otherwise `git commit -m "chore(SPRINT-{NNN}): start sprint"`.
-
-Stage only the listed paths — never `git add .` / `git add -A`. Skip silently if not in a git repo or `.soloflow/` is gitignored. If a run branch was created in Step 2.5, this commit lands on the run branch.
-
-## Step 2.7: Pre-sprint regression smoke (first sprint only)
-
-Skip this step if:
-- This sprint was resumed from a checkpoint (Step 1.2 "Resume" path), OR
-- Prior sprint archives exist (glob `.soloflow/archive/done/**/TASK-*-done.md` — if any match, a previous sprint already established a passing baseline)
-
-1. **Discover test infrastructure.** Check in order:
-   - `package.json` for `test`, `test:unit`, `test:e2e`, `test:integration` scripts
-   - Test runner configs: `jest.config.*`, `vitest.config.*`, `.mocharc.*`, `pytest.ini`, `pyproject.toml`
-   - Type checker configs: `tsconfig.json`, `mypy.ini`, `pyrightconfig.json`
-   - Linter configs: `.eslintrc.*`, `eslint.config.*`, `.flake8`, `ruff.toml`
-
-2. **Run available checks via Bash.** Run the test suite and type checker if found. Capture output. If neither tests nor type checker are found, note this explicitly.
-
-3. **Present results via AskUserQuestion.** Format the question with:
-   - Test results: `{N} tests passed, {M} failed` or `No test suite found`
-   - Type checker: `Type check passed` / `Type check failed with {N} errors` / `No type checker configured`
-   - If any ground-truth infrastructure is missing, note: `Missing: {tests / type checker / linter} — these ground-truth checks are uncovered for this sprint`
-
-   Options:
-   - **Continue sprint** — proceed to Step 3.
-   - **Abort** — stop execution so the user can investigate failures first.
-
-4. This step does NOT fix failures — it only surfaces the baseline state so the user can make an informed decision.
+This step does NOT fix failures — it only surfaces the baseline state.
 
 ## Step 3: Execute the Loop
 

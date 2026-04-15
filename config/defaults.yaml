@@ -10,6 +10,7 @@ models:
   code_reviewer: opus
   roadmap_researcher: sonnet
   roadmap_generator: opus
+  sprint_initiator: sonnet
 
 tester: false  # enable soloflow self-improvement feedback in /soloflow:compound (bucket E)
 
