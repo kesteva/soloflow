@@ -172,7 +172,7 @@ This step does NOT fix failures — it only surfaces the baseline state.
       - Otherwise commit with a verdict-scoped message: `chore(TASK-{NNN}): done` / `chore(TASK-{NNN}): stuck` / `chore(TASK-{NNN}): blocked` / `chore(TASK-{NNN}): human-needed`.
       - Skip silently if not in a git repo or `.soloflow/` is gitignored.
 
-3. **Complete sprint** — set `sprint.status: "complete"` in `sprint.json`.
+3. **End of execute loop.** Sprint status remains `"active"` until the closer's finalize phase flips it. The orchestrator does not write to `sprint.json` here.
 
 ## Step 3.5: End-of-sprint verification
 
@@ -182,73 +182,79 @@ Handle the report:
 - If regressions were found (visual or integration), add each to `.soloflow/human-review-queue.md` with the failure details, evidence, and suspected responsible task.
 - Commit any `.soloflow/` state changes with `chore(SPRINT-{NNN}): end-of-sprint verification`.
 
+## Step 3.7: Gather sprint close context
+
+Spawn the **sprint-closer** agent (phase: gather) with no additional input. Wait for its `GATHERED` payload.
+
+The payload contains: sprint metadata + run info, task tallies (completed/stuck/human-needed/blocked counts), per-task summaries, parsed `human-review-queue.md` entries (action_required grouped by action, plus other count), compound-proposal status, and resolved `merge_strategy`.
+
+If the agent reports `ERROR` (e.g., no active sprint), surface the error and stop.
+
 ## Step 4: Human Review
 
-Read `.soloflow/human-review-queue.md` and all stuck reports from `.soloflow/active/stuck/`.
+Using the gathered payload, present a consolidated review:
+- **Completed tasks** with brief summaries (from `completed_tasks`)
+- **Tasks needing human judgment** with notes (from `human_needed_tasks` and `review_queue.other_summaries`)
+- **Stuck tasks** with failure details and what was tried (from `stuck_tasks`)
+- **Sprint statistics:** `stats.completed_count`, `stats.stuck_count`, `stats.human_needed_count`, `stats.total_executor_loops`
 
-Present a consolidated review:
-- **Completed tasks** with brief summaries
-- **Tasks needing human judgment** (HUMAN_NEEDED verdicts) with verifier notes
-- **Stuck tasks** with failure details and what was tried
-- **Sprint statistics:** completed, stuck, human-needed, total executor loops
+**Deferred verification.** If `review_queue.action_required` is non-empty, present entries grouped by action. For each action, use **AskUserQuestion**: "Have you completed: {action}?" with options **Yes — re-verify now** / **Not yet — keep deferred** / **No longer needed — dismiss**.
 
-**Deferred verification.** If `human-review-queue.md` contains `type: action_required` entries, present them grouped by action. For each action, use **AskUserQuestion**: "Have you completed: {action}?" with options **Yes — re-verify now** / **Not yet — keep deferred** / **No longer needed — dismiss**.
-
-- **Yes:** Re-spawn the **verifier** (or **sprint-verifier** for sprint-level flows) with the original plan + executor report, scoped to only the previously deferred checks. Handle the verdict normally — if it passes, remove the entry from the queue and decrement `pending_count`; if it fails, convert to `NEEDS_CHANGES` and present to the user.
+- **Yes:** Re-spawn the **verifier** (or **sprint-verifier** for sprint-level flows) with the original plan + executor report, scoped to only the previously deferred checks. Handle the verdict normally — if it passes, edit `.soloflow/human-review-queue.md` to remove the entry and decrement `pending_count`; if it fails, convert to `NEEDS_CHANGES` and present to the user.
 - **Not yet:** Leave in the queue. The entry persists for the next session.
-- **Dismiss:** Remove from the queue and decrement `pending_count`.
+- **Dismiss:** Edit the queue to remove the entry and decrement `pending_count`.
 
 **PAUSE HERE.** The user's job is taste-level review — everything functional has already been verified.
 
-## Step 4.4: Commit sprint close
+## Step 4.4: Resolve merge choice
 
-Commit the sprint-closing state (sprint.json marked complete plus any final queue/checkpoint updates) before the run-branch merge decision.
+If gathered `run` is null (no run branch was created during sprint init), set `merge_choice = "none"` and skip to Step 4.5.
 
-1. **Archive stale compound proposal.** If `.soloflow/active/COMPOUND-PROPOSAL.md` exists:
-   a. Read its YAML frontmatter to extract the `sprint:` field (e.g., `SPRINT-005`).
-   b. Move it to `.soloflow/archive/compound/{sprint}-proposal.md`.
-   c. If the destination already exists (already archived by a prior compound run), skip — do not overwrite.
-   d. If the frontmatter lacks a `sprint:` field, skip with a warning.
-   e. Include the moved file in the `git add` below.
-2. `git add .soloflow/active/sprint.json .soloflow/human-review-queue.md .soloflow/checkpoint.md` — also add `.soloflow/archive/compound/{sprint}-proposal.md` if step 1 moved a file (include only the paths that actually changed).
-3. If `git diff --cached --quiet` reports no staged changes, skip.
-4. Otherwise `git commit -m "chore(SPRINT-{NNN}): close sprint"`.
+Otherwise use **AskUserQuestion**: "Merge run branch `<run.branch>` into `<run.base_branch>`?" with options:
+- **Merge locally** — merge with `merge_strategy`, then delete the branch. → `merge_choice = "merge_locally"`
+- **Open PR** — push the branch and open a pull request on GitHub. → `merge_choice = "open_pr"`
+- **Keep branch open** — stay on the run branch and let the user merge manually later. → `merge_choice = "keep_open"`
+- **Delete without merging** — discard everything in this run (destructive). → re-prompt with **AskUserQuestion** to confirm. On confirm `merge_choice = "delete"`. On cancel fall through to `merge_choice = "keep_open"`.
 
-Never `git add .` / `git add -A`. Skip silently if not in a git repo or `.soloflow/` is gitignored.
+If `merge_choice = "open_pr"`, prepare:
+- `pr_title`: `soloflow: SPRINT-{NNN} ({stats.completed_count} tasks)`
+- `pr_body`: render the same content shown in Step 5's report (sprint stats + completed/stuck summaries).
 
-## Step 4.5: Merge run branch (only if Step 2.5 created one)
+## Step 4.5: Execute sprint close
 
-1. Use **AskUserQuestion** to ask: "Merge run branch `<branch_name>` into `<base_branch>`?" with options:
-   - **Merge locally** — merge with `--no-ff`, then delete the branch.
-   - **Open PR** — push the branch and open a pull request on GitHub.
-   - **Keep branch open** — stay on the run branch and let the user merge manually later.
-   - **Delete without merging** — discard everything in this run (destructive).
-2. On **Merge locally**:
-   - `git checkout <base_branch>`
-   - `git merge --no-ff <branch_name> -m "soloflow: merge run <branch_name> (SPRINT-NNN)"` (use the `merge_strategy` value from config if different)
-   - If the merge reports conflicts, **do NOT attempt to resolve**. Leave the user on `<base_branch>` with conflict markers in place, print the conflicting paths, and stop. Do not delete the branch.
-   - On successful merge, delete the branch: `git branch -d <branch_name>`.
-3. On **Open PR**:
-   - `git push -u origin <branch_name>`
-   - Create a PR with `gh pr create --base <base_branch> --head <branch_name>` using the sprint report from Step 5 as the PR body.
-   - Print the PR URL. Do not merge or delete — the user merges via GitHub (branch cleanup happens via GitHub's auto-delete setting or manually).
-4. On **Keep branch open**: stay on `<branch_name>`. Print the branch name + base so the user can merge manually later.
-5. On **Delete without merging**: re-prompt with `AskUserQuestion` to confirm (destructive action). On confirmation, `git checkout <base_branch>` then `git branch -D <branch_name>`. On cancel, fall through to Keep branch open behavior.
+Spawn the **sprint-closer** agent (phase: finalize) with the resolved decisions:
 
-Record the outcome (merged / pr-opened / kept-open / deleted) for Step 5.
+```
+Phase: finalize
+Decisions:
+  merge_choice: "{merge_locally|open_pr|keep_open|delete|none}"
+  pr_title: "{title, only if open_pr}"
+  pr_body: "{body, only if open_pr}"
+```
+
+Wait for its `COMPLETED` or `ERROR` payload.
+
+Handle the outcome:
+- If `ERROR` with `merge_status: conflicts`, print the conflict paths and stop. The user must resolve the conflicts manually before re-invoking `/soloflow:executor` (which will resume via checkpoint detection in Step 1).
+- If `ERROR` for any other reason, surface the error message and stop. Do not retry — the closer has already left state in a known position.
+- Otherwise capture `merge.outcome`, `merge.merge_sha` / `merge.pr_url`, and `head_sha` for Step 5.
+
+The closer handles all staging and committing internally — do not run additional `git add` or `git commit` here.
 
 ## Step 5: Report
 
+Render using fields from the closer's finalize output:
+
 ```
 Sprint SPRINT-{NNN} complete.
-- Completed: {count}
-- Stuck: {count}
-- Human-needed: {count}
-- Total executor loops: {count}
+- Completed: {stats.completed_count}
+- Stuck: {stats.stuck_count}
+- Human-needed: {stats.human_needed_count}
+- Total executor loops: {stats.total_executor_loops}
 
-Run branch: {branch_name or "none — ran on <base_branch>"}
-  Status: {merged into <base> | pr-opened | kept open | deleted | n/a}
-  Head:   {short SHA at end of run}
+Run branch: {run.branch or "none — ran on <base_branch>"}
+  Status: {merge.outcome rendered as "merged into <base>" | "pr-opened: <url>" | "kept open" | "deleted" | "n/a"}
+  Head:   {head_sha}
 
 Next step: /soloflow:compound  (to extract learnings from this sprint)
 ```
