@@ -46,6 +46,23 @@ Valid values: `always` (create run branch silently), `never` (stay on current br
    - If `create_branch = true` and `git status --porcelain` is non-empty, stop and tell the user to commit or stash their working tree before starting a run.
    - If `create_branch = false`, current branch is `main` or `master`, and the sprint-to-be has more than one task, warn the user and re-prompt — they can still explicitly choose "Stay on current branch" to override.
 
+## Step 1.8: Check deferred ground-truth items
+
+1. Read `.soloflow/human-review-queue.md`. If the file does not exist or has no entries, skip to Step 2.
+2. Parse all entries. Separate into two groups:
+   - **Blocking:** entries where `level: ground_truth` and `type: action_required` (skip entries already marked `type: overridden`)
+   - **Advisory:** entries where `level` is `visual`, `requirements`, or `goal_backward`
+3. If there are **blocking** entries, use **AskUserQuestion**:
+
+   `{N} deferred ground-truth check(s) from prior sprints remain unresolved:`
+
+   List each blocking entry: task ID, action, and blocked checks. Options:
+   - **Resolve now** — the user resolves the items before continuing. After they confirm, re-read `human-review-queue.md` and re-check. If blocking items remain, re-prompt.
+   - **Override with justification** — the user provides a one-line justification. For each overridden entry, append `override: "{justification}"` and `override_at: {ISO timestamp}`, and flip `type` from `action_required` to `overridden`. Proceed to Step 2.
+   - **Abort** — stop execution.
+
+4. If there are **advisory** entries (non-blocking), print a one-line summary: `{N} advisory deferred item(s) from prior sprints (non-blocking).` No prompt — proceed automatically.
+
 ## Step 2: Create Sprint
 
 1. **Select tasks:**
@@ -97,7 +114,7 @@ If any git command fails, stop and report the failure — do NOT silently fall b
 
 Commit the newly written sprint state before entering the execution loop.
 
-1. `git add .soloflow/active/sprint.json .soloflow/active/backlog.json`
+1. `git add .soloflow/active/sprint.json .soloflow/active/backlog.json` — also add `.soloflow/human-review-queue.md` if it was modified by Step 1.8.
 2. If `git diff --cached --quiet` reports no staged changes, skip.
 3. Otherwise `git commit -m "chore(SPRINT-{NNN}): start sprint"`.
 
