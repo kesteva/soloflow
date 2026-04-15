@@ -2,6 +2,11 @@
 
 All notable changes to SoloFlow are documented in this file.
 
+## [0.8.0] - 2026-04-15
+
+### Added
+- **`/soloflow:mad-max`** — unattended backlog-drain command. Runs the full per-task quality loop (executor → verifier → code-reviewer → test-writer) against every ready task, plus the end-of-sprint regression check, with zero interactive prompts during the run. Hardcodes `create_branch: true` and `merge_choice: keep_open`; stuck / human-needed tasks are logged and skipped. Hard-stops only on conditions mad-max cannot safely bypass (active sprint, dirty worktree, blocking deferred items, red smoke baseline). Use this when you want to kick off a run and walk away.
+
 ## [0.5.2] - 2026-04-09
 
 ### Fixed
