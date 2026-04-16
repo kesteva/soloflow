@@ -44,7 +44,7 @@ Phase: gather
    - Dirty check: `git status --porcelain` (non-empty = dirty)
 
 6. **Parse deferred items.** Read `.soloflow/human-review-queue.md` (if it exists). Separate entries:
-   - **Blocking:** `level: ground_truth` AND `type: action_required` (skip `type: overridden`)
+   - **Blocking:** `level: ground_truth` AND `type: action_required` (skip `type: overridden`). For each blocking entry, capture the entry's `severity` field (`low | medium | high`). Treat a missing `severity` as `medium` for backward compatibility with entries written before severity was tracked.
    - **Advisory:** `level` in {`visual`, `requirements`, `goal_backward`}
 
 7. **Compute next sprint ID.** Glob:
@@ -92,6 +92,7 @@ deferred_items:
     - task_id: TASK-NNN
       action: "{action description}"
       blocked_checks: ["{check1}", ...]
+      severity: "{low|medium|high}"   # default medium if absent in queue
     # empty list if none
   advisory_count: {N}
 

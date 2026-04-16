@@ -37,7 +37,9 @@ Parse the structured output. Handle:
 - If `status: ERROR` → print the error and stop.
 - If `initialized: false` → print "mad-max: SoloFlow not initialized. Run /soloflow:init first." and stop. (Redundant with Step 0.5; keep for safety.)
 - If `backlog.ready_count == 0` → print `mad-max: no ready tasks in backlog. Run /soloflow:planner IDEA-NNN first.` and stop.
-- If `deferred_items.blocking` is non-empty → print `mad-max: {N} blocking deferred item(s) from prior sprints require human resolution. Run /soloflow:executor instead.` (list the task IDs from each blocking entry) and stop.
+- Filter `deferred_items.blocking` to entries with `severity: high`:
+  - If any high-severity blocking entries exist → print `mad-max: {N} high-severity deferred item(s) from prior sprints require human resolution. Run /soloflow:executor instead.` (list the task IDs from each high-severity blocking entry) and stop.
+  - If only medium/low-severity blocking entries exist → print `mad-max: {N} non-high-severity blocking deferred item(s) from prior sprints (continuing — re-verify in /soloflow:executor when ready).` and proceed. Do NOT stop.
 
 If `deferred_items.advisory_count > 0`, print `mad-max: {N} advisory deferred item(s) from prior sprints (non-blocking, continuing).` and proceed.
 
@@ -218,5 +220,5 @@ Next step: run /soloflow:executor to resume human review and merge, or inspect {
 
 - **Context-limit prompts still exist.** If the orchestrator itself hits `SOLOFLOW CONTEXT CRITICAL`, it writes a checkpoint and asks the user to compact-or-exit. There's no unattended-safe alternative for an out-of-context main agent. If this matters for your run, pre-empt it by keeping batches small or splitting work across sessions.
 - **Smoke baseline must be green.** Mad-max refuses to start on a red baseline because it cannot distinguish pre-existing failures from task-caused regressions. Use `/soloflow:executor` if you need to run on a known-red baseline.
-- **Blocking deferred items must be resolved first.** Mad-max will not silently override `action_required` entries from prior sprints.
+- **High-severity deferred items must be resolved first.** Mad-max will not silently override `action_required` entries from prior sprints when their severity is `high`. Medium/low-severity blocking entries are surfaced but do not stop the run.
 - **No auto-merge.** The run branch always stays open. Use `/soloflow:executor` to merge after human review.
