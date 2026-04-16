@@ -32,7 +32,7 @@ Skip this pass entirely if both `visual_mobile` and `visual_web` are `false`.
    - Use `inspect_view_hierarchy` first (~50 tokens) for layout/element checks. Use `take_screenshot` only when visual appearance must be verified. Budget: 3 screenshots max per flow.
    - Check specifically for **cross-task interactions**: does data set by Task A survive through screens modified by Task B? Are store resets from one task's changes still safe given another task's screen expectations?
 
-4. **Defer flows requiring human action.** If a flow cannot be tested because it requires a prerequisite human action (migration, deploy, seed data, etc.), append an `action_required` entry to `.soloflow/human-review-queue.md` with the action needed and the blocked flow, then continue to the next flow. Do not fail or skip — the orchestrator will re-run verification after the human completes the action.
+4. **Defer flows requiring human action.** If a flow cannot be tested because it requires a prerequisite human action (migration, deploy, seed data, etc.), append an `action_required` entry to `.soloflow/human-review-queue.md` with the action needed, the blocked flow, and a `severity` field (`low | medium | high`) — see the verifier's Deferred Checks Protocol for the rubric (default `medium` for visual flow gaps; `high` if the flow guards a foundational invariant). Then continue to the next flow. Do not fail or skip — the orchestrator will re-run verification after the human completes the action.
 
 5. **Report findings.** For each visual failure:
    - Which flow and which step failed

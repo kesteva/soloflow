@@ -119,7 +119,25 @@ At any level, if a check cannot run until a human performs a prerequisite action
   blocked_checks:
     - "{criterion or verification step blocked}"
   level: "{ground_truth | visual | requirements | goal_backward}"
+  severity: "{low | medium | high}"
 ```
+
+Pick `severity` so the user can scan the queue and tell which deferred items matter most:
+
+- `high` — the deferred check guards downstream work or a foundational invariant; leaving it unverified puts follow-on tasks or production correctness at risk.
+- `medium` — the deferred check covers observable user-facing behaviour for this feature, but does not block other work.
+- `low` — cosmetic / advisory; the feature works without this check passing.
+
+Default mapping when proposing severity (override only with reason):
+
+| Blocked level     | Default severity |
+|-------------------|------------------|
+| `ground_truth`    | `high`           |
+| `requirements`    | `high`           |
+| `goal_backward`   | `medium`         |
+| `visual`          | `medium`         |
+
+Downgrade to `low` when the criterion is plainly cosmetic. Upgrade to `high` when the deferred check gates dependent tasks visible in the plan.
 
 Increment `pending_count`. Continue running all non-blocked checks. Base your verdict on non-deferred checks only — if everything else passes, use `APPROVED_WITH_DEFERRED`. Include a `Deferred Checks` section in your report listing what was deferred and why.
 
@@ -237,7 +255,7 @@ For each acceptance criterion:
 - **Count:** N (entries appended to `.soloflow/active/findings.md`)
 
 ### Deferred Checks (only if APPROVED_WITH_DEFERRED)
-- **Action:** {what the human must do}
+- **[{severity}] Action:** {what the human must do}
   - Blocked: {criterion or check that could not run}
   - Level: {verification level}
 

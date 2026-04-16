@@ -37,7 +37,7 @@ Phase: gather
    - **Total executor loops:** sum the `executor_loops` frontmatter field across all done + stuck reports for this sprint (treat missing as 0).
 
 4. **Parse human-review-queue.** Read `.soloflow/human-review-queue.md` (if it exists). Separate:
-   - **action_required:** entries with `type: action_required`. Group by `action` text. For each group, list the blocked checks and originating task IDs.
+   - **action_required:** entries with `type: action_required`. Group by `action` text. For each group, list the blocked checks, originating task IDs, and the **maximum severity** across the group (rank `high > medium > low`; treat a missing `severity` field as `medium` for backward compatibility with entries written before severity was tracked).
    - **other:** non-actionable entries (informational verifier notes, HUMAN_NEEDED escalations, already-overridden entries). Capture brief summaries and a count.
 
 5. **Detect stale compound proposal.** If `.soloflow/active/COMPOUND-PROPOSAL.md` exists, read its YAML frontmatter and extract the `sprint:` field. Note whether the destination `.soloflow/archive/compound/{sprint}-proposal.md` already exists.
@@ -94,6 +94,7 @@ blocked_tasks: [TASK-NNN, ...]
 review_queue:
   action_required:
     - action: "{action description}"
+      severity: "{low|medium|high}"   # max across grouped task_ids; default medium if absent in queue
       blocked_checks: ["{check1}", ...]
       task_ids: [TASK-NNN, ...]
     # empty list if none

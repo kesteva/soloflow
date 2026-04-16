@@ -198,7 +198,7 @@ Using the gathered payload, present a consolidated review:
 - **Stuck tasks** with failure details and what was tried (from `stuck_tasks`)
 - **Sprint statistics:** `stats.completed_count`, `stats.stuck_count`, `stats.human_needed_count`, `stats.total_executor_loops`
 
-**Deferred verification.** If `review_queue.action_required` is non-empty, present entries grouped by action. For each action, use **AskUserQuestion**: "Have you completed: {action}?" with options **Yes — re-verify now** / **Not yet — keep deferred** / **No longer needed — dismiss**.
+**Deferred verification.** If `review_queue.action_required` is non-empty, present entries grouped by action, sorted by severity (`high` first, then `medium`, then `low`). For each action, use **AskUserQuestion**: "[{SEVERITY}] Have you completed: {action}?" with options **Yes — re-verify now** / **Not yet — keep deferred** / **No longer needed — dismiss**. (`{SEVERITY}` comes from the gathered `review_queue.action_required[].severity` field.)
 
 - **Yes:** Re-spawn the **verifier** (or **sprint-verifier** for sprint-level flows) with the original plan + executor report, scoped to only the previously deferred checks. Handle the verdict normally — if it passes, edit `.soloflow/human-review-queue.md` to remove the entry and decrement `pending_count`; if it fails, convert to `NEEDS_CHANGES` and present to the user.
 - **Not yet:** Leave in the queue. The entry persists for the next session.
