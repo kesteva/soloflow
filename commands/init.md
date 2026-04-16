@@ -262,6 +262,54 @@ The SoloFlow status line shows sprint/task state and a context usage bar. It req
 5. Write the updated settings back to `~/.claude/settings.json` with 2-space indentation.
 6. Print: `✓ Status line configured — restart Claude Code to activate.`
 
+## Step 4.6: Safe-command allow list
+
+SoloFlow agents (executor, verifier, code-reviewer) run many safe read-only commands. Pre-allowlisting them in `~/.claude/settings.json` reduces permission prompts without adding real risk.
+
+The default allow list (25 entries):
+
+```
+Bash(grep:*)              Bash(git status:*)
+Bash(find:*)              Bash(git log:*)
+Bash(ls:*)                Bash(git diff:*)
+Bash(cat:*)               Bash(git show:*)
+Bash(head:*)              Bash(git branch:*)
+Bash(tail:*)              Bash(git check-ignore:*)
+Bash(wc:*)                Bash(git add:*)
+Bash(sort:*)              Bash(git commit:*)
+Bash(uniq:*)
+Bash(which:*)
+Bash(file:*)
+Bash(date:*)
+Bash(echo:*)
+Bash(pwd:*)
+Bash(tree:*)
+Bash(mkdir:*)
+Bash(test:*)
+```
+
+Deliberately excluded (stay prompted each time): `rm`, `mv`, `cp`, `chmod`, `chown`, `sudo`, `git push`, `git reset`, `git rebase`, `npm install`, `pnpm install`, `curl`, `wget`. These are destructive, privileged, or fetch arbitrary code.
+
+### Procedure
+
+1. Use `AskUserQuestion`:
+   - **Question:** `"Add SoloFlow's default safe-command allow list to ~/.claude/settings.json? This preallows read-only commands (grep, find, cat, git status/log/diff, etc.) plus git add/commit. Destructive commands (rm, git push, npm install) stay prompted."`
+   - **Header:** `"Allow list"`
+   - **Options:**
+     - `"Yes — add safe defaults"`
+     - `"Skip"`
+   - On **Skip**: set `allow_list_status = "skipped"` and continue to Step 5.
+2. Read `~/.claude/settings.json` via Bash (`cat ~/.claude/settings.json`). If the file does not exist, treat the parsed object as `{}`.
+3. Normalize shape:
+   - Ensure `settings.permissions` is an object.
+   - Ensure `settings.permissions.allow` is an array (default `[]`).
+4. Compute the diff: iterate the default list **in the documented order** and collect entries not already present in `permissions.allow`. Use **exact string comparison** — preserve any existing entries verbatim, even near-duplicates like `Bash(grep *)` vs `Bash(grep:*)`.
+5. Append the missing entries to the end of `permissions.allow`. Preserve all other keys in `settings` (including `statusLine` written by Step 4.5, `permissions.defaultMode`, `permissions.deny`, `permissions.ask`, etc.). Do **not** set `permissions.defaultMode` if it is absent.
+6. Write the updated JSON back to `~/.claude/settings.json` with 2-space indentation and a trailing newline.
+7. Report to the user and set `allow_list_status` for the Step 7 summary:
+   - If N > 0: print `✓ Allow list updated — added N safe commands` and set `allow_list_status = "added N safe commands"`.
+   - If N == 0: print `✓ Allow list already up to date — all 25 safe commands present` and set `allow_list_status = "already up to date"`.
+
 ## Step 5: Commit to git (if applicable)
 
 Run `git rev-parse --is-inside-work-tree` via Bash. If the project is inside
@@ -301,6 +349,7 @@ Config: .soloflow/config.json {created|updated}
   git.branch_per_run:         {value}
 
 Status line: {configured|already configured|skipped (user kept existing)|not configured}
+Allow list:  {added N safe commands|already up to date|skipped}
 
 {if any orphaned files:}
 Orphaned files (safe to remove manually):
