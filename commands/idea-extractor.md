@@ -77,9 +77,15 @@ Then make a **single batched `AskUserQuestion` call** whose questions list is bu
    - If `recommended`: *"Research recommended — {research_rationale}"*
    - If `not_needed`: *"Research likely not needed — {research_rationale}"*
 
+   Resolve `research_enabled` per the config resolution recipe
+   (`.soloflow/config.json` → `config/defaults.yaml` → fallback `true`) reading
+   `phases.research`. If `research_enabled === false`, omit the
+   "Approve + Research" option entirely — research is globally disabled for
+   this project.
+
    Question: "How should we proceed with IDEA-{NNN}?" with options:
-   - **Approve + Research** — run external research next. Label with `(recommended)` if `research_recommendation` is `recommended`.
-   - **Approve (skip research)** — stop here; idea is ready for `/soloflow:planner`. Label with `(recommended)` if `research_recommendation` is `not_needed`.
+   - **Approve + Research** — run external research next. Label with `(recommended)` if `research_recommendation` is `recommended`. *(Omitted when `phases.research === false`.)*
+   - **Approve (skip research)** — stop here; idea is ready for `/soloflow:planner`. Label with `(recommended)` if `research_recommendation` is `not_needed` or if `phases.research === false`.
    - **Modify** — update slices, answer questions, add constraints
    - **Reject** — delete the idea file and stop
 
