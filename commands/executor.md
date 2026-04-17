@@ -122,7 +122,7 @@ This step does NOT fix failures — it only surfaces the baseline state.
 
 2. For each ready task (dependencies all completed):
 
-   a. Set task `status: "in_progress"` in `sprint.json`.
+   a. Set task status to in_progress: `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/update-task-status.js" TASK-{NNN} in_progress`.
 
    a2. **Locate the plan file** by globbing `.soloflow/active/plans/**/TASK-{NNN}-plan.md` (matches both nested epic folders and flat orphan paths; excludes `EPIC-*.md`). Read the plan's `epic` frontmatter field — it may be a slug or absent/null. This determines where downstream reports go.
 
@@ -130,8 +130,8 @@ This step does NOT fix failures — it only surfaces the baseline state.
 
    c. Handle executor result:
       - **COMPLETED** → proceed to verification.
-      - **BLOCKED** → update status to `"blocked"` in `sprint.json`, continue to next task.
-      - **STUCK** → write stuck report to `.soloflow/active/stuck/{epic}/TASK-{NNN}-stuck.md` if the plan has an epic, else flat at `.soloflow/active/stuck/TASK-{NNN}-stuck.md`. Create the folder if missing. Update status in `sprint.json`, continue.
+      - **BLOCKED** → run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} blocked --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue to next task.
+      - **STUCK** → write stuck report to `.soloflow/active/stuck/{epic}/TASK-{NNN}-stuck.md` if the plan has an epic, else flat at `.soloflow/active/stuck/TASK-{NNN}-stuck.md` (create the folder if missing). Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue.
       - **CONTEXT_LIMIT** → pass the handoff to a fresh executor. Do NOT run git commands yourself to reconstruct state — keep orchestrator context lean.
         1. Read the `### Handoff` section from the executor's status report (produced by the context monitor protocol).
         2. If context-limit respawns for this agent on this task < `context_limit_respawn_max` (config default: 3), spawn a **fresh executor** with the original plan content prepended with:
@@ -146,13 +146,13 @@ This step does NOT fix failures — it only surfaces the baseline state.
       - **APPROVED** → proceed to code review (step f).
       - **APPROVED_WITH_DEFERRED** → proceed to code review (step f). The deferred checks are already queued in `.soloflow/human-review-queue.md` by the verifier — they will be re-verified in Step 4.
       - **NEEDS_CHANGES** → if loops < `executor_retry_max` (config default: 3), re-spawn executor with verifier feedback. Otherwise write stuck report.
-      - **HUMAN_NEEDED** → add to `.soloflow/human-review-queue.md`, update status in `sprint.json`.
+      - **HUMAN_NEEDED** → append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`.
       - **CONTEXT_LIMIT** → read the `### Handoff` section. Spawn a **fresh verifier** with the original inputs + "Continue verification from previous verifier's handoff: {handoff section}". Same respawn budget as executor CONTEXT_LIMIT handling.
 
    f. Spawn **code-reviewer** with the plan + executor's changed files list. Wait for verdict.
       - **CLEAN** → proceed to step f2 (test writing).
       - **IMPROVEMENTS_NEEDED** (first time only) → re-spawn executor with review feedback, then re-verify. Does NOT consume the executor retry budget.
-      - **SECURITY_ISSUE** → escalate to HUMAN_NEEDED. Add to `.soloflow/human-review-queue.md`, update status in `sprint.json`.
+      - **SECURITY_ISSUE** → escalate to HUMAN_NEEDED. Append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`.
       - **CONTEXT_LIMIT** → read the `### Handoff` section. Spawn a **fresh code-reviewer** with the original inputs + "Continue review from previous reviewer's handoff: {handoff section}". Same respawn budget.
 
    f2. **Test writing.** Spawn the **test-writer** agent with the plan, executor's changed files list, and code-reviewer's report. Wait for result.
@@ -161,16 +161,11 @@ This step does NOT fix failures — it only surfaces the baseline state.
       - **NO_TEST_INFRA** → proceed (no test framework is set up in this project).
       - **CONTEXT_LIMIT** → read the `### Handoff` section. Spawn a **fresh test-writer** with the original inputs + "Continue from previous test-writer's handoff: {handoff section}". Same respawn budget.
 
-   f3. Write done report to `.soloflow/archive/done/{epic}/TASK-{NNN}-done.md` if the plan has an epic (create the folder if missing), else flat at `.soloflow/archive/done/TASK-{NNN}-done.md`. Remove task from `sprint.json`. Then perform the **epic archival check**: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no tasks from that epic remain in `sprint.json`, flag the epic for the Step 4 human review with an "archive this epic?" prompt. On user approval (not automatic), move `.soloflow/active/plans/{epic}/EPIC-{epic}.md` → `.soloflow/archive/done/{epic}/EPIC-{epic}.md` and flip its frontmatter `status` from `active` to `complete`.
+   f3. Write done report to `.soloflow/archive/done/{epic}/TASK-{NNN}-done.md` if the plan has an epic (create the folder if missing), else flat at `.soloflow/archive/done/TASK-{NNN}-done.md`. Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md` — this removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`. Then perform the **epic archival check**: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no tasks from that epic remain in `sprint.json`, flag the epic for the Step 4 human review with an "archive this epic?" prompt. On user approval (not automatic), move `.soloflow/active/plans/{epic}/EPIC-{epic}.md` → `.soloflow/archive/done/{epic}/EPIC-{epic}.md` and flip its frontmatter `status` from `active` to `complete`.
 
    g. Every `checkpoint_interval` completed tasks (config default: 3), write checkpoint to `.soloflow/checkpoint.md`.
 
-   h. **Commit state for this task.** After the task has fully settled (done, stuck, blocked, or human-needed) and all state files for it have been written, commit the `.soloflow/` state changes via Bash. This is a **state-only** commit and is separate from any code commits the executor subagent made.
-      - `git add` only the specific state paths that changed for this task: `.soloflow/active/sprint.json`, the new done report (`.soloflow/archive/done/**/TASK-{NNN}-done.md`) or stuck report (`.soloflow/active/stuck/**/TASK-{NNN}-stuck.md`), `.soloflow/active/findings.md` if it was appended to during this task, `.soloflow/human-review-queue.md` if it was updated, and `.soloflow/checkpoint.md` if Step 3.g wrote one.
-      - Never `git add .` / `git add -A`.
-      - If `git diff --cached --quiet` reports no staged changes, skip.
-      - Otherwise commit with a verdict-scoped message: `chore(TASK-{NNN}): done` / `chore(TASK-{NNN}): stuck` / `chore(TASK-{NNN}): blocked` / `chore(TASK-{NNN}): human-needed`.
-      - Skip silently if not in a git repo or `.soloflow/` is gitignored.
+   h. **State commit happens inside `settle-task.js`** (invoked by each terminal verdict above). The orchestrator does not run `git add` / `git commit` itself for per-task state.
 
 3. **End of execute loop.** Sprint status remains `"active"` until the closer's finalize phase flips it. The orchestrator does not write to `sprint.json` here.
 
