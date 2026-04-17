@@ -194,19 +194,24 @@ Bump `pending_count` (counting only `status: open` entries) and refresh `last_up
 
 ### Plan-Prescribed Scope Deviations
 
-When reviewing `.soloflow/active/findings.md`, you may encounter entries with `type: scope_deviation` logged by the executor. These indicate the executor touched a file outside `files_owned`. Before treating these as open findings:
+When reviewing `.soloflow/active/findings.md`, you may encounter entries with `type: scope_deviation` logged by the executor. These indicate the executor touched a file outside `files_owned`. Before treating these as open findings, check both of the following:
 
-1. **Check the task plan** for an explicit reference to the deviated file. Look for:
+**(a) Plan-text prescription.** Does the task plan explicitly reference the deviated file? Look for:
    - A specific implementation step that names the file or its directory
    - An acceptance criterion that requires changes to the file
    - A plan note that explicitly calls out cross-file coordination
-2. **Match against the specific plan section**, not a vague mention. The plan must prescribe the edit, not merely reference the file in passing. For example, a plan that says "this task affects the login flow" does NOT prescribe edits to `src/auth/login.ts` — but a plan step that says "update `src/auth/login.ts` to call the new token refresh function" does.
-3. If the deviation **is prescribed** by the plan:
+
+   **Match against the specific plan section**, not a vague mention. The plan must prescribe the edit, not merely reference the file in passing. For example, a plan that says "this task affects the login flow" does NOT prescribe edits to `src/auth/login.ts` — but a plan step that says "update `src/auth/login.ts` to call the new token refresh function" does.
+
+**(b) AC-required deviation.** Is the change required to satisfy a broad acceptance criterion such as "all suites must pass," "no regressions in existing tests," "type-check is clean," or any equivalent? When a task enables a previously disabled feature or rewires a shared API, follow-on edits to consumer files / their tests are *prescribed by the AC* even if the consumer file is not named in the plan text.
+
+**Resolve when either (a) or (b) holds:**
    - Edit the finding's `status` from `open` to `resolved`
-   - Set `resolved_by` to `verifier — plan-prescribed (see {plan section reference})`
+   - Set `resolved_by` to `verifier — {plan-prescribed: <plan section> | AC-prescribed: <one sentence naming the AC>}`
    - Decrement `pending_count` in the frontmatter
    - Do NOT flag it in your verification report as an issue
-4. If the deviation is **NOT prescribed** by the plan, leave it as `status: open` and note it in your verification report under a "Scope Deviations" line so the orchestrator and user are aware.
+
+**Leave as `status: open`** only when the deviated file appears in neither `files_owned` nor the plan text **and** no AC mandates the change — i.e. the motivation would be unclear to an external reviewer. In that case, note it in your verification report under a "Scope Deviations" line so the orchestrator and user are aware.
 
 ## Context Limit Protocol
 
