@@ -79,8 +79,8 @@ Wait for the executor to complete and capture its status report.
 Read the executor's status report:
 
 - **If COMPLETED**: Proceed to Step 6 (verification).
-- **If BLOCKED**: Update the task in `.soloflow/active/sprint.json` to `status: "blocked"`. Report the blocker to the user. Stop here.
-- **If STUCK**: Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` with the executor's error details. Update `.soloflow/active/sprint.json` to `status: "stuck"`. Report to the user. Stop here.
+- **If BLOCKED**: Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} blocked --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings.md`. Report the blocker to the user. Stop here.
+- **If STUCK**: Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` with the executor's error details. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report .soloflow/active/stuck/TASK-{NNN}-stuck.md --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings.md`. Report to the user. Stop here.
 - **If CONTEXT_LIMIT**: Read the `### Handoff` section. If context-limit respawns < 3, spawn a **fresh executor** with the original plan + "Continue from previous executor's handoff: {handoff section}". Otherwise escalate as STUCK.
 
 ## Step 6: Spawn Verifier
@@ -98,32 +98,25 @@ Read the verifier's verification report:
 
 ### If APPROVED
 1. Spawn **test-writer** with the plan, executor's changed files, and "no code-review report" (quick path skips code review). If `TESTS_WRITTEN`, run the test suite to confirm. One retry on failure; if still failing, log a finding and proceed.
-2. Write a done report to `.soloflow/archive/done/TASK-{NNN}-done.md` using the verifier's report
-3. Remove the task from `.soloflow/active/sprint.json`
-4. Report success to the user with a summary of changes
+2. Write a done report to `.soloflow/archive/done/TASK-{NNN}-done.md` using the verifier's report.
+3. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report .soloflow/archive/done/TASK-{NNN}-done.md --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings.md`. This removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`.
+4. Report success to the user with a summary of changes.
 
 ### If NEEDS_CHANGES
 Check the loop counter (starts at 1, max 3 from config `executor_retry_max`):
 - **If loops < 3**: Go back to Step 4, but append the verifier's feedback to the executor prompt:
   "Previous attempt had issues. The verifier found: {verifier feedback}. Fix these specific issues."
   Increment the loop counter.
-- **If loops >= 3**: The task is stuck. Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` including the verifier's feedback. Update `.soloflow/active/sprint.json` to `status: "stuck"`. Report to the user that the fix needs human intervention.
+- **If loops >= 3**: The task is stuck. Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` including the verifier's feedback, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report .soloflow/active/stuck/TASK-{NNN}-stuck.md --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings.md`. Report to the user that the fix needs human intervention.
 
 ### If HUMAN_NEEDED
-1. Add an entry to `.soloflow/human-review-queue.md` with the verifier's notes
-2. Update `.soloflow/active/sprint.json` to `status: "human_needed"`
-3. Report to the user that the fix works technically but needs their review for product judgment
+1. Append an entry to `.soloflow/human-review-queue.md` with the verifier's notes.
+2. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings.md`.
+3. Report to the user that the fix works technically but needs their review for product judgment.
 
-## Step 7.5: Commit state
+## Step 7.5: State commit
 
-After the task settles (APPROVED, STUCK, or HUMAN_NEEDED), commit the `.soloflow/` state changes via Bash. This is a state-only commit, separate from the executor's code commits.
-
-1. `git add` only the specific state paths touched in this run: the plan file (`.soloflow/active/plans/TASK-{NNN}-plan.md`), `.soloflow/active/sprint.json`, and whichever of these apply — `.soloflow/archive/done/TASK-{NNN}-done.md`, `.soloflow/active/stuck/TASK-{NNN}-stuck.md`, `.soloflow/human-review-queue.md`, `.soloflow/active/findings.md`.
-2. Never `git add .` / `git add -A`.
-3. If `git diff --cached --quiet` reports no staged changes, skip.
-4. Otherwise commit with a verdict-scoped message: `chore(TASK-{NNN}): done` / `chore(TASK-{NNN}): stuck` / `chore(TASK-{NNN}): human-needed`.
-
-Skip silently if not in a git repo or `.soloflow/` is gitignored.
+State commit happens inside `settle-task.js` (invoked by each verdict branch in Step 7). The quick command does not run `git add` / `git commit` itself for task state.
 
 ## Step 8: Final Summary
 
