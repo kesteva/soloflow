@@ -47,9 +47,8 @@ All settings below live in `config/defaults.yaml` and are runtime-overridable. `
 
 | Setting | Default | Consumer |
 |---|---|---|
-| `models.orchestrator` | `opus` | `agents/orchestrator.md` (spawned by `/soloflow:executor`) |
-| `models.executor` | `sonnet` | `agents/executor.md` |
 | `models.verifier` | `opus` | `agents/verifier.md` |
+| `models.executor` | `sonnet` | `agents/executor.md` |
 | `models.idea_extractor` | `sonnet` | `agents/idea-extractor.md` |
 | `models.task_refiner` | `opus` | `agents/task-refiner.md` |
 | `models.compounder` | `sonnet` | `agents/compounder.md` |
