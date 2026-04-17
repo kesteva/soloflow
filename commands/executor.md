@@ -103,18 +103,34 @@ Parse its structured output. Handle:
 - If `status: ERROR` → report the error and stop.
 - If `run` is non-null, print: `Run branch: {run.branch} (base: {run.base_branch}@{run.base_sha short})`.
 
-## Step 2.8: Smoke test decision
+## Step 2.8: Smoke and infra decision
 
-If the phase 2 output includes `smoke_results` (non-null), present results via **AskUserQuestion**:
+Surface two orthogonal signals from the phase 2 output: the smoke baseline and the task-level infra availability. Present a single **AskUserQuestion** only if at least one of the following is true:
+- `smoke_results` is non-null AND (any failures OR `smoke_results.missing_infra` is non-empty)
+- `infra_check.missing` is non-empty
+
+Otherwise print `Smoke baseline clean; all required infra available.` and proceed to Step 3 with no prompt.
+
+### Prompt body
+
+Compose the question body from these sections (omit a section if it has nothing to report):
+
+**Smoke baseline** (only if `smoke_results` is non-null):
 - Test results: `{passed} tests passed, {failed} failed` or `No test suite found`
 - Type checker: `Type check passed` / `Type check failed` / `No type checker configured`
-- If `missing_infra` is non-empty: `Missing: {list} — these ground-truth checks are uncovered for this sprint`
+- If `smoke_results.missing_infra` is non-empty: `Missing test config: {list} — these ground-truth checks are uncovered for this sprint.`
 
-Options:
-- **Continue sprint** — proceed to Step 3.
-- **Abort** — stop execution so the user can investigate failures first.
+**Task-level infra** (only if `infra_check.missing` is non-empty):
+- Header: `{N} task(s) in this sprint expect infrastructure that isn't available:`
+- Per `missing` entry: `- {category} — {reason}. Affected: {task_id list}. Tests that will be skipped: {flattened test_targets}.`
+- Trailer: `Continuing will skip these checks; verifier will mark them SKIPPED — {category} not available.`
 
-This step does NOT fix failures — it only surfaces the baseline state.
+### Options
+
+- **Continue sprint** — proceed to Step 3. If `infra_check.missing` was non-empty, append one line to `.soloflow/active/findings.md` via Bash: `SPRINT-{sprint_id} started with missing infra: {categories}; tests deferred.`
+- **Abort** — stop execution so the user can install the missing tooling or fix the baseline, then re-run `/soloflow:executor`.
+
+This step does NOT fix failures — it only surfaces baseline state and lets the user confirm a known-reduced verification surface.
 
 ## Step 3: Execute the Loop
 
