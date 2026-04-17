@@ -2,6 +2,16 @@
 
 All notable changes to SoloFlow are documented in this file.
 
+## [0.8.1] - 2026-04-17
+
+### Changed
+- **Verifier auto-resolves AC-prescribed scope deviations.** `agents/verifier.md` Plan-Prescribed Scope Deviations section now resolves a `scope_deviation` finding on either (a) the plan text naming the file, or (b) the change being required by a broad AC such as "all suites must pass." Previously only (a) triggered auto-resolve, producing recurring open findings whenever enabling a feature broke an outside-of-`files_owned` test.
+- **Sprint-verifier now emits per-platform outcomes.** `agents/sprint-verifier.md` splits its single Visual Verification status into `visual_mobile` and `visual_web` (same 5-value enum as the per-task verifier) and persists them to `.soloflow/active/sprint-verification.md`, archived at sprint close to `.soloflow/archive/sprint-verifications/SPRINT-NNN-verification.md`.
+
+### Added
+- **Done-report schema gains `executor_loops` and `code_review_rounds`.** `commands/executor.md` step f3 defines the canonical done-report frontmatter; orchestrators (`executor`, `mad-max`, `quick`) track both counters per task and write them into the report. Sprint-closer sums them into `total_executor_loops` / `total_code_review_rounds`; compounder uses them as evidence for D-bucket recommendations (e.g. "shared-helper integration tasks consistently need two code-review rounds").
+- **Visual verification five-bucket classification.** Per-task verifier and sprint-verifier emit `pass | fail | not_applicable | skipped_user_preference | skipped_unable` for each platform, surfaced at sprint end by `/soloflow:executor` Step 5 and `/soloflow:mad-max` final report. Distinguishes healthy skips (user preference, N/A) from coverage gaps (unable to run).
+
 ## [0.8.0] - 2026-04-15
 
 ### Added
