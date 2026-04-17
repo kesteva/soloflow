@@ -180,6 +180,30 @@ Decisions:
    
    c. **Format results** into structured output (the orchestrator will present the prompt).
 
+6.5 **Task-level infra availability check.** Always run this, even if `skip_smoke` is true — it's diagnostic, not a gate.
+
+   a. **Infer required infra** by scanning each selected task's plan file:
+      - Glob `.soloflow/active/plans/**/TASK-{NNN}-plan.md` for each id in `selected_task_ids`.
+      - For each plan, union these categories into a set:
+        - `maestro` — `test_strategy.targets[*].type: integration` AND any of `ios|android|mobile|maestro|simulator|react-native` appears (case-insensitive) in `files_owned`, acceptance criteria, objective, or implementation steps.
+        - `playwright` — `test_strategy.targets[*].type: integration` AND any of `browser|playwright|e2e|\bweb\b|page\.|screenshot` appears AND no mobile keywords matched.
+        - `docker` — any of `docker|container|compose|dockerfile` appears, OR (`postgres|redis|rabbitmq|mysql`) paired with (`start|spin up|local|test against|container`) in acceptance criteria or implementation steps.
+      - If the set is empty, emit `infra_check` with empty arrays and skip to step c.
+
+   b. **Probe availability** via Bash. For each required category:
+      - `maestro`: `claude mcp list 2>/dev/null | grep -qi maestro && which maestro >/dev/null`
+      - `playwright`: `claude mcp list 2>/dev/null | grep -qi playwright && which npx >/dev/null`
+      - `docker`: `which docker >/dev/null && timeout 3 docker info >/dev/null 2>&1`
+
+      Record the failing check as `reason`:
+      - `claude mcp list` exits non-zero → `"claude mcp list unavailable"` for any MCP-backed category.
+      - MCP grep finds nothing → `"MCP server not registered"`.
+      - CLI (`maestro` / `npx`) not found → `"CLI not found"`.
+      - Docker binary missing → `"not installed"`.
+      - Docker binary present but `docker info` fails (or times out) → `"daemon not running"`.
+
+   c. **Format `infra_check`** into structured output (see schema below). Diagnostic only — do NOT prompt the user; the orchestrator handles the prompt in Step 2.8. Note: the heuristic may produce false positives (e.g., a plan that mentions "postgres" in prose without needing Docker); the user can override by choosing Continue at the orchestrator prompt.
+
 ### Output
 
 ```
@@ -213,6 +237,16 @@ smoke_results:  # null if skipped
     found: {true|false}
     passed: {true|false}
   missing_infra: ["{tests|typecheck|linter}"]
+
+infra_check:  # ALWAYS present (never null). Empty arrays if nothing required.
+  required: ["maestro", "playwright", "docker"]   # union inferred from selected plans
+  available: ["playwright"]                        # subset of required that passed all checks
+  missing:
+    - category: "maestro"                          # "maestro" | "playwright" | "docker"
+      reason: "MCP server not registered"          # see Step 6.5.b for reasons
+      impacts:
+        - task_id: "TASK-NNN"
+          test_targets: ["{behavior from test_strategy.targets[].behavior}"]
 `` `
 ```
 
