@@ -167,9 +167,14 @@ e. Handle verifier verdict:
   - **HUMAN_NEEDED** → append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue.
   - **CONTEXT_LIMIT** → respawn with handoff (same budget).
 
-f. Spawn **code-reviewer** with the plan + executor's changed files list. Wait for verdict.
+f. **Code review.** Resolve `code_review.enabled` per the recipe in
+   [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md)
+   (fallback: `true`). If `false`, skip this entire step — treat the task as
+   CLEAN and go to f2. Otherwise:
+
+   Spawn **code-reviewer** with the plan + executor's changed files list. Wait for verdict.
   - **CLEAN** → proceed to step f2.
-  - **IMPROVEMENTS_NEEDED** (first time only) → increment `code_review_rounds`, re-spawn executor with review feedback, then re-verify. Does not consume executor retry budget.
+  - **IMPROVEMENTS_NEEDED** → increment `code_review_rounds`, re-spawn executor with review feedback, then re-verify. Does not consume executor retry budget. Loop up to resolved `code_review.review_retry_max` (fallback: 1) rounds, then accept remaining findings as minor and proceed.
   - **SECURITY_ISSUE** → append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue.
   - **CONTEXT_LIMIT** → respawn with handoff.
 

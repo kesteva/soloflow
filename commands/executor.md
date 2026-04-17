@@ -201,9 +201,14 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
       - **HUMAN_NEEDED** → append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`.
       - **CONTEXT_LIMIT** → read the `### Handoff` section. Spawn a **fresh verifier** with the original inputs + "Continue verification from previous verifier's handoff: {handoff section}". Same respawn budget as executor CONTEXT_LIMIT handling.
 
-   f. Spawn **code-reviewer** with the plan + executor's changed files list. Wait for verdict.
+   f. **Code review.** Resolve `code_review.enabled` per the recipe in
+      [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md)
+      (fallback: `true`). If `false`, skip this entire step — treat the task as
+      CLEAN and go straight to f2. Otherwise:
+
+      Spawn **code-reviewer** with the plan + executor's changed files list. Wait for verdict.
       - **CLEAN** → proceed to step f2 (test writing).
-      - **IMPROVEMENTS_NEEDED** (first time only) → increment `code_review_rounds`, re-spawn executor with review feedback, then re-verify. Does NOT consume the executor retry budget.
+      - **IMPROVEMENTS_NEEDED** → increment `code_review_rounds`, re-spawn executor with review feedback, then re-verify. Does NOT consume the executor retry budget. Loop allowed up to resolved `code_review.review_retry_max` (fallback: 1) rounds. After the cap, accept the remaining findings as minor and proceed to f2.
       - **SECURITY_ISSUE** → escalate to HUMAN_NEEDED. Append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`.
       - **CONTEXT_LIMIT** → read the `### Handoff` section. Spawn a **fresh code-reviewer** with the original inputs + "Continue review from previous reviewer's handoff: {handoff section}". Same respawn budget.
 

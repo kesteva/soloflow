@@ -26,20 +26,20 @@ You receive:
    2. Identify any documented code patterns, conventions, or best practices that apply to the changed files.
    3. Verify the changed code follows these documented conventions.
 
-3. **Run `/simplify`** via the Skill tool. This reviews the changed code for:
+3. **Run `/simplify`** via the Skill tool *(only if `code_review.run_simplify` resolves to `true` per the recipe in [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md); fallback: `true`)*. This reviews the changed code for:
    - Opportunities to reuse existing utilities or patterns
    - Code quality issues (duplication, unnecessary complexity, dead code)
    - Efficiency improvements
-   
-   Capture the output.
 
-4. **Run `/security-review`** via the Skill tool. This reviews for:
+   Capture the output. If skipped, note `"(skipped — code_review.run_simplify=false)"` under **Quality Review** in your report.
+
+4. **Run `/security-review`** via the Skill tool *(only if `code_review.run_security_review` resolves to `true`; fallback: `true`)*. This reviews for:
    - OWASP Top 10 vulnerabilities (XSS, injection, auth issues, etc.)
    - Insecure data handling
    - Exposed secrets or credentials
    - Missing input validation at system boundaries
-   
-   Capture the output.
+
+   Capture the output. If skipped, note `"(skipped — code_review.run_security_review=false)"` under **Security Review**. **Note:** with security review skipped, you cannot emit `SECURITY_ISSUE` — disabling is a deliberate user choice.
 
 5. **Synthesize findings.** Combine results from all reviews into a unified report. Categorize each finding as:
    - **Critical (security):** Vulnerabilities that must be fixed before shipping
