@@ -92,6 +92,18 @@ Do not roll back the run branch — leave it for the user to investigate. Stop.
 
 If `smoke_results` is null or all checks passed, proceed.
 
+### Infra availability guardrail
+
+If the phase 2 output includes `infra_check` with a non-empty `missing` list, **abort**. Print:
+
+```
+mad-max: sprint requires infrastructure that isn't available: {categories}. Affected tasks: {task_ids}. Refusing to start an unattended run that would silently skip tests. Install the tooling or run /soloflow:executor to confirm the skip.
+```
+
+Do not roll back the run branch — leave it for the user to investigate. Stop.
+
+Rationale: mad-max is unattended, so missing infra = silently skipped tests = exactly the class of regression mad-max should refuse. Users who know the gap and still want to proceed can use `/soloflow:executor`, which prompts for explicit confirmation.
+
 ---
 
 ## Step 3: Execute the per-task loop
