@@ -190,10 +190,12 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
        summary: "{one-line summary}"
        executor_loops: {N}        # 0 = verifier passed first try, 1 = one NEEDS_CHANGES retry, etc.
        code_review_rounds: {N}    # 0 = code-reviewer was CLEAN first try, 1 = one IMPROVEMENTS_NEEDED cycle
+       visual_mobile: pass | fail | not_applicable | skipped_user_preference | skipped_unable
+       visual_web:    pass | fail | not_applicable | skipped_user_preference | skipped_unable
        ---
        ```
 
-       Use the counters you tracked in working memory for this task. Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md` — this removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`. Then perform the **epic archival check**: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no tasks from that epic remain in `sprint.json`, flag the epic for the Step 4 human review with an "archive this epic?" prompt. On user approval (not automatic), move `.soloflow/active/plans/{epic}/EPIC-{epic}.md` → `.soloflow/archive/done/{epic}/EPIC-{epic}.md` and flip its frontmatter `status` from `active` to `complete`.
+       Use the counters you tracked in working memory for this task. Copy `visual_mobile` and `visual_web` verbatim from the verifier's Visual Verification report block (the verifier emits the enum directly — do not re-classify here). If a prior verifier round emitted a different outcome and the task is now passing on a later round, use the *most recent* verifier's values. Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md` — this removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`. Then perform the **epic archival check**: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no tasks from that epic remain in `sprint.json`, flag the epic for the Step 4 human review with an "archive this epic?" prompt. On user approval (not automatic), move `.soloflow/active/plans/{epic}/EPIC-{epic}.md` → `.soloflow/archive/done/{epic}/EPIC-{epic}.md` and flip its frontmatter `status` from `active` to `complete`.
 
    g. Every `checkpoint_interval` completed tasks (config default: 3), write checkpoint to `.soloflow/checkpoint.md`.
 
@@ -207,7 +209,7 @@ Spawn the **sprint-verifier** agent with the sprint ID, base SHA (from `sprint.j
 
 Handle the report:
 - If regressions were found (visual or integration), add each to `.soloflow/human-review-queue.md` with the failure details, evidence, and suspected responsible task.
-- Commit any `.soloflow/` state changes with `chore(SPRINT-{NNN}): end-of-sprint verification`.
+- Stage `.soloflow/active/sprint-verification.md` (the sprint-verifier writes it; it's the sprint-closer's single source of truth for sprint-level visual coverage) and commit any `.soloflow/` state changes with `chore(SPRINT-{NNN}): end-of-sprint verification`. Use `git add` with explicit paths — never `git add -A`.
 
 ## Step 3.7: Gather sprint close context
 
@@ -281,6 +283,11 @@ Sprint SPRINT-{NNN} complete.
 - Human-needed: {stats.human_needed_count}
 - Total executor loops: {stats.total_executor_loops}
 - Total code review rounds: {stats.total_code_review_rounds}
+
+Visual coverage:
+  Per-task mobile: {per_task.mobile.pass} pass / {per_task.mobile.fail} fail / {per_task.mobile.not_applicable} N/A / {per_task.mobile.skipped_user_preference} skipped (user pref) / {per_task.mobile.skipped_unable} skipped (unable)
+  Per-task web:    {per_task.web.pass} pass / {per_task.web.fail} fail / {per_task.web.not_applicable} N/A / {per_task.web.skipped_user_preference} skipped (user pref) / {per_task.web.skipped_unable} skipped (unable)
+  Sprint-level:    mobile={sprint_level.mobile}{sprint_level.mobile_note ? " (" + sprint_level.mobile_note + ")" : ""}, web={sprint_level.web}{sprint_level.web_note ? " (" + sprint_level.web_note + ")" : ""}
 
 Run branch: {run.branch or "none — ran on <base_branch>"}
   Status: {merge.outcome rendered as "merged into <base>" | "pr-opened: <url>" | "kept open" | "deleted" | "n/a"}

@@ -36,6 +36,8 @@ Phase: gather
    - **Blocked / human-needed:** read directly from the remaining `tasks` map in `sprint.json`.
    - **Total executor loops:** sum the `executor_loops` frontmatter field across all done + stuck reports for this sprint (treat missing as 0).
    - **Total code review rounds:** sum the `code_review_rounds` frontmatter field across all done reports for this sprint (treat missing as 0).
+   - **Per-task visual coverage:** for each platform (`visual_mobile`, `visual_web`), tally how many done reports emit each of the five enum values: `pass`, `fail`, `not_applicable`, `skipped_user_preference`, `skipped_unable`. Treat a missing field as `not_applicable` (backward compatibility with reports written before this schema).
+   - **Sprint-level visual coverage:** read `.soloflow/active/sprint-verification.md` if it exists. Extract `visual_mobile`, `visual_web`, their note fields, and `regressions_count`. If the file is missing, treat both platforms as `not_applicable` with note `"sprint-verifier did not run"`.
 
 4. **Parse human-review-queue.** Read `.soloflow/human-review-queue.md` (if it exists). Separate:
    - **action_required:** entries with `type: action_required`. Group by `action` text. For each group, list the blocked checks, originating task IDs, and the **maximum severity** across the group (rank `high > medium > low`; treat a missing `severity` field as `medium` for backward compatibility with entries written before severity was tracked).
@@ -76,6 +78,15 @@ stats:
   blocked_count: {N}
   total_executor_loops: {N}
   total_code_review_rounds: {N}
+  visual_coverage:
+    per_task:
+      mobile: { pass: N, fail: N, not_applicable: N, skipped_user_preference: N, skipped_unable: N }
+      web:    { pass: N, fail: N, not_applicable: N, skipped_user_preference: N, skipped_unable: N }
+    sprint_level:
+      mobile: "{pass | fail | not_applicable | skipped_user_preference | skipped_unable}"
+      web:    "{pass | fail | not_applicable | skipped_user_preference | skipped_unable}"
+      mobile_note: "{note or null}"
+      web_note:    "{note or null}"
 
 completed_tasks:
   - id: TASK-NNN
@@ -141,11 +152,14 @@ Decisions:
    c. If the destination already exists, leave the active file in place — do not overwrite. Record `skipped_reason: already_exists` in output.
    d. If the frontmatter lacks a `sprint:` field, leave the file in place. Record `skipped_reason: missing_sprint_field`.
 
+2b. **Archive sprint-verification file.** If `.soloflow/active/sprint-verification.md` exists, move it to `.soloflow/archive/sprint-verifications/{sprint.id}-verification.md` (create the folder if missing). If the destination already exists, leave the active file in place and record `skipped_reason: already_exists` in the output's `archived_sprint_verification` field. If the file doesn't exist, record `archived_sprint_verification.moved: false` and move on.
+
 3. **Commit sprint close.**
    - `git add .soloflow/active/sprint.json`
    - Also add `.soloflow/human-review-queue.md` if it exists.
    - Also add `.soloflow/checkpoint.md` if it exists.
    - Also add `.soloflow/archive/compound/{sprint_field}-proposal.md` if step 2 moved a file.
+   - Also add `.soloflow/archive/sprint-verifications/{sprint.id}-verification.md` if step 2b moved a file (and `.soloflow/active/sprint-verification.md` for the deletion).
    - If `git diff --cached --quiet` reports no staged changes, skip the commit.
    - Otherwise: `git commit -m "chore({sprint_id}): close sprint"`.
    - Stage only listed paths — never `git add .` / `git add -A`.
@@ -190,6 +204,11 @@ archived_proposal:
   moved: {true|false}
   destination: "{path or null}"
   skipped_reason: "{already_exists|missing_sprint_field|null}"
+
+archived_sprint_verification:
+  moved: {true|false}
+  destination: "{path or null}"
+  skipped_reason: "{already_exists|null}"
 
 merge:
   outcome: "{merged|pr-opened|kept-open|deleted|none}"

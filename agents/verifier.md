@@ -79,7 +79,19 @@ If `visual_mobile` resolves to `false`, skip Maestro entirely. If `visual_web` r
 
 A file-scoped visual check that only tests `files_owned` is insufficient when the task has cross-cutting side effects.
 
-**Graceful degradation:** If any MCP tool call returns an error during verification, do NOT fail the task. Log the error, mark Level 2 as "SKIPPED — {reason}", and proceed to Level 3.
+**Graceful degradation:** If any MCP tool call returns an error during verification, do NOT fail the task. Log the error, mark the affected platform as `skipped_unable` (see Outcome Classification below), and proceed to Level 3.
+
+**Outcome classification.** For each platform (`visual_mobile`, `visual_web`), classify the outcome into exactly one of these five values — the orchestrator copies them verbatim into the done-report frontmatter:
+
+| Value | When to emit |
+|---|---|
+| `pass` | Platform ran through the flow and every check passed |
+| `fail` | Platform ran but a check failed (implies NEEDS_CHANGES) |
+| `not_applicable` | Decision gate returned no: no UI files, no UI-feeding state, no user-visible acceptance criterion. Healthy — not a gap |
+| `skipped_user_preference` | Settings gate resolved to `false` for this platform (user / config disabled it) |
+| `skipped_unable` | Settings+decision gates both passed, but we couldn't run: tool not installed, MCP server not running, or MCP tool errored mid-run |
+
+Classify each platform independently — e.g. `visual_mobile: pass`, `visual_web: not_applicable` is normal for a mobile-only project.
 
 ### CLAUDE.md E2E Verification Gates
 
@@ -242,8 +254,8 @@ Output exactly this structure:
 - **Linter:** PASS | FAIL | SKIPPED — {summary}
 
 ### Visual Verification
-- **Mobile (Maestro):** PASS | FAIL | SKIPPED — {summary}
-- **Web (Playwright):** PASS | FAIL | SKIPPED — {summary}
+- **visual_mobile:** pass | fail | not_applicable | skipped_user_preference | skipped_unable — {one-line reason, required for skipped_* and fail}
+- **visual_web:** pass | fail | not_applicable | skipped_user_preference | skipped_unable — {one-line reason, required for skipped_* and fail}
 - **Evidence:** {screenshot descriptions or hierarchy excerpts, if applicable}
 
 ### Requirements Adherence

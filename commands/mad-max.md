@@ -148,7 +148,7 @@ f2. **Test writing.** Spawn the **test-writer** agent with the plan, executor's 
   - **NO_TESTS_NEEDED** / **NO_TEST_INFRA** → proceed.
   - **CONTEXT_LIMIT** → respawn with handoff.
 
-f3. Write done report to `.soloflow/archive/done/{epic}/TASK-{NNN}-done.md` (or flat) using the frontmatter spec defined in `commands/executor.md` step f3 — populate `executor_loops` and `code_review_rounds` from the per-task counters tracked above. Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md` — this removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`. Run the epic archival check: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no sprint tasks from that epic remain, **log to `.soloflow/active/findings.md`** — `epic {epic} has no remaining tasks; candidate for archival` — and do NOT prompt. Archival waits for human review.
+f3. Write done report to `.soloflow/archive/done/{epic}/TASK-{NNN}-done.md` (or flat) using the frontmatter spec defined in `commands/executor.md` step f3 — populate `executor_loops` and `code_review_rounds` from the per-task counters tracked above, and copy `visual_mobile` / `visual_web` verbatim from the most recent verifier's Visual Verification report block. Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md` — this removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`. Run the epic archival check: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no sprint tasks from that epic remain, **log to `.soloflow/active/findings.md`** — `epic {epic} has no remaining tasks; candidate for archival` — and do NOT prompt. Archival waits for human review.
 
 g. Every `checkpoint_interval` completed tasks (default 3), write checkpoint to `.soloflow/checkpoint.md`.
 
@@ -164,7 +164,7 @@ Spawn the **sprint-verifier** agent with: sprint ID, base SHA (from `sprint.json
 
 Handle the report:
 - Append any regressions (visual or integration) to `.soloflow/human-review-queue.md` with the failure details, evidence, and suspected responsible task.
-- Commit any `.soloflow/` state changes with `chore(SPRINT-{NNN}): end-of-sprint verification`.
+- Stage `.soloflow/active/sprint-verification.md` (sprint-closer reads it for sprint-level visual coverage) and commit any `.soloflow/` state changes with `chore(SPRINT-{NNN}): end-of-sprint verification`. Use `git add` with explicit paths — never `git add -A`.
 
 Capture `regressions_count` for the final summary.
 
@@ -219,6 +219,10 @@ Render using fields from the closer's gather and finalize outputs and the sprint
 - **Regressions flagged:** {sprint_verifier.regressions_count} (appended to human-review-queue)
 - **Total executor loops:** {stats.total_executor_loops}
 - **Total code review rounds:** {stats.total_code_review_rounds}
+- **Visual coverage:**
+  - Per-task mobile: {per_task.mobile.pass} pass / {per_task.mobile.fail} fail / {per_task.mobile.not_applicable} N/A / {per_task.mobile.skipped_user_preference} skipped (user pref) / {per_task.mobile.skipped_unable} skipped (unable)
+  - Per-task web:    {per_task.web.pass} pass / {per_task.web.fail} fail / {per_task.web.not_applicable} N/A / {per_task.web.skipped_user_preference} skipped (user pref) / {per_task.web.skipped_unable} skipped (unable)
+  - Sprint-level:    mobile={sprint_level.mobile}{note if present}, web={sprint_level.web}{note if present}
 - **Head SHA:** {head_sha}
 
 Next step: run /soloflow:executor to resume human review and merge, or inspect {run.branch} manually.
