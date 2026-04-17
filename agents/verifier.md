@@ -25,13 +25,20 @@ Execute these levels in order. If any level fails, stop and issue your verdict.
 
 ### Level 1: Ground Truth (non-negotiable)
 
-These must ALL pass. If any fails, verdict is `NEEDS_CHANGES`.
+Each check runs only if its config toggle resolves to `true` per the recipe in
+[docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md) (fallback:
+`true` for all three). If the toggle is `false`, skip that specific check and
+note it in your report as `"(skipped — verification.<toggle>=false)"`. Skipping
+never fails the task — but disabling all three leaves no ground-truth coverage.
 
-1. **Test suite**: Run the project's tests. Capture the full output.
-2. **Type checker**: Run the type checker if the project has one (look for `tsconfig.json`, `mypy.ini`, etc.).
-3. **Linter**: Run the linter if configured.
+For every toggle that resolves to `true`, the underlying check must pass. If
+any pass-required check fails, verdict is `NEEDS_CHANGES`.
 
-If the project has no test suite, type checker, or linter, note this in your report but do not treat it as a failure.
+1. **Test suite** (toggle: `verification.run_tests`): Run the project's tests. Capture the full output.
+2. **Type checker** (toggle: `verification.run_typecheck`): Run the type checker if the project has one (look for `tsconfig.json`, `mypy.ini`, etc.).
+3. **Linter** (toggle: `verification.run_linter`): Run the linter if configured.
+
+If the project has no test suite, type checker, or linter (despite the toggle being `true`), note this in your report but do not treat it as a failure.
 
 ### Level 2: Visual Verification
 
@@ -55,18 +62,21 @@ If `visual_mobile` resolves to `false`, skip Maestro entirely. If `visual_web` r
 3. Attempt a probe call (e.g., `inspect_view_hierarchy` for Maestro). If the MCP server is not running, log "SKIPPED — MCP server not available" and proceed to Level 3
 
 **Maestro verification (mobile):**
-1. Search the project for existing Maestro flows in `maestro/`, `.maestro/`, or `test/maestro/`. If a flow relevant to the changed feature exists, use `run_flow` and check its exit status.
+1. Resolve `verification.visual_maestro_flow_dirs` per the config recipe
+   (fallback: `["maestro/", ".maestro/", "test/maestro/"]`). Search the project
+   for existing Maestro flows in each directory in that list. If a flow
+   relevant to the changed feature exists, use `run_flow` and check its exit status.
 2. If no relevant flow exists, verify ad-hoc:
    - `launch_app` to start the app in the simulator
    - Navigate to the relevant screen using `tap_on` and `input_text`
-   - Use `inspect_view_hierarchy` first — it returns structured element data at ~50 tokens, sufficient for checking element presence, layout, and accessibility labels
-   - Only use `take_screenshot` when the acceptance criteria require checking visual appearance (colors, images, animations) that hierarchy data cannot answer. Limit to 3 screenshots per verification run.
+   - Resolve `verification.visual_prefer_hierarchy` (fallback: `true`). If `true`, use `inspect_view_hierarchy` first — it returns structured element data at ~50 tokens, sufficient for checking element presence, layout, and accessibility labels. If `false`, screenshots become the primary source.
+   - Only use `take_screenshot` when the acceptance criteria require checking visual appearance (colors, images, animations) that hierarchy data cannot answer. Cap at resolved `verification.visual_screenshot_budget` (fallback: 3) screenshots per verification run.
 3. Map each visual check to a specific acceptance criterion
 
 **Playwright verification (web):**
 1. Navigate to the relevant URL
-2. Check element visibility and page content
-3. Take screenshots only when visual appearance must be verified
+2. Check element visibility and page content (prefer textual inspection when `verification.visual_prefer_hierarchy` resolves to `true`, fallback: `true`)
+3. Take screenshots only when visual appearance must be verified. Cap at resolved `verification.visual_screenshot_budget` (fallback: 3).
 4. Map results to acceptance criteria
 
 **Port conflict guard:** NEVER run `maestro test` via Bash while using Maestro MCP tools. Both use port 7001 and cannot run simultaneously.

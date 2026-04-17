@@ -32,13 +32,10 @@ Use this for: confirming buttons exist, checking text content, verifying layout 
 ### Screen Capture
 Use `take_screenshot` only when acceptance criteria require checking visual appearance that hierarchy data cannot answer: colors, images, animations, visual styling.
 
-Limit screenshots to 3 per verification run to manage token budget.
+Cap at resolved `verification.visual_screenshot_budget` screenshots per verification run (fallback: 3) to manage token budget. Resolve per the recipe in [docs/CUSTOMIZATION.md#config-resolution](../../docs/CUSTOMIZATION.md).
 
 ### Flow Execution
-Use `run_flow` to execute pre-written Maestro YAML flows. Search the project for flows in these conventional directories:
-- `maestro/`
-- `.maestro/`
-- `test/maestro/`
+Use `run_flow` to execute pre-written Maestro YAML flows. Resolve `verification.visual_maestro_flow_dirs` per the config recipe (fallback: `["maestro/", ".maestro/", "test/maestro/"]`) and search those directories.
 
 List available flows with Glob, then match flow names to the feature being verified. If a relevant flow exists, prefer it over ad-hoc verification — flows are repeatable and maintained by the project.
 
@@ -69,7 +66,7 @@ Prefer cheaper operations first:
 2. **Page content reading** (variable) — for text content, data verification
 3. **`take_screenshot`** (~1600 tokens) — only for visual appearance checks
 
-A typical verification should use 1-2 hierarchy inspections and at most 3 screenshots. If you find yourself taking more screenshots, reconsider whether hierarchy data or page content would suffice.
+A typical verification should use 1-2 hierarchy inspections and at most `verification.visual_screenshot_budget` screenshots (default 3). If you find yourself taking more screenshots, reconsider whether hierarchy data or page content would suffice.
 
 ## Mapping Results to Criteria
 
