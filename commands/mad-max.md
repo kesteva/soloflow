@@ -103,7 +103,7 @@ Mirror `commands/executor.md` Step 3 exactly. The **only** behavioral delta for 
 
 Concretely, for each ready task (dependencies satisfied):
 
-a. Set task `status: "in_progress"` in `sprint.json`.
+a. Set task status to in_progress: `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/update-task-status.js" TASK-{NNN} in_progress`.
 
 a2. **Locate the plan file** via `.soloflow/active/plans/**/TASK-{NNN}-plan.md` (matches nested epic folders and flat orphan paths; excludes `EPIC-*.md`). Read the plan's `epic` frontmatter field — this determines where downstream reports go.
 
@@ -111,22 +111,22 @@ b. Spawn **executor** agent with the plan content. Wait for result.
 
 c. Handle executor result:
   - **COMPLETED** → proceed to verification.
-  - **BLOCKED** → update status to `"blocked"` in `sprint.json`, commit state (step h), continue to next task.
-  - **STUCK** → write stuck report to `.soloflow/active/stuck/{epic}/TASK-{NNN}-stuck.md` (or flat if no epic). Update status in `sprint.json`, commit state, continue.
+  - **BLOCKED** → run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} blocked --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue to next task.
+  - **STUCK** → write stuck report to `.soloflow/active/stuck/{epic}/TASK-{NNN}-stuck.md` (or flat if no epic), then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue.
   - **CONTEXT_LIMIT** → pass handoff to a fresh executor (up to `context_limit_respawn_max`, default 3). If exhausted, treat as STUCK. Same protocol as `commands/executor.md:135-141`.
 
 d. Spawn **verifier** with plan + executor report. Wait for verdict.
 
 e. Handle verifier verdict:
   - **APPROVED** / **APPROVED_WITH_DEFERRED** → proceed to code review (step f). Deferred checks already queued in `human-review-queue.md` by the verifier.
-  - **NEEDS_CHANGES** → if loops < `executor_retry_max` (default 3), re-spawn executor with verifier feedback. Otherwise write stuck report, commit state, continue to next task.
-  - **HUMAN_NEEDED** → add to `.soloflow/human-review-queue.md`, update status in `sprint.json`, commit state, continue.
+  - **NEEDS_CHANGES** → if loops < `executor_retry_max` (default 3), re-spawn executor with verifier feedback. Otherwise write stuck report (same path rule as step c's STUCK) and run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue to next task.
+  - **HUMAN_NEEDED** → append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue.
   - **CONTEXT_LIMIT** → respawn with handoff (same budget).
 
 f. Spawn **code-reviewer** with the plan + executor's changed files list. Wait for verdict.
   - **CLEAN** → proceed to step f2.
   - **IMPROVEMENTS_NEEDED** (first time only) → re-spawn executor with review feedback, then re-verify. Does not consume executor retry budget.
-  - **SECURITY_ISSUE** → add to `.soloflow/human-review-queue.md`, update status in `sprint.json`, commit state, continue.
+  - **SECURITY_ISSUE** → append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue.
   - **CONTEXT_LIMIT** → respawn with handoff.
 
 f2. **Test writing.** Spawn the **test-writer** agent with the plan, executor's changed files, and code-reviewer's report. Wait for result.
@@ -134,16 +134,11 @@ f2. **Test writing.** Spawn the **test-writer** agent with the plan, executor's 
   - **NO_TESTS_NEEDED** / **NO_TEST_INFRA** → proceed.
   - **CONTEXT_LIMIT** → respawn with handoff.
 
-f3. Write done report to `.soloflow/archive/done/{epic}/TASK-{NNN}-done.md` (or flat). Remove task from `sprint.json`. Run the epic archival check: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no sprint tasks from that epic remain, **log to `.soloflow/active/findings.md`** — `epic {epic} has no remaining tasks; candidate for archival` — and do NOT prompt. Archival waits for human review.
+f3. Write done report to `.soloflow/archive/done/{epic}/TASK-{NNN}-done.md` (or flat), then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md` — this removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`. Run the epic archival check: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no sprint tasks from that epic remain, **log to `.soloflow/active/findings.md`** — `epic {epic} has no remaining tasks; candidate for archival` — and do NOT prompt. Archival waits for human review.
 
 g. Every `checkpoint_interval` completed tasks (default 3), write checkpoint to `.soloflow/checkpoint.md`.
 
-h. **Commit state for this task.** After the task settles (done, stuck, blocked, or human-needed), commit `.soloflow/` state changes via Bash:
-  - `git add` only the specific state paths touched: `.soloflow/active/sprint.json`, the new done/stuck report path, `.soloflow/active/findings.md` if appended, `.soloflow/human-review-queue.md` if updated, `.soloflow/checkpoint.md` if Step 3.g wrote one.
-  - Never `git add .` / `git add -A`.
-  - If `git diff --cached --quiet` reports no staged changes, skip.
-  - Otherwise commit with a verdict-scoped message: `chore(TASK-{NNN}): done` / `chore(TASK-{NNN}): stuck` / `chore(TASK-{NNN}): blocked` / `chore(TASK-{NNN}): human-needed`.
-  - Skip silently if not in a git repo or `.soloflow/` is gitignored.
+h. **State commit happens inside `settle-task.js`** (invoked by each terminal verdict above). The orchestrator does not run `git add` / `git commit` itself for per-task state.
 
 **End of loop.** Sprint status remains `"active"` until the closer's finalize phase flips it.
 
