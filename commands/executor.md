@@ -12,6 +12,28 @@ Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDE
 
 ---
 
+## Model resolution (applies to every Agent spawn below)
+
+Before invoking the Agent tool for any subagent, resolve `models.<name>` per the
+three-tier recipe in [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md)
+(`.soloflow/config.json` → `$CLAUDE_PLUGIN_ROOT/config/defaults.yaml` → inline
+fallback matching the agent's frontmatter `model:`). Pass the resolved value as
+the Agent tool's `model` parameter. This lets users override model choices via
+`/soloflow:config` without editing agent frontmatter.
+
+Mapping used in this command:
+- `sprint-initiator` → `models.sprint_initiator` (fallback: `sonnet`)
+- `executor` → `models.executor` (fallback: `sonnet`)
+- `verifier` → `models.verifier` (fallback: `opus`)
+- `code-reviewer` → `models.code_reviewer` (fallback: `opus`)
+- `test-writer` → `models.test_writer` (fallback: `sonnet`)
+- `sprint-verifier` → `models.sprint_verifier` (fallback: `opus`)
+- `sprint-closer` → `models.sprint_closer` (fallback: `sonnet`)
+
+You only need to load the config file once at the start of the run; cache the
+resolved values and reuse them for every spawn (including respawns on
+`CONTEXT_LIMIT` / `NEEDS_CHANGES` / `IMPROVEMENTS_NEEDED`).
+
 ## Sprint Initiation (Steps 0.5–2.8)
 
 Sprint initiation uses the **sprint-initiator** sub-agent in two phases to keep orchestrator context lean. The agent handles file I/O, config resolution, git operations, and test runs; the orchestrator handles all user prompts between phases.

@@ -12,6 +12,16 @@ The user's idea is: **$ARGUMENTS**
 
 ---
 
+## Model resolution (applies to every Agent spawn below)
+
+Before invoking the Agent tool, resolve `models.<name>` per the three-tier
+recipe in [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md)
+and pass the resolved value as the Agent tool's `model` parameter.
+
+Mapping used in this command:
+- `idea-extractor` → `models.idea_extractor` (fallback: `sonnet`)
+- `researcher` → `models.researcher` (fallback: `sonnet`)
+
 ## Step 1: Initialize
 
 1. If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.

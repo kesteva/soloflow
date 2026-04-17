@@ -10,6 +10,20 @@ You are running the SoloFlow quick bugfix workflow. The user has described a bug
 
 The bug description is: **$ARGUMENTS**
 
+## Model resolution (applies to every Agent spawn below)
+
+Before invoking the Agent tool for any subagent, resolve `models.<name>` per the
+three-tier recipe in [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md)
+(`.soloflow/config.json` → `$CLAUDE_PLUGIN_ROOT/config/defaults.yaml` → inline
+fallback). Pass the resolved value as the Agent tool's `model` parameter.
+
+Mapping used in this command:
+- `executor` → `models.executor` (fallback: `sonnet`)
+- `verifier` → `models.verifier` (fallback: `opus`)
+- `test-writer` → `models.test_writer` (fallback: `sonnet`)
+
+Cache the resolved values at the start of the run and reuse them for respawns.
+
 ## Step 1: Check initialization
 
 If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.

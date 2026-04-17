@@ -12,6 +12,15 @@ The target idea is: **$ARGUMENTS**
 
 ---
 
+## Model resolution (applies to every Agent spawn below)
+
+Before invoking the Agent tool, resolve `models.<name>` per the three-tier
+recipe in [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md)
+and pass the resolved value as the Agent tool's `model` parameter.
+
+Mapping used in this command:
+- `task-refiner` → `models.task_refiner` (fallback: `opus`)
+
 ## Step 0: Check initialization
 
 If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.

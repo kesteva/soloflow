@@ -14,6 +14,23 @@ Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDE
 
 ---
 
+## Model resolution (applies to every Agent spawn below)
+
+Before invoking the Agent tool, resolve `models.<name>` per the three-tier
+recipe in [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md)
+and pass the resolved value as the Agent tool's `model` parameter.
+
+Mad-max spawns the same agents as `/soloflow:executor`:
+- `sprint-initiator` → `models.sprint_initiator` (fallback: `sonnet`)
+- `executor` → `models.executor` (fallback: `sonnet`)
+- `verifier` → `models.verifier` (fallback: `opus`)
+- `code-reviewer` → `models.code_reviewer` (fallback: `opus`)
+- `test-writer` → `models.test_writer` (fallback: `sonnet`)
+- `sprint-verifier` → `models.sprint_verifier` (fallback: `opus`)
+- `sprint-closer` → `models.sprint_closer` (fallback: `sonnet`)
+
+Cache the resolved values at the start of the run and reuse them for respawns.
+
 ## Step 0.5: Hard-stop guardrails
 
 Run these three checks in the orchestrator before spawning anything. Any failure prints a single-line reason and stops — mad-max never prompts.

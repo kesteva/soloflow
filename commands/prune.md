@@ -12,6 +12,16 @@ Scope: **$ARGUMENTS** (optional — limit analysis to a specific directory; defa
 
 ---
 
+## Model resolution (applies to every Agent spawn below)
+
+Before invoking the Agent tool, resolve `models.<name>` per the three-tier
+recipe in [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md)
+and pass the resolved value as the Agent tool's `model` parameter.
+
+Mapping used in this command:
+- `codebase-pruner` → `models.codebase_pruner` (fallback: `opus`)
+- `claudemd-pruner` → `models.claudemd_pruner` (fallback: `opus`)
+
 ## Step 0: Check initialization
 
 If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
@@ -30,12 +40,12 @@ Spawn **two agents in parallel** using the Agent tool:
 ### Agent A: Codebase Pruner
 - Agent definition: `codebase-pruner`
 - Task: "Audit the codebase at `{project_root}` for dead code, redundancy, inefficiency, and orphaned assets. {If $ARGUMENTS specifies a scope, add: Focus on `{scope}`.} Produce a structured pruning report."
-- Model: opus
+- Model: resolved `models.codebase_pruner` (see Model resolution above)
 
 ### Agent B: CLAUDE.md Pruner
 - Agent definition: `claudemd-pruner`
 - Task: "Audit all CLAUDE.md files in `{project_root}` for redundancy, staleness, scope misplacement, and content that should move to specialized reference files. Produce a structured pruning report."
-- Model: opus
+- Model: resolved `models.claudemd_pruner` (see Model resolution above)
 
 Wait for both agents to complete.
 
