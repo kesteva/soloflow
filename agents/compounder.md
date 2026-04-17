@@ -19,7 +19,7 @@ You receive references to:
 
 ## Process
 
-1. **Read all done reports** for this sprint. Note what was implemented, how many executor loops each task needed, and what the verifier / code-reviewer surfaced.
+1. **Read all done reports** for this sprint. Note what was implemented, how many executor loops each task needed (frontmatter `executor_loops`), how many code-review rounds each task needed (frontmatter `code_review_rounds`), and what the verifier / code-reviewer surfaced. Tasks with elevated `executor_loops` or `code_review_rounds` are leading evidence for D-bucket items (e.g., "shared-helper integration tasks consistently need two code-review rounds — propose a CODE-PATTERNS.md entry").
 2. **Read all stuck reports** for this sprint. Note what failed and why.
 3. **Read `findings.md`** — these are the primary seed for buckets A/B/C. Only triage findings with `status: open`. Skip any finding with `status: resolved` — those were already addressed by an executor during the sprint. Treat findings without an explicit `status` field as `open` (backward compatibility).
 4. **Read `human-review-queue.md`** — items here often signal missing context or process gaps.

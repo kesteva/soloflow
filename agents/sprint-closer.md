@@ -35,6 +35,7 @@ Phase: gather
    - **Stuck:** glob `.soloflow/active/stuck/**/TASK-*-stuck.md`. Filter the same way. Capture `id`, `epic`, brief failure description, and what was tried.
    - **Blocked / human-needed:** read directly from the remaining `tasks` map in `sprint.json`.
    - **Total executor loops:** sum the `executor_loops` frontmatter field across all done + stuck reports for this sprint (treat missing as 0).
+   - **Total code review rounds:** sum the `code_review_rounds` frontmatter field across all done reports for this sprint (treat missing as 0).
 
 4. **Parse human-review-queue.** Read `.soloflow/human-review-queue.md` (if it exists). Separate:
    - **action_required:** entries with `type: action_required`. Group by `action` text. For each group, list the blocked checks, originating task IDs, and the **maximum severity** across the group (rank `high > medium > low`; treat a missing `severity` field as `medium` for backward compatibility with entries written before severity was tracked).
@@ -74,6 +75,7 @@ stats:
   human_needed_count: {N}
   blocked_count: {N}
   total_executor_loops: {N}
+  total_code_review_rounds: {N}
 
 completed_tasks:
   - id: TASK-NNN

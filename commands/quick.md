@@ -103,7 +103,7 @@ Read the verifier's verification report:
 
 ### If APPROVED
 1. Spawn **test-writer** with the plan, executor's changed files, and "no code-review report" (quick path skips code review). If `TESTS_WRITTEN`, run the test suite to confirm. One retry on failure; if still failing, log a finding and proceed.
-2. Write a done report to `.soloflow/archive/done/TASK-{NNN}-done.md` using the verifier's report.
+2. Write a done report to `.soloflow/archive/done/TASK-{NNN}-done.md` using the verifier's report. Use the frontmatter spec defined in `commands/executor.md` step f3 — populate `executor_loops` from your loop counter and set `code_review_rounds: 0` (quick path skips code review).
 3. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report .soloflow/archive/done/TASK-{NNN}-done.md --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings.md`. This removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`.
 4. Report success to the user with a summary of changes.
 

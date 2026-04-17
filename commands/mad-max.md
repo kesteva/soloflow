@@ -115,6 +115,8 @@ Mirror `commands/executor.md` Step 3 exactly. The **only** behavioral delta for 
 
 Concretely, for each ready task (dependencies satisfied):
 
+Initialize per-task counters in working memory: `executor_loops = 0` (incremented in step e on `NEEDS_CHANGES` retry) and `code_review_rounds = 0` (incremented in step f on `IMPROVEMENTS_NEEDED` retry). Both are written into the done-report frontmatter at step f3. CONTEXT_LIMIT respawns and `IMPROVEMENTS_NEEDED` re-verifies do not count toward `executor_loops`.
+
 a. Set task status to in_progress: `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/update-task-status.js" TASK-{NNN} in_progress`.
 
 a2. **Locate the plan file** via `.soloflow/active/plans/**/TASK-{NNN}-plan.md` (matches nested epic folders and flat orphan paths; excludes `EPIC-*.md`). Read the plan's `epic` frontmatter field — this determines where downstream reports go.
@@ -131,13 +133,13 @@ d. Spawn **verifier** with plan + executor report. Wait for verdict.
 
 e. Handle verifier verdict:
   - **APPROVED** / **APPROVED_WITH_DEFERRED** → proceed to code review (step f). Deferred checks already queued in `human-review-queue.md` by the verifier.
-  - **NEEDS_CHANGES** → if loops < `executor_retry_max` (default 3), re-spawn executor with verifier feedback. Otherwise write stuck report (same path rule as step c's STUCK) and run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue to next task.
+  - **NEEDS_CHANGES** → if `executor_loops < executor_retry_max` (default 3), increment `executor_loops` and re-spawn executor with verifier feedback. Otherwise write stuck report (same path rule as step c's STUCK) and run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue to next task.
   - **HUMAN_NEEDED** → append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue.
   - **CONTEXT_LIMIT** → respawn with handoff (same budget).
 
 f. Spawn **code-reviewer** with the plan + executor's changed files list. Wait for verdict.
   - **CLEAN** → proceed to step f2.
-  - **IMPROVEMENTS_NEEDED** (first time only) → re-spawn executor with review feedback, then re-verify. Does not consume executor retry budget.
+  - **IMPROVEMENTS_NEEDED** (first time only) → increment `code_review_rounds`, re-spawn executor with review feedback, then re-verify. Does not consume executor retry budget.
   - **SECURITY_ISSUE** → append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue.
   - **CONTEXT_LIMIT** → respawn with handoff.
 
@@ -146,7 +148,7 @@ f2. **Test writing.** Spawn the **test-writer** agent with the plan, executor's 
   - **NO_TESTS_NEEDED** / **NO_TEST_INFRA** → proceed.
   - **CONTEXT_LIMIT** → respawn with handoff.
 
-f3. Write done report to `.soloflow/archive/done/{epic}/TASK-{NNN}-done.md` (or flat), then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md` — this removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`. Run the epic archival check: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no sprint tasks from that epic remain, **log to `.soloflow/active/findings.md`** — `epic {epic} has no remaining tasks; candidate for archival` — and do NOT prompt. Archival waits for human review.
+f3. Write done report to `.soloflow/archive/done/{epic}/TASK-{NNN}-done.md` (or flat) using the frontmatter spec defined in `commands/executor.md` step f3 — populate `executor_loops` and `code_review_rounds` from the per-task counters tracked above. Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md` — this removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`. Run the epic archival check: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no sprint tasks from that epic remain, **log to `.soloflow/active/findings.md`** — `epic {epic} has no remaining tasks; candidate for archival` — and do NOT prompt. Archival waits for human review.
 
 g. Every `checkpoint_interval` completed tasks (default 3), write checkpoint to `.soloflow/checkpoint.md`.
 
@@ -216,6 +218,7 @@ Render using fields from the closer's gather and finalize outputs and the sprint
 - **Blocked:** {stats.blocked_count}
 - **Regressions flagged:** {sprint_verifier.regressions_count} (appended to human-review-queue)
 - **Total executor loops:** {stats.total_executor_loops}
+- **Total code review rounds:** {stats.total_code_review_rounds}
 - **Head SHA:** {head_sha}
 
 Next step: run /soloflow:executor to resume human review and merge, or inspect {run.branch} manually.
