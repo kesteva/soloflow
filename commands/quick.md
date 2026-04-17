@@ -62,8 +62,13 @@ estimated_complexity: low|medium|high
 {Restate each criterion with clear pass/fail definition}
 ```
 
-Write the plan file with `noclobber`/`wx` semantics; if it already exists (a parallel worker raced), recompute the next ID and retry. Then:
-- Add the task entry with `status: "in_progress"` to `.soloflow/active/sprint.json` (quick path skips backlog)
+Write the plan file with `noclobber`/`wx` semantics; if it already exists (a parallel worker raced), recompute the next ID and retry. Then add the task entry to `.soloflow/active/sprint.json` (quick path skips backlog) by running:
+
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/state/update-task-status.js" TASK-{NNN} in_progress --create --plan .soloflow/active/plans/TASK-{NNN}-plan.md
+```
+
+`--create` scaffolds `sprint.json` (with a `SPRINT-quick-<timestamp>` id) if it doesn't exist yet, and inserts the task entry.
 
 ## Step 4: Spawn Executor
 
