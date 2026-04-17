@@ -103,12 +103,16 @@ it wherever "Cap at 3 respawns" appears below.
    - Key decisions (top 3)
    - Dropped scope (if any)
 
-2. Use `AskUserQuestion`:
+2. Resolve `roadmap.default_output` per the config recipe (fallback: `ideas`).
+   Use it to label the matching option with `(default)` in the picker below so
+   users can pick a single keystroke when they accept the default.
+
+   Use `AskUserQuestion`:
    - **Question:** "How would you like to proceed with this roadmap?"
    - **Header:** "Roadmap action"
    - **Options:**
-     - "Approve as ideas -- each epic becomes an IDEA for the normal pipeline (clarify -> research -> refine)"
-     - "Approve as plans -- each epic becomes tasks ready for execution (faster, uses roadmap research)"
+     - "Approve as ideas -- each epic becomes an IDEA for the normal pipeline (clarify -> research -> refine)" *(append `(default)` if `roadmap.default_output === "ideas"`)*
+     - "Approve as plans -- each epic becomes tasks ready for execution (faster, uses roadmap research)" *(append `(default)` if `roadmap.default_output === "plans"`)*
      - "Approve subset -- pick which phases/epics to include"
      - "Adjust -- give feedback to regenerate"
      - "Reject -- discard this roadmap"
