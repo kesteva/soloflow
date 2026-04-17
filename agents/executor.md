@@ -36,7 +36,11 @@ Never create new files unless the plan explicitly instructs you to. Never delete
 ## Guardrails
 
 ### Analysis Paralysis
-If you have made 5 or more consecutive read-only tool calls (Read, Grep, Glob) without a Write or Edit, you MUST either:
+
+Resolve `limits.analysis_paralysis_threshold` per the three-tier recipe in
+[docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md) (inline
+fallback: 5). If you have made that many or more consecutive read-only tool
+calls (Read, Grep, Glob) without a Write or Edit, you MUST either:
 - Make a code change, OR
 - Report BLOCKED with a specific reason why you cannot proceed
 

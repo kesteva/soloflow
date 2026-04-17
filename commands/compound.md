@@ -22,6 +22,11 @@ Mapping used in this command:
 - `compounder` → `models.compounder` (fallback: `sonnet`)
 - `task-refiner` → `models.task_refiner` (fallback: `opus`) — used when materializing backlog items
 
+## Limits resolution
+
+Resolve `limits.context_limit_respawn_max` (fallback: 3) at run start and use
+it wherever "Cap at 3 respawns" appears below.
+
 ## Step 0: Check initialization
 
 If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
@@ -47,7 +52,7 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
    - If tester mode is on: `tester: true`
    - Instruction: "Produce `.soloflow/active/COMPOUND-PROPOSAL.md` with three buckets (A clean-ups, B backlog tasks, C CLAUDE.md / CODE-PATTERNS.md improvements). Route each C-item to the correct target file — rules and constraints go to CLAUDE.md, code patterns go to CODE-PATTERNS.md. {If tester: Also produce bucket D (SoloFlow improvements).} Do not apply anything. Cite concrete evidence for every item."
 3. Wait for the compounder to finish.
-   - If the compounder reports **CONTEXT_LIMIT**: read the `### Handoff` section. If a partial `COMPOUND-PROPOSAL.md` was written, read it. Spawn a **fresh compounder** with the remaining un-triaged inputs and the partial proposal content. Merge results. Cap at 3 respawns.
+   - If the compounder reports **CONTEXT_LIMIT**: read the `### Handoff` section. If a partial `COMPOUND-PROPOSAL.md` was written, read it. Spawn a **fresh compounder** with the remaining un-triaged inputs and the partial proposal content. Merge results. Cap at resolved `limits.context_limit_respawn_max`.
    Read the resulting `COMPOUND-PROPOSAL.md`.
 
 ## Step 3: Present proposal and collect approvals — one bucket at a time

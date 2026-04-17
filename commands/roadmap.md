@@ -23,6 +23,11 @@ Mapping used in this command:
 - `roadmap-generator` → `models.roadmap_generator` (fallback: `opus`)
 - `task-refiner` → `models.task_refiner` (fallback: `opus`)
 
+## Limits resolution
+
+Resolve `limits.context_limit_respawn_max` (fallback: 3) at run start and use
+it wherever "Cap at 3 respawns" appears below.
+
 ## Step 0: Initialize
 
 1. If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
@@ -67,7 +72,7 @@ Mapping used in this command:
    - Instruction: "Research this dimension for roadmap generation. Output the complete research report."
 
 4. Collect all research reports.
-   - If any researcher reports **CONTEXT_LIMIT**: read its `### Handoff` section. Spawn a **fresh roadmap-researcher** for the same dimension with: "Continue research from previous researcher's handoff: {handoff section}". Cap at 3 respawns per dimension.
+   - If any researcher reports **CONTEXT_LIMIT**: read its `### Handoff` section. Spawn a **fresh roadmap-researcher** for the same dimension with: "Continue research from previous researcher's handoff: {handoff section}". Cap at resolved `limits.context_limit_respawn_max` per dimension.
 
 5. Write each report to `.soloflow/active/research/ROADMAP-{NNN}-research-{dimension}.md`. Use the Write tool -- these files are new, not appending to existing files.
 
@@ -83,7 +88,7 @@ Mapping used in this command:
    - Instruction: "Generate a phased roadmap with epics. Use the provided roadmap ID. Output the complete ROADMAP file content."
 
 3. Capture the generator's output.
-   - If the generator reports **CONTEXT_LIMIT**: read the `### Handoff` section. Spawn a **fresh roadmap-generator** with the original inputs + "Continue from previous generator's handoff: {handoff section}". Cap at 3 respawns.
+   - If the generator reports **CONTEXT_LIMIT**: read the `### Handoff` section. Spawn a **fresh roadmap-generator** with the original inputs + "Continue from previous generator's handoff: {handoff section}". Cap at resolved `limits.context_limit_respawn_max`.
 
 4. Write to `.soloflow/active/roadmaps/ROADMAP-{NNN}.md` using noclobber semantics. If the target already exists (collision), recompute the next ID and retry.
 

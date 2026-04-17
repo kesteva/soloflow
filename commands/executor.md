@@ -8,7 +8,7 @@ allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 
 Phase 3 of the SoloFlow pipeline. Creates a sprint from ready tasks in the backlog and runs the executor → verifier → code-reviewer loop until the sprint is complete.
 
-Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDEA-NNN` to filter; if empty, include all ready tasks up to `max_sprint_tasks`)
+Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDEA-NNN` to filter; if empty, include all ready tasks up to resolved `limits.max_sprint_tasks`)
 
 ---
 
@@ -33,6 +33,18 @@ Mapping used in this command:
 You only need to load the config file once at the start of the run; cache the
 resolved values and reuse them for every spawn (including respawns on
 `CONTEXT_LIMIT` / `NEEDS_CHANGES` / `IMPROVEMENTS_NEEDED`).
+
+## Limits resolution (applies throughout this command)
+
+Resolve these limits per the recipe in
+[docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md) at the start
+of the run, then use the resolved values wherever the corresponding concept
+appears below (instead of the literal defaults):
+
+- `limits.executor_retry_max` (fallback: 3) — max `NEEDS_CHANGES` re-spawns in step 2.e
+- `limits.checkpoint_interval` (fallback: 3) — tasks between checkpoint writes in step 2.g
+- `limits.max_sprint_tasks` (fallback: 10) — cap on `$ARGUMENTS`-less sprint scope
+- `limits.context_limit_respawn_max` (fallback: 3) — max `CONTEXT_LIMIT` respawns per agent per task
 
 ## Sprint Initiation (Steps 0.5–2.8)
 
@@ -99,9 +111,9 @@ Use gathered backlog data. If `$ARGUMENTS` names specific task IDs or an `IDEA-N
 
 `{ready_count} ready tasks in backlog. How many to include in this sprint?`
 
-Options:
+Options (label `{M}` = resolved `limits.max_sprint_tasks`, fallback 10):
 - **Next 5** — first 5 ready tasks by ID order *(omit if fewer than 5; show actual count instead)*
-- **Next 10** — first 10 ready tasks *(omit if fewer than 10)*
+- **Next {M}** — first `{M}` ready tasks *(omit if fewer than `{M}` ready, or if `{M}` == 5)*
 - **All tasks in {epic name}** — all ready tasks in the natural next epic *(only if an epic with ready tasks exists)*
 - **Other** — user specifies task IDs or a count
 
@@ -174,7 +186,7 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
       - **STUCK** → write stuck report to `.soloflow/active/stuck/{epic}/TASK-{NNN}-stuck.md` if the plan has an epic, else flat at `.soloflow/active/stuck/TASK-{NNN}-stuck.md` (create the folder if missing). Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue.
       - **CONTEXT_LIMIT** → pass the handoff to a fresh executor. Do NOT run git commands yourself to reconstruct state — keep orchestrator context lean.
         1. Read the `### Handoff` section from the executor's status report (produced by the context monitor protocol).
-        2. If context-limit respawns for this agent on this task < `context_limit_respawn_max` (config default: 3), spawn a **fresh executor** with the original plan content prepended with:
+        2. If context-limit respawns for this agent on this task < resolved `limits.context_limit_respawn_max`, spawn a **fresh executor** with the original plan content prepended with:
            - The previous executor's `### Handoff` section verbatim (if present).
            - If the handoff section is **missing** (agent terminated before reporting): tell the new executor: *"The previous executor hit its context limit without producing a handoff. Before starting work, run `git log --oneline {base_sha}..HEAD -- {files_owned}` and `git status --porcelain` to determine what has already been done. Do NOT redo completed steps or re-commit already-committed changes."*
            - In both cases, include: *"Continue from where the previous executor left off."*
@@ -185,7 +197,7 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
    e. Handle verifier verdict:
       - **APPROVED** → proceed to code review (step f).
       - **APPROVED_WITH_DEFERRED** → proceed to code review (step f). The deferred checks are already queued in `.soloflow/human-review-queue.md` by the verifier — they will be re-verified in Step 4.
-      - **NEEDS_CHANGES** → if `executor_loops < executor_retry_max` (config default: 3), increment `executor_loops` and re-spawn executor with verifier feedback. Otherwise write stuck report.
+      - **NEEDS_CHANGES** → if `executor_loops < resolved limits.executor_retry_max`, increment `executor_loops` and re-spawn executor with verifier feedback. Otherwise write stuck report.
       - **HUMAN_NEEDED** → append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`.
       - **CONTEXT_LIMIT** → read the `### Handoff` section. Spawn a **fresh verifier** with the original inputs + "Continue verification from previous verifier's handoff: {handoff section}". Same respawn budget as executor CONTEXT_LIMIT handling.
 
@@ -219,7 +231,7 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
 
        Use the counters you tracked in working memory for this task. Copy `visual_mobile` and `visual_web` verbatim from the verifier's Visual Verification report block (the verifier emits the enum directly — do not re-classify here). If a prior verifier round emitted a different outcome and the task is now passing on a later round, use the *most recent* verifier's values. Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md` — this removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`. Then perform the **epic archival check**: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no tasks from that epic remain in `sprint.json`, flag the epic for the Step 4 human review with an "archive this epic?" prompt. On user approval (not automatic), move `.soloflow/active/plans/{epic}/EPIC-{epic}.md` → `.soloflow/archive/done/{epic}/EPIC-{epic}.md` and flip its frontmatter `status` from `active` to `complete`.
 
-   g. Every `checkpoint_interval` completed tasks (config default: 3), write checkpoint to `.soloflow/checkpoint.md`.
+   g. Every resolved `limits.checkpoint_interval` completed tasks, write checkpoint to `.soloflow/checkpoint.md`.
 
    h. **State commit happens inside `settle-task.js`** (invoked by each terminal verdict above). The orchestrator does not run `git add` / `git commit` itself for per-task state.
 

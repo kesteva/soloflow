@@ -24,6 +24,16 @@ Mapping used in this command:
 
 Cache the resolved values at the start of the run and reuse them for respawns.
 
+## Limits resolution (applies throughout this command)
+
+Resolve these limits per the recipe in
+[docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md) at run
+start, then use the resolved values wherever the corresponding concept appears
+below:
+
+- `limits.executor_retry_max` (fallback: 3) — cap on `NEEDS_CHANGES` retries in Step 7
+- `limits.context_limit_respawn_max` (fallback: 3) — cap on `CONTEXT_LIMIT` respawns
+
 ## Step 1: Check initialization
 
 If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
@@ -100,7 +110,7 @@ Read the executor's status report:
 - **If COMPLETED**: Proceed to Step 6 (verification).
 - **If BLOCKED**: Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} blocked --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings.md`. Report the blocker to the user. Stop here.
 - **If STUCK**: Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` with the executor's error details. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report .soloflow/active/stuck/TASK-{NNN}-stuck.md --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings.md`. Report to the user. Stop here.
-- **If CONTEXT_LIMIT**: Read the `### Handoff` section. If context-limit respawns < 3, spawn a **fresh executor** with the original plan + "Continue from previous executor's handoff: {handoff section}". Otherwise escalate as STUCK.
+- **If CONTEXT_LIMIT**: Read the `### Handoff` section. If context-limit respawns < resolved `limits.context_limit_respawn_max`, spawn a **fresh executor** with the original plan + "Continue from previous executor's handoff: {handoff section}". Otherwise escalate as STUCK.
 
 ## Step 6: Spawn Verifier
 
@@ -122,11 +132,11 @@ Read the verifier's verification report:
 4. Report success to the user with a summary of changes.
 
 ### If NEEDS_CHANGES
-Check the loop counter (starts at 1, max 3 from config `executor_retry_max`):
-- **If loops < 3**: Go back to Step 4, but append the verifier's feedback to the executor prompt:
+Check the loop counter (starts at 1, capped at resolved `limits.executor_retry_max`):
+- **If loops < resolved cap**: Go back to Step 4, but append the verifier's feedback to the executor prompt:
   "Previous attempt had issues. The verifier found: {verifier feedback}. Fix these specific issues."
   Increment the loop counter.
-- **If loops >= 3**: The task is stuck. Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` including the verifier's feedback, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report .soloflow/active/stuck/TASK-{NNN}-stuck.md --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings.md`. Report to the user that the fix needs human intervention.
+- **If loops >= resolved cap**: The task is stuck. Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` including the verifier's feedback, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report .soloflow/active/stuck/TASK-{NNN}-stuck.md --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings.md`. Report to the user that the fix needs human intervention.
 
 ### If HUMAN_NEEDED
 1. Append an entry to `.soloflow/human-review-queue.md` with the verifier's notes.

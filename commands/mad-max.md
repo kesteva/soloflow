@@ -31,6 +31,19 @@ Mad-max spawns the same agents as `/soloflow:executor`:
 
 Cache the resolved values at the start of the run and reuse them for respawns.
 
+## Limits resolution (applies throughout this command)
+
+Resolve these limits per the recipe in
+[docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md) at run
+start, then use them wherever the corresponding concept appears below:
+
+- `limits.executor_retry_max` (fallback: 3)
+- `limits.checkpoint_interval` (fallback: 3)
+- `limits.context_limit_respawn_max` (fallback: 3)
+
+Mad-max intentionally ignores `limits.max_sprint_tasks` — it drains every ready
+task, not a capped sprint.
+
 ## Step 0.5: Hard-stop guardrails
 
 Run these three checks in the orchestrator before spawning anything. Any failure prints a single-line reason and stops — mad-max never prompts.
@@ -144,13 +157,13 @@ c. Handle executor result:
   - **COMPLETED** → proceed to verification.
   - **BLOCKED** → run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} blocked --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue to next task.
   - **STUCK** → write stuck report to `.soloflow/active/stuck/{epic}/TASK-{NNN}-stuck.md` (or flat if no epic), then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue.
-  - **CONTEXT_LIMIT** → pass handoff to a fresh executor (up to `context_limit_respawn_max`, default 3). If exhausted, treat as STUCK. Same protocol as `commands/executor.md:135-141`.
+  - **CONTEXT_LIMIT** → pass handoff to a fresh executor (up to resolved `limits.context_limit_respawn_max`). If exhausted, treat as STUCK. Same protocol as `commands/executor.md:135-141`.
 
 d. Spawn **verifier** with plan + executor report. Wait for verdict.
 
 e. Handle verifier verdict:
   - **APPROVED** / **APPROVED_WITH_DEFERRED** → proceed to code review (step f). Deferred checks already queued in `human-review-queue.md` by the verifier.
-  - **NEEDS_CHANGES** → if `executor_loops < executor_retry_max` (default 3), increment `executor_loops` and re-spawn executor with verifier feedback. Otherwise write stuck report (same path rule as step c's STUCK) and run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue to next task.
+  - **NEEDS_CHANGES** → if `executor_loops < resolved limits.executor_retry_max`, increment `executor_loops` and re-spawn executor with verifier feedback. Otherwise write stuck report (same path rule as step c's STUCK) and run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue to next task.
   - **HUMAN_NEEDED** → append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue.
   - **CONTEXT_LIMIT** → respawn with handoff (same budget).
 
@@ -167,7 +180,7 @@ f2. **Test writing.** Spawn the **test-writer** agent with the plan, executor's 
 
 f3. Write done report to `.soloflow/archive/done/{epic}/TASK-{NNN}-done.md` (or flat) using the frontmatter spec defined in `commands/executor.md` step f3 — populate `executor_loops` and `code_review_rounds` from the per-task counters tracked above, and copy `visual_mobile` / `visual_web` verbatim from the most recent verifier's Visual Verification report block. Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md` — this removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`. Run the epic archival check: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no sprint tasks from that epic remain, **log to `.soloflow/active/findings.md`** — `epic {epic} has no remaining tasks; candidate for archival` — and do NOT prompt. Archival waits for human review.
 
-g. Every `checkpoint_interval` completed tasks (default 3), write checkpoint to `.soloflow/checkpoint.md`.
+g. Every resolved `limits.checkpoint_interval` completed tasks, write checkpoint to `.soloflow/checkpoint.md`.
 
 h. **State commit happens inside `settle-task.js`** (invoked by each terminal verdict above). The orchestrator does not run `git add` / `git commit` itself for per-task state.
 
