@@ -81,6 +81,7 @@ To uninstall: `bash /tmp/soloflow/scripts/uninstall.sh /path/to/your/project`
 | Command | When to Use |
 |---------|-------------|
 | `/soloflow:init` | One-time setup — scaffold `.soloflow/` state in the current project |
+| `/soloflow:config` | Interactive walkthrough of every SoloFlow setting; writes `.soloflow/config.json` |
 | `/soloflow:idea-extractor <description>` | Phase 1 — extract a structured idea from raw input, with optional research |
 | `/soloflow:planner <IDEA-NNN>` | Phase 2 — refine an approved idea into execution-ready task plans |
 | `/soloflow:executor [IDEA-NNN or TASK list]` | Phase 3 — run an execution sprint (executor → verifier → code reviewer) |

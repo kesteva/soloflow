@@ -233,6 +233,11 @@ Write the result to `.soloflow/config.json` with 2-space indentation and a
 trailing newline. Use `Write` — overwriting is expected here because we just
 merged with the previous content.
 
+**Tip for the user:** after init, re-run `/soloflow:config` anytime to adjust
+any setting (models, limits, phases, verification, git, roadmap, tester) — it
+walks through every value in `config/defaults.yaml` interactively and preserves
+unknown keys.
+
 ## Step 4.5: Status line setup
 
 The SoloFlow status line shows sprint/task state and a context usage bar. It requires a `statusLine` entry in the user's `~/.claude/settings.json` — hooks.json cannot register status lines.

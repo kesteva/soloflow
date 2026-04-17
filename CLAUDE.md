@@ -28,7 +28,7 @@ Seven-phase workflow orchestrated via Claude Code hooks and agent definitions:
 
 - **`agents/`** — Agent definitions as markdown with YAML frontmatter
 - **`hooks/`** — JavaScript Claude Code hooks, declared in `hooks/hooks.json` with `${CLAUDE_PLUGIN_ROOT}` paths
-- **`commands/`** — Slash command definitions, namespaced as `/soloflow:<name>`: `/soloflow:roadmap`, `/soloflow:idea-extractor`, `/soloflow:planner`, `/soloflow:executor`, `/soloflow:mad-max`, `/soloflow:compound`, `/soloflow:quick`, `/soloflow:status`, `/soloflow:verify`, `/soloflow:review-queue`
+- **`commands/`** — Slash command definitions, namespaced as `/soloflow:<name>`: `/soloflow:roadmap`, `/soloflow:idea-extractor`, `/soloflow:planner`, `/soloflow:executor`, `/soloflow:mad-max`, `/soloflow:compound`, `/soloflow:quick`, `/soloflow:status`, `/soloflow:verify`, `/soloflow:review-queue`, `/soloflow:config`
 - **`skills/`** — Skill definitions (e.g., `visual-verify/`)
 - MCP servers (Maestro, Playwright) are **not** shipped in a plugin `.mcp.json` — `/soloflow:init` detects them via `claude mcp list` and offers per-user or per-project registration to avoid collisions with existing installs.
 - **`scripts/`** — Shell scripts for the script-install fallback (`install.sh`, `update.sh`, `uninstall.sh`, `init.sh`). Primary install path is `/plugin install soloflow`.
@@ -56,6 +56,7 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 **`.soloflow/`** root:
 - `checkpoint.md` — context restoration after compaction
 - `human-review-queue.md` — batched items for human review
+- `config.json` — project-level overrides for every key in `config/defaults.yaml`. Read at runtime via the three-tier recipe in `docs/CUSTOMIZATION.md#config-resolution`. Edit interactively via `/soloflow:config`. Unknown keys are preserved; nothing reads them until they're documented in `defaults.yaml`.
 
 **ID allocation.** `IDEA-NNN`, `TASK-NNN`, and `SPRINT-NNN` are derived from the filesystem — there is no `counters.json`. To allocate the next ID, glob every location an ID of that kind could live, extract the numeric suffix, take `max + 1`, zero-pad to 3 digits. Reference globs:
 

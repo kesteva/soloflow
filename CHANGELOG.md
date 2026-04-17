@@ -2,6 +2,21 @@
 
 All notable changes to SoloFlow are documented in this file.
 
+## [Unreleased]
+
+### Added
+- **`/soloflow:config`** — interactive walkthrough for every SoloFlow setting. Shows defaults and current overrides, walks through models, phases, tester mode, limits, code review, verification, git, and roadmap categories, and writes changes to `.soloflow/config.json` with a confirm-at-exit diff. Preserves unknown keys, offers "Reset to defaults" for the managed key set, and optionally commits the file if it's tracked.
+- **All settings in `config/defaults.yaml` are now runtime-overridable.** Previously only 5 keys (visual verify + git branching) were read from `.soloflow/config.json` at runtime; the rest were embedded in agent sources. Every agent/command now consults the config at runtime using the shared three-tier recipe (config.json → defaults.yaml → inline fallback) documented in `docs/CUSTOMIZATION.md#config-resolution`. Model choices override per-agent at `Agent` spawn time via the tool's `model` param.
+- **Seven more agents added to the `models.*` schema** — `sprint_closer`, `sprint_verifier`, `test_writer`, `integration_tester`, `codebase_pruner`, `claudemd_pruner`, `claude_md_reviewer`. Any of them can now be retargeted (e.g., "run `test-writer` on `haiku`") via `/soloflow:config` without editing agent frontmatter.
+
+### Changed
+- **`docs/CUSTOMIZATION.md` rewrite.** Reframed as a complete reference for the 35+ runtime-overridable settings. Adds a canonical `## Config resolution` section with a stable anchor (`#config-resolution`) that every agent references, instead of duplicating the three-tier recipe prose.
+- **`agents/code-reviewer.md`** gates `/simplify` on `code_review.run_simplify` and `/security-review` on `code_review.run_security_review`; the orchestrator honors `code_review.enabled` and `code_review.review_retry_max`.
+- **`agents/verifier.md` and `skills/visual-verify/SKILL.md`** honor `verification.run_tests`, `verification.run_typecheck`, `verification.run_linter`, `verification.visual_screenshot_budget`, `verification.visual_prefer_hierarchy`, and `verification.visual_maestro_flow_dirs` instead of hardcoded values.
+- **Limits (`executor_retry_max`, `checkpoint_interval`, `max_sprint_tasks`, `context_limit_respawn_max`, `analysis_paralysis_threshold`) resolve at runtime** in the orchestrator commands (`executor`, `mad-max`, `quick`) and in `agents/executor.md`. The per-command "Cap at 3 respawns" prose in `planner`, `roadmap`, and `compound` now references `limits.context_limit_respawn_max`.
+- **`phases.research`** now gates whether `/soloflow:idea-extractor` even offers the "Approve + Research" option. When disabled project-wide, the research path is omitted from the picker.
+- **`roadmap.default_output`** is surfaced in the materialization picker so the default option is labeled `(default)`; users can set the project default to `plans` and get one-keystroke approval for plan materialization.
+
 ## [0.8.1] - 2026-04-17
 
 ### Changed
