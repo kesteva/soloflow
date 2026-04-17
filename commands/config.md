@@ -91,12 +91,14 @@ All sub-flows share a helper pattern for every individual setting:
 
 ### 5a. Models
 
-Ten settings: `models.verifier`, `models.executor`, `models.idea_extractor`,
-`models.task_refiner`, `models.compounder`, `models.researcher`,
-`models.code_reviewer`, `models.roadmap_researcher`, `models.roadmap_generator`,
-`models.sprint_initiator`.
+Seventeen settings — one per agent: `models.verifier`, `models.executor`,
+`models.idea_extractor`, `models.task_refiner`, `models.compounder`,
+`models.researcher`, `models.code_reviewer`, `models.roadmap_researcher`,
+`models.roadmap_generator`, `models.sprint_initiator`, `models.sprint_closer`,
+`models.sprint_verifier`, `models.test_writer`, `models.integration_tester`,
+`models.codebase_pruner`, `models.claudemd_pruner`, `models.claude_md_reviewer`.
 
-Ask in groups of up to 4 per `AskUserQuestion` call (three or four rounds). For each agent:
+For each agent:
 
 - **Question:** `"Which model should <agent_name> use? (default: <default>, current: <current or 'default'>)"`
 - **Header:** `"<agent_name>"`
@@ -104,12 +106,8 @@ Ask in groups of up to 4 per `AskUserQuestion` call (three or four rounds). For 
   - Label whichever option matches the current value with `(current)`.
   - `"Use default"` removes `config.models.<name>` if set (falls back to `defaults.yaml`).
 
-Group rounds (to stay within the per-question option cap — each `AskUserQuestion` call can carry up to 4 questions, so bundle 4 agents per call):
-- Round A: verifier, executor, idea_extractor, task_refiner
-- Round B: compounder, researcher, code_reviewer, roadmap_researcher
-- Round C: roadmap_generator, sprint_initiator
-
-Offer a `"Skip models — go back"` escape between rounds if desired.
+Bundle four agents per `AskUserQuestion` call (each call carries up to 4 questions).
+Between rounds, offer an `"All done with models — back"` escape.
 
 ### 5b. Phases
 
@@ -281,6 +279,13 @@ models.code_reviewer
 models.roadmap_researcher
 models.roadmap_generator
 models.sprint_initiator
+models.sprint_closer
+models.sprint_verifier
+models.test_writer
+models.integration_tester
+models.codebase_pruner
+models.claudemd_pruner
+models.claude_md_reviewer
 phases.clarify
 phases.research
 phases.roadmap_clarify

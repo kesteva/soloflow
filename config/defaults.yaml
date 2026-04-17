@@ -11,6 +11,13 @@ models:
   roadmap_researcher: sonnet
   roadmap_generator: opus
   sprint_initiator: sonnet
+  sprint_closer: sonnet
+  sprint_verifier: opus
+  test_writer: sonnet
+  integration_tester: sonnet
+  codebase_pruner: opus
+  claudemd_pruner: opus
+  claude_md_reviewer: opus
 
 tester: false  # enable soloflow self-improvement feedback in /soloflow:compound (bucket E)
 

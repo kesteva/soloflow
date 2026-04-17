@@ -57,6 +57,13 @@ All settings below live in `config/defaults.yaml` and are runtime-overridable. `
 | `models.roadmap_researcher` | `sonnet` | `agents/roadmap-researcher.md` |
 | `models.roadmap_generator` | `opus` | `agents/roadmap-generator.md` |
 | `models.sprint_initiator` | `sonnet` | `agents/sprint-initiator.md` |
+| `models.sprint_closer` | `sonnet` | `agents/sprint-closer.md` |
+| `models.sprint_verifier` | `opus` | `agents/sprint-verifier.md` |
+| `models.test_writer` | `sonnet` | `agents/test-writer.md` |
+| `models.integration_tester` | `sonnet` | `agents/integration-tester.md` |
+| `models.codebase_pruner` | `opus` | `agents/codebase-pruner.md` |
+| `models.claudemd_pruner` | `opus` | `agents/claudemd-pruner.md` |
+| `models.claude_md_reviewer` | `opus` | `agents/claude-md-reviewer.md` |
 
 Valid values: `opus`, `sonnet`, `haiku`. Callsites that spawn these agents via the `Agent` tool resolve `models.<name>` and pass it as the `model` param, overriding the agent's frontmatter.
 
