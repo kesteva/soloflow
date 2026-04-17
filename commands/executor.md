@@ -201,6 +201,8 @@ Using the gathered payload, present a consolidated review:
 
 **PAUSE HERE.** The user's job is taste-level review — everything functional has already been verified.
 
+Outside of an active sprint, the same queue can be triaged (with cruft sweep and visual verification) via `/soloflow:review-queue`.
+
 ## Step 4.4: Resolve merge choice
 
 If gathered `run` is null (no run branch was created during sprint init), set `merge_choice = "none"` and skip to Step 4.5.
