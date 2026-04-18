@@ -26,7 +26,7 @@ Seven-phase workflow orchestrated via Claude Code hooks and agent definitions:
 
 ### Components
 
-- **`agents/`** — Agent definitions as markdown with YAML frontmatter
+- **`agents/`** — Agent definitions as markdown with YAML frontmatter (includes `sprint-code-reviewer.md`, the end-of-sprint aggregate reviewer whose findings flow to human review rather than back to execution)
 - **`hooks/`** — JavaScript Claude Code hooks, declared in `hooks/hooks.json` with `${CLAUDE_PLUGIN_ROOT}` paths
 - **`commands/`** — Slash command definitions, namespaced as `/soloflow:<name>`: `/soloflow:roadmap`, `/soloflow:idea-extractor`, `/soloflow:planner`, `/soloflow:sprint`, `/soloflow:mad-max`, `/soloflow:compound`, `/soloflow:quick`, `/soloflow:status`, `/soloflow:verify`, `/soloflow:review-queue`, `/soloflow:config`
 - **`skills/`** — Skill definitions (e.g., `visual-verify/`)
@@ -43,7 +43,8 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 - `ideas/`, `research/`, `plans/`, `stuck/` — in-flight task files
 - `backlog.json` — tasks awaiting execution (written by refinement, read by execution)
 - `sprint.json` — active sprint + in-flight tasks (written/read by execution)
-- `findings.md` — append-only queue of out-of-scope observations logged by executor / verifier / code-reviewer during a sprint. Consumed and archived by the compounder.
+- `findings.md` — append-only queue of out-of-scope observations logged by executor / verifier / code-reviewer during a sprint. Consumed and archived by the compounder. Also receives accepted sprint-level code review findings at end-of-sprint triage.
+- `sprint-code-review.md` — transient file written by the sprint-code-reviewer at Step 3.6; read by the sprint-closer's gather phase and archived to `archive/sprint-code-reviews/` at sprint close.
 - `COMPOUND-PROPOSAL.md` — transient file written by the compounder during `/soloflow:compound`, archived after the user approves/rejects items.
 
 **`.soloflow/archive/`** — never read during execution:
@@ -94,7 +95,7 @@ State format: Markdown with YAML frontmatter (optimized for LLM parsing + git di
 
 ## Agent Model Strategy
 
-- **Opus:** Orchestrator, Verifier, Task Refiner, Code Reviewer, Roadmap Generator (quality-critical roles)
+- **Opus:** Orchestrator, Verifier, Task Refiner, Code Reviewer, Sprint Code Reviewer, Roadmap Generator (quality-critical roles)
 - **Sonnet:** Executor, Idea Extractor, Researcher, Roadmap Researcher, Compounder (cost optimization, ~60% reduction)
 
 ## Verification Layer
@@ -104,7 +105,8 @@ Multi-layered verification hierarchy (in order of authority):
 2. Visual: Maestro MCP (mobile), Playwright MCP (web)
 3. Requirements adherence with concrete evidence
 4. Goal-backward: "What must be TRUE for production?"
-5. Code review: `/simplify` (quality/reuse) + `/security-review` (security audit)
+5. Per-task code review: `/simplify` (quality/reuse) + `/security-review` (security audit). Can send the executor back with `IMPROVEMENTS_NEEDED`. Toggles: `code_review.enabled/.run_simplify/.run_security_review`.
+6. Sprint-level code review: aggregate `/simplify` + `/security-review` across `base_sha..HEAD` + cross-task redundancy sweep. **Advisory only** — findings go to human review (accept → findings.md / defer / dismiss), never back to execution. Toggles: `sprint_code_review.enabled/.run_simplify/.run_security_review` (resolve independently from `code_review.*`).
 
 **Visual verification:** The verifier checks tool availability at runtime (`which maestro`, `which npx`) before attempting MCP interactions. If tools aren't installed or MCP servers aren't running, Level 2 is skipped gracefully. See `docs/VISUAL-VERIFICATION-SETUP.md` for configuration.
 
