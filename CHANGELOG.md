@@ -4,6 +4,8 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-04-18
+
 ### Added
 - **`/soloflow:config`** — interactive walkthrough for every SoloFlow setting. Shows defaults and current overrides, walks through models, phases, tester mode, limits, code review, verification, git, and roadmap categories, and writes changes to `.soloflow/config.json` with a confirm-at-exit diff. Preserves unknown keys, offers "Reset to defaults" for the managed key set, and optionally commits the file if it's tracked.
 - **All settings in `config/defaults.yaml` are now runtime-overridable.** Previously only 5 keys (visual verify + git branching) were read from `.soloflow/config.json` at runtime; the rest were embedded in agent sources. Every agent/command now consults the config at runtime using the shared three-tier recipe (config.json → defaults.yaml → inline fallback) documented in `docs/CUSTOMIZATION.md#config-resolution`. Model choices override per-agent at `Agent` spawn time via the tool's `model` param.
