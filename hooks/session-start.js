@@ -27,7 +27,8 @@ const backlogPath = path.join(tasksDir, 'active', 'backlog.json');
 const sprintPath = path.join(tasksDir, 'active', 'sprint.json');
 const checkpointPath = path.join(tasksDir, 'checkpoint.md');
 const reviewQueuePath = path.join(tasksDir, 'human-review-queue.md');
-const findingsPath = path.join(tasksDir, 'active', 'findings.md');
+const findingsDir = path.join(tasksDir, 'active', 'findings');
+const legacyFindingsPath = path.join(tasksDir, 'active', 'findings.md');
 const doneDir = path.join(tasksDir, 'archive', 'done');
 
 let lines = ['## SoloFlow Status'];
@@ -102,17 +103,47 @@ if (fs.existsSync(reviewQueuePath)) {
   }
 }
 
-// Check for pending out-of-scope findings
-if (fs.existsSync(findingsPath)) {
+// Check for pending out-of-scope findings. Layout is one file per sprint
+// (active/findings/SPRINT-*-findings.md). Legacy projects may still have a
+// single active/findings.md until the next sprint-initiator migrates it.
+const findingsBySprint = [];
+if (fs.existsSync(findingsDir)) {
   try {
-    const content = fs.readFileSync(findingsPath, 'utf8');
-    const match = content.match(/pending_count:\s*(\d+)/);
-    const count = match ? parseInt(match[1], 10) : 0;
-    if (count > 0) {
-      lines.push(`Findings queue: ${count} out-of-scope item${count > 1 ? 's' : ''} awaiting next compound`);
+    for (const entry of fs.readdirSync(findingsDir)) {
+      if (!/-findings\.md$/.test(entry)) continue;
+      const sprintId = entry.replace(/-findings\.md$/, '');
+      const full = path.join(findingsDir, entry);
+      const content = fs.readFileSync(full, 'utf8');
+      const match = content.match(/pending_count:\s*(\d+)/);
+      const count = match ? parseInt(match[1], 10) : 0;
+      if (count > 0) findingsBySprint.push({ sprintId, count });
     }
   } catch (e) {
+    // Ignore directory read errors
+  }
+}
+if (fs.existsSync(legacyFindingsPath)) {
+  try {
+    const content = fs.readFileSync(legacyFindingsPath, 'utf8');
+    const match = content.match(/pending_count:\s*(\d+)/);
+    const count = match ? parseInt(match[1], 10) : 0;
+    if (count > 0) findingsBySprint.push({ sprintId: 'legacy', count });
+  } catch (e) {
     // Ignore read errors for optional file
+  }
+}
+if (findingsBySprint.length > 0) {
+  const total = findingsBySprint.reduce((sum, f) => sum + f.count, 0);
+  if (findingsBySprint.length === 1) {
+    const { sprintId, count } = findingsBySprint[0];
+    const label = sprintId === 'legacy' ? 'legacy findings.md' : sprintId;
+    lines.push(`Findings queue: ${count} out-of-scope item${count > 1 ? 's' : ''} in ${label} awaiting compound`);
+  } else {
+    const breakdown = findingsBySprint
+      .sort((a, b) => a.sprintId.localeCompare(b.sprintId))
+      .map((f) => `${f.sprintId} (${f.count})`)
+      .join(', ');
+    lines.push(`Findings queue: ${total} items across ${findingsBySprint.length} sprints awaiting compound — ${breakdown}`);
   }
 }
 

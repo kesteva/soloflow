@@ -27,13 +27,14 @@ write_if_missing() {
 }
 
 # Active state — read during execution
-mkdir -p "$TASKS_DIR"/active/{ideas,research,plans,stuck,roadmaps}
+mkdir -p "$TASKS_DIR"/active/{ideas,research,plans,stuck,roadmaps,findings,compound}
 
 # Archive — never read during execution
 mkdir -p "$TASKS_DIR"/archive/{done,reviews,findings,compound,roadmaps}
 
 # .gitkeep files so empty subdirs get tracked by git
 for sub in active/ideas active/research active/plans active/stuck active/roadmaps \
+           active/findings active/compound \
            archive/done archive/reviews \
            archive/findings archive/compound archive/roadmaps; do
   [ -e "$TASKS_DIR/$sub/.gitkeep" ] || touch "$TASKS_DIR/$sub/.gitkeep"
@@ -81,32 +82,29 @@ items: []
 No items pending review.
 EOF
 
-# Findings queue — out-of-scope observations logged by executor/verifier/reviewer
-# during a sprint. Consumed by the compounder at learning time.
-write_if_missing "$TASKS_DIR/active/findings.md" << 'EOF'
----
-pending_count: 0
-last_updated: null
----
-
-# Findings Queue
-
-Append out-of-scope observations here during a sprint. Each entry:
-
-```
-## FIND-{sprint}-{n}
-- **source:** TASK-NNN (executor|verifier|code-reviewer)
-- **type:** bug | cleanup | improvement | claude-md | anti-pattern
-- **severity:** low | medium | high
-- **status:** open
-- **location:** path/to/file.ext:line (optional)
-- **description:** one-paragraph observation
-- **suggested_action:** (optional)
-- **resolved_by:**
-```
-
-No findings yet.
-EOF
+# Findings queue — one file per sprint under active/findings/. Created on
+# demand by sprint-initiator when a sprint starts. We do NOT scaffold a
+# global findings.md here anymore (it is the legacy pre-backlog layout).
+#
+# Legacy migration (one-shot): if an old global `active/findings.md` still
+# exists AND an active sprint is present in sprint.json AND no per-sprint
+# file exists yet, move the legacy file to the per-sprint path so agents
+# start writing to the new location on the next sprint action. If no
+# active sprint exists, leave the legacy file alone and print an advisory
+# — the next /soloflow:compound will pick it up via its migration branch.
+if [ -f "$TASKS_DIR/active/findings.md" ]; then
+  sprint_id=""
+  if [ -f "$TASKS_DIR/active/sprint.json" ]; then
+    # shellcheck disable=SC2016
+    sprint_id=$(sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$TASKS_DIR/active/sprint.json" | head -n1)
+  fi
+  if [ -n "$sprint_id" ] && [ "$sprint_id" != "null" ] && [ ! -f "$TASKS_DIR/active/findings/${sprint_id}-findings.md" ]; then
+    mv "$TASKS_DIR/active/findings.md" "$TASKS_DIR/active/findings/${sprint_id}-findings.md"
+    echo "Migrated legacy active/findings.md -> active/findings/${sprint_id}-findings.md"
+  else
+    echo "Legacy active/findings.md detected; leaving in place. Next /soloflow:compound will attribute it to the selected sprint."
+  fi
+fi
 
 if [ "$MODE" = "fresh" ]; then
   echo "Initialized SoloFlow at $TASKS_DIR"

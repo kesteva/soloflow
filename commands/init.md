@@ -43,6 +43,8 @@ empty `.gitkeep` file into it.
 - `.soloflow/active/research`
 - `.soloflow/active/plans`
 - `.soloflow/active/stuck`
+- `.soloflow/active/findings`
+- `.soloflow/active/compound`
 - `.soloflow/archive/ideas`
 - `.soloflow/archive/done`
 - `.soloflow/archive/reviews`
@@ -77,17 +79,11 @@ user state (backlog tasks, sprint data, checkpoint notes). Increment
 }
 ```
 
-**`.soloflow/active/findings.md`**
-```markdown
----
-pending_count: 0
-last_updated: null
----
+**Findings queue layout**
 
-# Findings Queue
+Findings are written one file per sprint at `.soloflow/active/findings/SPRINT-NNN-findings.md`. The per-sprint file is created by `sprint-initiator` when each sprint starts, so `/soloflow:init` does NOT scaffold a global `findings.md` anymore.
 
-No findings yet.
-```
+**Legacy migration (one-shot).** If a legacy `.soloflow/active/findings.md` exists and an active sprint is present in `sprint.json`, move the legacy file to `.soloflow/active/findings/{sprint.id}-findings.md` (mirrors `scripts/init.sh` behavior). If no active sprint, leave the legacy file in place and print: `Legacy active/findings.md detected; next /soloflow:compound will attribute it to the selected sprint.` Increment `files_created` only when a move actually happens.
 
 **`.soloflow/checkpoint.md`**
 ```markdown
