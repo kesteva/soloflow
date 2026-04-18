@@ -49,6 +49,12 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
 2. Capture the refiner's output.
    - If the task-refiner reports **CONTEXT_LIMIT**: read the `### Handoff` section to get plans produced so far. Write the completed plans to disk (same as normal flow). Spawn a **fresh task-refiner** with: the original idea, "Continue refinement from previous refiner's handoff. These tasks are already planned: {list}. Start numbering at TASK-{next}.", the handoff content, and the updated starting counter. Merge outputs. Cap at resolved `limits.context_limit_respawn_max` context-limit respawns; after that, proceed with whatever plans exist.
 3. Parse the output into individual plan files and any new EPIC-{slug}.md blocks.
+3a. **Validate `test_strategy` ↔ `files_owned` parity (deterministic gate).** For each parsed plan, cross-check every `test_strategy.targets[].test_file` against that plan's `files_owned` list:
+   - If a target `test_file` is missing from `files_owned`, auto-insert it into `files_owned` before writing the plan to disk.
+   - Record each auto-correction (task ID + file path) and surface the list in Step 3 so the user sees what was adjusted.
+   - If more than 3 plans required auto-correction in a single refinement run, that is a signal the refiner misunderstood scope — flag it prominently in the Step 3 review and offer the "Request changes" option proactively.
+
+   This gate closes the parity loop at plan-authoring time so the executor never has to trigger a `scope_deviation` finding for this pattern.
 4. Write each plan based on its `epic` frontmatter field:
    - If `epic: <slug>` is set → write to `.soloflow/active/plans/{slug}/TASK-{NNN}-plan.md`, creating the folder if missing.
    - If `epic` is absent or `null` → write to `.soloflow/active/plans/TASK-{NNN}-plan.md` (flat, orphan).

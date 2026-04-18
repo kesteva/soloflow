@@ -60,6 +60,13 @@ You may also receive a list of **existing epic slugs** (with the contents of the
    - If the task is purely config, docs, or trivial wiring, note `test_strategy: none` with a one-line justification.
    - The test-writer agent uses this section after execution — make it concrete enough to act on.
 
+5c. **Validate `test_strategy` ↔ `files_owned` parity.** Before emitting a plan, cross-check every `test_strategy.targets[].test_file` against that plan's `files_owned`:
+   - If the test file is already in `files_owned` → ✓ proceed.
+   - If the test file is absent but the strategy requires **modifying** it → move it into `files_owned` (or add the new path the executor must create).
+   - If the test file only needs to be **executed** (not modified) → reframe the strategy step as "run `<command>`, confirm exit 0" and keep it out of `files_owned`.
+
+   Any file a plan's `test_strategy` instructs the executor to modify MUST appear in `files_owned`. This check must pass before emitting the plan — do not rely on executor-time scope-deviation recovery.
+
 6. **Answer three critical questions per plan:**
    - Hardest decision and why this approach was chosen
    - Rejected alternatives and what would change your mind
