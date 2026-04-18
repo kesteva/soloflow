@@ -45,7 +45,9 @@ Phase: gather
    - **sprint_code_review:** entries with `type: sprint_code_review`. Keep each entry separately (do NOT group by action — each finding is standalone). Capture `severity`, `finding`, `location`, `recommendation`, and `suspected_tasks`.
    - **other:** non-actionable entries (informational verifier notes, HUMAN_NEEDED escalations, already-overridden entries). Capture brief summaries and a count.
 
-5. **Detect stale compound proposal.** If `.soloflow/active/COMPOUND-PROPOSAL.md` exists, read its YAML frontmatter and extract the `sprint:` field. Note whether the destination `.soloflow/archive/compound/{sprint}-proposal.md` already exists.
+5. **Detect stale compound proposal drafts.** Glob `.soloflow/active/compound/SPRINT-*-proposal.md` (per-sprint drafts) AND `.soloflow/active/COMPOUND-PROPOSAL.md` (pre-migration legacy single slot). For each match, read the YAML frontmatter to extract the `sprint:` field, and check whether the destination `.soloflow/archive/compound/{sprint_field}-proposal.md` already exists. Emit one entry per draft so the orchestrator can see every pending proposal.
+
+   **Note:** sprint-closer does NOT archive the per-sprint findings file (`.soloflow/active/findings/{sprint.id}-findings.md`). It must stay in `active/findings/` until `/soloflow:compound` consumes it. Archival is a compound-phase responsibility.
 
 6. **Resolve merge config.** Check in order (first hit wins):
    - `.soloflow/config.json` → `git.merge_strategy`
@@ -133,10 +135,11 @@ sprint_code_review:
     important: {N}
     minor: {N}
 
-compound_proposal:
-  exists: {true|false}
-  sprint_field: "{SPRINT-NNN or null}"
-  destination_exists: {true|false}
+compound_drafts:  # one entry per draft found in active/compound/ (plus legacy single-slot if present)
+  - source_path: "{path to active draft}"
+    sprint_field: "{SPRINT-NNN or null}"
+    destination_exists: {true|false}
+  # empty list if none
 
 merge_strategy: "{--no-ff|--ff-only|...}"
 `` `
@@ -165,11 +168,13 @@ Decisions:
 
 1. **Mark sprint complete.** Read `.soloflow/active/sprint.json`. If `sprint.status != "complete"`, set it to `"complete"` and write back. (Idempotent.)
 
-2. **Archive stale compound proposal.** If `.soloflow/active/COMPOUND-PROPOSAL.md` exists:
-   a. Read its YAML frontmatter to extract the `sprint:` field.
+2. **Archive stale compound proposal drafts.** For each entry in `compound_drafts` from Phase 1:
+   a. Read the file's YAML frontmatter to extract the `sprint:` field (already captured in gather — re-read here to avoid stale data).
    b. If a `sprint:` field is present and `.soloflow/archive/compound/{sprint_field}-proposal.md` does NOT exist, move the file there.
-   c. If the destination already exists, leave the active file in place — do not overwrite. Record `skipped_reason: already_exists` in output.
+   c. If the destination already exists, leave the active file in place — do not overwrite. Record `skipped_reason: already_exists` for that draft.
    d. If the frontmatter lacks a `sprint:` field, leave the file in place. Record `skipped_reason: missing_sprint_field`.
+
+   **Do NOT archive the per-sprint findings file.** `.soloflow/active/findings/{sprint.id}-findings.md` stays in place for `/soloflow:compound` to consume later.
 
 2b. **Archive sprint-verification file.** If `.soloflow/active/sprint-verification.md` exists, move it to `.soloflow/archive/sprint-verifications/{sprint.id}-verification.md` (create the folder if missing). If the destination already exists, leave the active file in place and record `skipped_reason: already_exists` in the output's `archived_sprint_verification` field. If the file doesn't exist, record `archived_sprint_verification.moved: false` and move on.
 
@@ -178,9 +183,10 @@ Decisions:
 3. **Commit sprint close.**
    - `git add .soloflow/active/sprint.json`
    - Also add `.soloflow/human-review-queue.md` if it exists.
-   - Also add `.soloflow/active/findings.md` if it exists.
+   - Do NOT add the per-sprint findings file — it stays active for `/soloflow:compound` to archive later.
    - Also add `.soloflow/checkpoint.md` if it exists.
-   - Also add `.soloflow/archive/compound/{sprint_field}-proposal.md` if step 2 moved a file.
+   - Also add every `.soloflow/archive/compound/{sprint_field}-proposal.md` that step 2 moved (one per archived draft).
+   - Also add the corresponding `.soloflow/active/compound/{sprint_field}-proposal.md` (or the legacy `.soloflow/active/COMPOUND-PROPOSAL.md`) for the deletion side of each archived draft.
    - Also add `.soloflow/archive/sprint-verifications/{sprint.id}-verification.md` if step 2b moved a file (and `.soloflow/active/sprint-verification.md` for the deletion).
    - Also add `.soloflow/archive/sprint-code-reviews/{sprint.id}-code-review.md` if step 2c moved a file (and `.soloflow/active/sprint-code-review.md` for the deletion).
    - If `git diff --cached --quiet` reports no staged changes, skip the commit.
@@ -223,10 +229,12 @@ sprint:
 
 close_commit: "chore({sprint_id}): close sprint"  # or null if nothing to commit
 
-archived_proposal:
-  moved: {true|false}
-  destination: "{path or null}"
-  skipped_reason: "{already_exists|missing_sprint_field|null}"
+archived_proposals:  # one entry per draft the finalize phase processed
+  - source_path: "{path that was archived or left in place}"
+    moved: {true|false}
+    destination: "{path or null}"
+    skipped_reason: "{already_exists|missing_sprint_field|null}"
+  # empty list if no drafts existed
 
 archived_sprint_verification:
   moved: {true|false}
