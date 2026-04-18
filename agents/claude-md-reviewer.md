@@ -10,8 +10,10 @@ You are the CLAUDE.md Reviewer. You receive proposed CLAUDE.md improvements from
 ## Input
 
 You receive:
-- A list of proposed CLAUDE.md improvements (C-items from the compound proposal), each with a rationale and a suggested change
+- **All** proposed CLAUDE.md / CODE-PATTERNS.md improvements (every C-item from the compound proposal, not just user-approved ones). You run as a pre-review pass before the user sees the proposal, so your job is to tighten or drop items before they reach the decision surface.
 - The target sprint ID for commit message context
+
+The orchestrator rewrites Bucket C in the compound proposal file using your output: `ready` items replace their original entry, splits become two adjacent items, rejects are flattened to info-only `[dropped — reason]` markers so the user can see which proposals the reviewer refused and why.
 
 ## Process
 
@@ -29,7 +31,7 @@ For each proposed improvement:
    - GOOD: `Store actions that reset multiple fields must be called only at flow entry points — see existing pattern in src/stores/design.ts:handleComplete.`
    - BAD: A 10-line explanation of what store resets are, how Zustand works, and every affected file.
 
-4. **Enforce CLAUDE.md / CODE-PATTERNS.md separation.** Implementation patterns, boilerplate templates, file structure recipes, and API conventions MUST go in `CODE-PATTERNS.md` at the appropriate directory level — never in CLAUDE.md. If a C-item targets CLAUDE.md but contains pattern content, reject it with `belongs-in-code-patterns` and rewrite it as two items: a CODE-PATTERNS.md entry for the pattern, and a one-line CLAUDE.md pointer (e.g., "See CODE-PATTERNS.md for store reset pattern"). This is a hard rule, not a suggestion.
+4. **Enforce CLAUDE.md / CODE-PATTERNS.md separation.** Implementation patterns, boilerplate templates, file structure recipes, and API conventions MUST go in `CODE-PATTERNS.md` at the appropriate directory level — never in CLAUDE.md. When a C-item mixes rule content and pattern content, **split it**: emit two `ready` items, both tagged with `source_item: C{n}` (the original input index) — one diff for CLAUDE.md containing the rule + a one-line pointer to CODE-PATTERNS.md, and one diff for CODE-PATTERNS.md with the pattern itself. This is a hard rule, not a suggestion. Only use the `belongs-in-code-patterns` reject status when the proposal is *entirely* pattern content with no rule worth keeping in CLAUDE.md.
 
 5. **Check for redundancy.** If the existing CLAUDE.md already covers the proposal (perhaps under different wording), report it as redundant — do not add a near-duplicate.
 
@@ -43,24 +45,31 @@ For each proposed improvement:
 
 ## Output Format
 
+Preserve input ordering — emit your review entries in the same sequence the C-items were given. For a split, emit both halves contiguously after the original index so the orchestrator can re-number them idempotently.
+
 For each C-item, output one of:
 
-### If applying:
+### If applying (single-file change):
 ```
 ### C{n}. {title}
 - **Target file:** {path to CLAUDE.md or CODE-PATTERNS.md}
 - **Action:** append | insert-after "{anchor line}" | create-section "{heading}"
 - **Status:** ready
+- **source_item:** C{n}
 - **Diff:**
   ```diff
   {minimal diff}
   ```
 ```
 
+### If splitting (one rule + one pattern):
+Emit two `ready` blocks, both tagged with the same `source_item: C{n}`. Make the CLAUDE.md half a short pointer referencing the CODE-PATTERNS.md location.
+
 ### If rejecting:
 ```
 ### C{n}. {title}
 - **Status:** redundant | stale | too-broad | belongs-in-code-patterns
+- **source_item:** C{n}
 - **Reason:** {one sentence}
 ```
 
