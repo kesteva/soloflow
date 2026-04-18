@@ -65,6 +65,7 @@ All settings below live in `config/defaults.yaml` and are runtime-overridable. `
 | `models.codebase_pruner` | `opus` | `agents/codebase-pruner.md` |
 | `models.claudemd_pruner` | `opus` | `agents/claudemd-pruner.md` |
 | `models.claude_md_reviewer` | `opus` | `agents/claude-md-reviewer.md` |
+| `models.compound_skeptic` | `opus` | `agents/compound-skeptic.md` |
 
 Valid values: `opus`, `sonnet`, `haiku`. Callsites that spawn these agents via the `Agent` tool resolve `models.<name>` and pass it as the `model` param, overriding the agent's frontmatter.
 
@@ -105,9 +106,24 @@ These toggles control the **per-task** reviewer that runs inside the executor lo
 | `sprint_code_review.run_simplify` | `true` | Run `/simplify` across the whole sprint diff |
 | `sprint_code_review.run_security_review` | `true` | Run `/security-review` across the whole sprint diff |
 
-The sprint-level reviewer runs **once per sprint** against `base_sha..HEAD`, specifically hunting cross-task patterns (duplicated utilities, inconsistent patterns, redundant helpers). Findings **never trigger re-execution** — they land in `.soloflow/human-review-queue.md` as `type: sprint_code_review` entries and are triaged during end-of-sprint human review with Accept / Defer / Dismiss. Accepted findings append to `.soloflow/active/findings.md` for the compounder to pick up.
+The sprint-level reviewer runs **once per sprint** against `base_sha..HEAD`, specifically hunting cross-task patterns (duplicated utilities, inconsistent patterns, redundant helpers). Findings **never trigger re-execution** — they land in `.soloflow/human-review-queue.md` as `type: sprint_code_review` entries and are triaged during end-of-sprint human review with Accept / Defer / Dismiss. Accepted findings append to the active sprint's findings file (`.soloflow/active/findings/{sprint.id}-findings.md`) for the compounder to pick up.
 
 These toggles resolve independently from `code_review.*` — you can disable the per-task loop and keep the sprint-level safety net, or vice versa.
+
+### Compound
+
+Compound is Phase 6 — the end-of-sprint learning pass. Findings, proposals, and archives are all per-sprint, so multiple sprints can wait for compound simultaneously (compound backlog). Drain in bulk with `/soloflow:compound --all` or pick a specific `SPRINT-NNN`.
+
+| Setting | Default | Description |
+|---|---|---|
+| `compound.skeptic.enabled` | `true` | Spawn `compound-skeptic` in Step 2.6 after the proposal is written. Emits per-item IMPLEMENT / DONT_IMPLEMENT verdicts and enables the "Accept skeptic's recommendations" option in Step 3. |
+| `compound.claude_md_reviewer.enabled` | `true` | Spawn `claude-md-reviewer` in Step 2.5 against **all** C-items before the user sees options. Tightens or drops items, splits mixed rule+pattern proposals into a CLAUDE.md pointer + CODE-PATTERNS.md entry. |
+| `compound.claude_md_reviewer.pre_review_feedback_rounds` | `2` | Cap on how many times "Give feedback" on Bucket C can re-run compounder + claude-md-reviewer before the last reviewer output is used as final. |
+| `compound.pending_sprints.picker_threshold` | `2` | When `/soloflow:compound` is invoked with no argument, prompt the sprint picker if ≥ this many sprints are pending; fewer → use the oldest silently. |
+
+Bucket C pre-review, the skeptic pass, and the picker are all independent — disabling one does not affect the others. The "Accept skeptic's recommendations" option only appears in Step 3 when the skeptic ran AND the bucket has at least one `DONT_IMPLEMENT` verdict (otherwise it's redundant with Approve all).
+
+Findings are stored at `.soloflow/active/findings/SPRINT-NNN-findings.md` — one file per sprint, created by `sprint-initiator` at sprint start. After a sprint is compounded, its findings file is archived to `.soloflow/archive/findings/`. Sprint close does NOT archive findings — they stay in `active/findings/` until `/soloflow:compound` runs against the sprint. Likewise compound proposals are drafted at `.soloflow/active/compound/SPRINT-NNN-proposal.md` and archived after the user reviews them.
 
 ### Verification
 

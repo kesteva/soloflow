@@ -19,6 +19,7 @@ models:
   claudemd_pruner: opus
   claude_md_reviewer: opus
   sprint_code_reviewer: opus
+  compound_skeptic: opus
 
 tester: false  # enable soloflow self-improvement feedback in /soloflow:compound (bucket E)
 
@@ -44,6 +45,23 @@ sprint_code_review:
   enabled: true              # end-of-sprint aggregate reviewer; independent of per-task code_review.*
   run_simplify: true
   run_security_review: true
+
+# Compound pipeline customization
+#   skeptic            = run compound-skeptic agent against proposal before user review;
+#                        adds per-item IMPLEMENT / DONT_IMPLEMENT verdicts and enables the
+#                        "Accept skeptic's recommendations" option in Step 3.
+#   claude_md_reviewer = run claude-md-reviewer on ALL C-items before presentation
+#                        (Step 2.5); tightens diffs, splits rule+pattern items.
+#   pending_sprints    = compound-backlog picker UX when /soloflow:compound is invoked
+#                        with no argument and ≥ picker_threshold pending sprints exist.
+compound:
+  skeptic:
+    enabled: true
+  claude_md_reviewer:
+    enabled: true
+    pre_review_feedback_rounds: 2   # cap on compounder+reviewer re-runs per "Give feedback" cycle
+  pending_sprints:
+    picker_threshold: 2             # prompt with picker when ≥ N pending sprints; fewer → pick oldest silently
 
 verification:
   run_tests: true
