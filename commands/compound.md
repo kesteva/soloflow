@@ -24,6 +24,7 @@ and pass the resolved value as the Agent tool's `model` parameter.
 
 Mapping used in this command:
 - `compounder` → `models.compounder` (fallback: `sonnet`)
+- `claude-md-reviewer` → `models.claude_md_reviewer` (fallback: `opus`) — pre-review of Bucket C in Step 2.5
 - `task-refiner` → `models.task_refiner` (fallback: `opus`) — used when materializing backlog items
 
 ## Limits resolution
@@ -80,6 +81,23 @@ If nothing was done and nothing was logged (empty done/stuck dirs AND empty find
    - If the compounder reports **CONTEXT_LIMIT**: read the `### Handoff` section. If a partial `active/compound/{sprint_id}-proposal.md` was written, read it. Spawn a **fresh compounder** with the remaining un-triaged inputs and the partial proposal content. Merge results. Cap at resolved `limits.context_limit_respawn_max`.
    Read the resulting `active/compound/{sprint_id}-proposal.md`.
 
+## Step 2.5: Pre-review Bucket C (claude-md-reviewer)
+
+Runs before the user sees any options, so the C-bucket presented in Step 3 is already tightened.
+
+1. **Resolve `compound.claude_md_reviewer.enabled`** per the three-tier recipe (fallback: `true`). If `false`, skip this step entirely and carry raw C-items into Step 3.
+2. Parse Bucket C from `active/compound/{sprint_id}-proposal.md`. If the bucket is empty (`_No items._`) or has zero entries, skip.
+3. Spawn the **claude-md-reviewer** agent with:
+   - The full list of C-items (all of them — not user-filtered)
+   - The target sprint ID
+   - Instruction: *"Review every proposed CLAUDE.md / CODE-PATTERNS.md improvement against the existing codebase and CLAUDE.md files. Produce tightly scoped diffs at the lowest appropriate directory level. Reject redundant, stale, or overly broad proposals with a reason code. When an item mixes rule content and pattern content, SPLIT it into two ready items (one for CLAUDE.md, one for CODE-PATTERNS.md) both tagged source_item: C{n}."*
+   - Handle **CONTEXT_LIMIT** respawns identically to Step 2 (capped at resolved `limits.context_limit_respawn_max`).
+4. **Rewrite Bucket C in the proposal file** using the reviewer's output:
+   - **Ready items:** replace the original item's content with the reviewer's refined diff + `**Status:** ready` tag. Preserve the item's title and source citation. For split items, insert both halves contiguously and keep both with their `source_item: C{n}` tag.
+   - **Rejected items:** flatten to an info-only block with heading `### C{n}. {title} [dropped — {reason}]` and a single `**Reason:** {one sentence}` line. Do NOT include the original diff.
+   - Re-number the **ready items** sequentially (`C1..Cm`) so "Approve some" can reference them unambiguously. Keep the original `source_item` tag inside each item so the audit trail is preserved. Rejected items keep their `[dropped]` prefix and do not consume an index.
+5. If every C-item was rejected, note it for Step 3 (present dropped list info-only; skip the approve/reject prompt for C entirely).
+
 ## Step 3: Present proposal and collect approvals — one bucket at a time
 
 Walk through each bucket sequentially. For each non-empty bucket:
@@ -95,6 +113,19 @@ Walk through each bucket sequentially. For each non-empty bucket:
    - **Reject all** — skip this bucket entirely
    - **Give feedback** — user provides notes; re-run the compounder for this bucket only with the feedback appended, then re-present
 3. Record the per-bucket decisions before moving to the next bucket.
+
+**Bucket C presentation (after claude-md-reviewer pre-review):**
+
+Bucket C's summary has two parts:
+- Count of ready items — *approvable*. Use `Cn` indices from the renumbered list.
+- Count of dropped items — *info-only*, with their reason codes. Shown as `[dropped — reason]`. Not indexable by "Approve some".
+
+Question format: `Bucket C — CLAUDE.md / CODE-PATTERNS.md improvements: {m} approvable, {k} dropped by reviewer ({reason codes}). {approvable titles comma-separated}. Approve?`
+
+- "Approve all" accepts every ready item.
+- "Approve some" lists ready indices only (e.g., `C1, C3`); unlisted ready items are rejected.
+- If every C-item was dropped (`m == 0`), skip the AskUserQuestion entirely — just print the dropped list as info and continue to the next bucket.
+- **"Give feedback" on Bucket C:** re-run the compounder with the feedback appended **and then re-run Step 2.5** (claude-md-reviewer) before re-presenting. Cap the loop at resolved `compound.claude_md_reviewer.pre_review_feedback_rounds` (fallback: `2`). When the cap is hit, print `Feedback budget exhausted — using last reviewer output as final.` and treat the current state of Bucket C as the final presentation. Feedback on buckets A/B/D does not re-trigger Step 2.5.
 
 **Bucket D exception (SoloFlow improvements):** Do not use the standard approve/reject flow. Instead:
 1. Print the full feedback write-up inline so the user can read and copy it directly.
@@ -131,13 +162,15 @@ For the set of approved B-items, produce execution-ready task plans by spawning 
 8. Commit `feat({sprint}): plan TASK-{NNN}..TASK-{MMM} from compound` including all plan files and backlog.json.
 
 ### Bucket C — CLAUDE.md / CODE-PATTERNS.md improvements
-Spawn the **claude-md-reviewer** agent to review and tighten the approved C-items before applying:
 
-1. Pass all approved C-items to the claude-md-reviewer agent with instruction: *"Review these proposed CLAUDE.md improvements against the existing codebase and CLAUDE.md files. Produce tightly scoped diffs at the lowest appropriate directory level. Reject redundant, stale, or overly broad proposals."*
-2. Wait for the reviewer's output. For each item it marks `ready`:
-   - Apply the diff to the target file using `Edit`. If the target file doesn't exist (e.g., a new scoped CLAUDE.md or CODE-PATTERNS.md), create it with `Write`.
-   - Commit with `docs({sprint}): {title}` per item.
-3. For items the reviewer rejects (redundant / stale / too-broad / belongs-in-code-patterns): skip them. Note in the final report which were rejected and why.
+The diffs are already tightened by Step 2.5. No re-spawn of claude-md-reviewer here.
+
+For each approved C-item (already `ready` in the proposal):
+1. Read the item's `**Target file:**` and `**Diff:**`.
+2. Apply the diff using `Edit` (or `Write` if the target file does not exist — applies when creating a new scoped CLAUDE.md or CODE-PATTERNS.md).
+3. Commit with `docs({sprint}): {title}` per item.
+
+Dropped items (from Step 2.5) are never applied — they stay in the archived proposal as an audit trail only.
 
 ### Bucket D — SoloFlow improvements (tester mode only)
 
@@ -181,7 +214,7 @@ Findings : archived → archive/findings/SPRINT-{NNN}-findings.md
 
 - This command mutates the codebase for approved clean-ups and CLAUDE.md edits. Bucket B spawns the task-refiner to produce plans.
 - The compounder agent is read-only except for its own per-sprint proposal draft (`active/compound/SPRINT-NNN-proposal.md`) — it never writes directly to plans or CLAUDE.md.
-- The claude-md-reviewer agent is read-only — it reviews proposals and produces diffs; the main agent applies them.
+- The claude-md-reviewer agent runs as a pre-review in Step 2.5, tightening Bucket C before the user sees options. It can only edit the proposal file to insert `[reviewer: ready]` / `[dropped — reason]` markers and refined diffs.
 - Rejected items are preserved in the archived proposal so they can be revisited manually.
 - Multiple sprints can await compound simultaneously. This command enables a compound backlog — use `--all` to drain it in one go, or pick a specific sprint.
 
