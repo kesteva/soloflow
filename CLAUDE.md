@@ -18,7 +18,7 @@ Seven-phase workflow orchestrated via Claude Code hooks and agent definitions:
 3. **Task Refinement** (Opus) — idea + research → execution-ready `.soloflow/active/plans/TASK-NNN-plan.md`
 4. **Execution Sprint** — Orchestrator (Opus) coordinates parallel Executor (Sonnet) + Verifier (Opus) + Code Reviewer (Opus) subagents via worktrees
 5. **Human Review** — batched taste-level review (functional verification already done)
-6. **Compound Learning** (Sonnet, interactive) — analyzes done reports + stuck reports + `.soloflow/active/findings.md` and produces a three-bucket proposal (`COMPOUND-PROPOSAL.md`): (A) clean-ups to apply immediately, (B) backlog ideas → `active/ideas/IDEA-NNN.md`, (C) CLAUDE.md improvements to apply directly. The user approves per-item; the main agent applies approved items (clean-ups as direct edits, not new tasks) with atomic commits, then archives the proposal and findings file.
+6. **Compound Learning** (Sonnet, interactive) — analyzes done reports + stuck reports + the sprint's per-sprint findings file and produces a three-bucket proposal at `.soloflow/active/compound/SPRINT-NNN-proposal.md`: (A) clean-ups to apply immediately, (B) backlog ideas → `active/ideas/IDEA-NNN.md`, (C) CLAUDE.md improvements to apply directly. The user approves per-item; the main agent applies approved items (clean-ups as direct edits, not new tasks) with atomic commits, then archives the proposal and findings file. Compound does not block the next sprint — findings and proposals are per-sprint, so a compound backlog of multiple pending sprints is supported (drain with `/soloflow:compound --all`).
 
 **Key constraint:** Subagents cannot spawn subagents. Orchestrator is main agent; executors/verifiers/reviewers are leaf nodes only.
 
@@ -43,9 +43,9 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 - `ideas/`, `research/`, `plans/`, `stuck/` — in-flight task files
 - `backlog.json` — tasks awaiting execution (written by refinement, read by execution)
 - `sprint.json` — active sprint + in-flight tasks (written/read by execution)
-- `findings.md` — append-only queue of out-of-scope observations logged by executor / verifier / code-reviewer during a sprint. Consumed and archived by the compounder. Also receives accepted sprint-level code review findings at end-of-sprint triage.
+- `findings/SPRINT-NNN-findings.md` — append-only queue of out-of-scope observations for a specific sprint, logged by executor / verifier / code-reviewer. Sprint-initiator creates the file at sprint start; the file stays in `active/findings/` after sprint close and is archived by `/soloflow:compound` after that sprint is compounded. Multiple sprints' findings files can coexist (compound backlog).
+- `compound/SPRINT-NNN-proposal.md` — transient per-sprint compound proposal written by the compounder during `/soloflow:compound`, archived after the user approves/rejects items.
 - `sprint-code-review.md` — transient file written by the sprint-code-reviewer at Step 3.6; read by the sprint-closer's gather phase and archived to `archive/sprint-code-reviews/` at sprint close.
-- `COMPOUND-PROPOSAL.md` — transient file written by the compounder during `/soloflow:compound`, archived after the user approves/rejects items.
 
 **`.soloflow/archive/`** — never read during execution:
 - `ideas/` — ideas that have been refined into plans (moved from `active/ideas/` by the planner)
@@ -63,7 +63,7 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 
 - **IDEA:** `.soloflow/active/ideas/IDEA-*.md` ∪ `.soloflow/archive/ideas/IDEA-*.md`
 - **TASK:** `.soloflow/active/plans/**/TASK-*-plan.md` ∪ `.soloflow/active/stuck/**/TASK-*-stuck.md` ∪ `.soloflow/archive/done/**/TASK-*-done.md`
-- **SPRINT:** `.soloflow/archive/compound/SPRINT-*-proposal.md` ∪ `.soloflow/archive/findings/SPRINT-*-findings.md` ∪ the active `sprint.json`'s `sprint.id`
+- **SPRINT:** `.soloflow/archive/compound/SPRINT-*-proposal.md` ∪ `.soloflow/archive/findings/SPRINT-*-findings.md` ∪ `.soloflow/active/findings/SPRINT-*-findings.md` ∪ `.soloflow/active/compound/SPRINT-*-proposal.md` ∪ the active `sprint.json`'s `sprint.id` (pending sprints live in `active/findings/` until compounded)
 - **ROADMAP:** `.soloflow/active/roadmaps/ROADMAP-*.md` ∪ `.soloflow/archive/roadmaps/ROADMAP-*.md`
 
 Recipe (bash):
@@ -83,7 +83,7 @@ next_id() {
 
 **Collision handling.** When two parallel workers compute the same "next ID," the second writer must fail-fast on write and retry. In bash, use `set -o noclobber` + `> file` (or `: > file`) which errors if the file exists; in Node, `fs.writeFileSync(path, data, { flag: 'wx' })`; via a slash command, check `test -e` and retry with `max+1` if it exists. Never overwrite an existing ID file.
 
-**Findings queue.** Executor / verifier / code-reviewer agents append an entry to `active/findings.md` whenever they notice something out of scope for their current task (a bug elsewhere, stale docs, a CLAUDE.md gap). They never expand scope to fix it. The compounder consumes the queue at learning time and uses it as the primary seed for clean-up, backlog, and CLAUDE.md proposals.
+**Findings queue (per-sprint).** Executor / verifier / code-reviewer agents append entries to the active sprint's findings file (`.soloflow/active/findings/{sprint.id}-findings.md`, resolved from `sprint.json`) whenever they notice something out of scope for their current task (a bug elsewhere, stale docs, a CLAUDE.md gap). They never expand scope to fix it. The compounder consumes the sprint's findings file at learning time and uses it as the primary seed for clean-up, backlog, and CLAUDE.md proposals; the file is archived to `archive/findings/` only after that sprint is compounded. Legacy: projects that predate the per-sprint layout may still have a single `active/findings.md`; it is migrated automatically by sprint-initiator (or concatenated into the next compound run by `/soloflow:compound`).
 
 State is split into 2 JSON files (backlog, sprint) to enable parallel worktree execution without merge conflicts. Completed tasks are removed from `sprint.json` and their reports move to `archive/done/`. There is no counters file — IDs are derived from the filesystem (see "ID allocation" above).
 
@@ -106,7 +106,7 @@ Multi-layered verification hierarchy (in order of authority):
 3. Requirements adherence with concrete evidence
 4. Goal-backward: "What must be TRUE for production?"
 5. Per-task code review: `/simplify` (quality/reuse) + `/security-review` (security audit). Can send the executor back with `IMPROVEMENTS_NEEDED`. Toggles: `code_review.enabled/.run_simplify/.run_security_review`.
-6. Sprint-level code review: aggregate `/simplify` + `/security-review` across `base_sha..HEAD` + cross-task redundancy sweep. **Advisory only** — findings go to human review (accept → findings.md / defer / dismiss), never back to execution. Toggles: `sprint_code_review.enabled/.run_simplify/.run_security_review` (resolve independently from `code_review.*`).
+6. Sprint-level code review: aggregate `/simplify` + `/security-review` across `base_sha..HEAD` + cross-task redundancy sweep. **Advisory only** — findings go to human review (accept → active sprint's findings file / defer / dismiss), never back to execution. Toggles: `sprint_code_review.enabled/.run_simplify/.run_security_review` (resolve independently from `code_review.*`).
 
 **Visual verification:** The verifier checks tool availability at runtime (`which maestro`, `which npx`) before attempting MCP interactions. If tools aren't installed or MCP servers aren't running, Level 2 is skipped gracefully. See `docs/VISUAL-VERIFICATION-SETUP.md` for configuration.
 

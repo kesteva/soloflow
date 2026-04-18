@@ -75,8 +75,9 @@ SoloFlow is a set of Claude Code hooks, agent definitions, slash commands, and s
 
 ### Phase 5: Compound Learning
 - **Agent:** `compounder` (Sonnet)
-- **Input:** Done reports and stuck reports from the sprint
-- **Output:** `COMPOUND-PROPOSAL.md` with three buckets (clean-ups, backlog tasks, CLAUDE.md improvements)
+- **Input:** Done reports, stuck reports, and the sprint's per-sprint findings file (`active/findings/SPRINT-NNN-findings.md`)
+- **Output:** `active/compound/SPRINT-NNN-proposal.md` with three buckets (clean-ups, backlog tasks, CLAUDE.md improvements). Compound does not block the next sprint; multiple sprints' findings+proposals can await compound simultaneously. Drain in bulk with `/soloflow:compound --all`.
+- **Optional:** `compound-skeptic` pre-review and `claude-md-reviewer` C-bucket refinement (see `docs/CUSTOMIZATION.md`)
 
 ## Hook System
 
@@ -112,11 +113,14 @@ All workflow state lives in `.soloflow/`, created by `scripts/init.sh`:
 ├── active/                     # Read during execution
 │   ├── ideas/                  # IDEA-NNN.md (Phase 1 output)
 │   ├── plans/                  # TASK-NNN-plan.md (Phase 2 output)
-│   └── stuck/                  # TASK-NNN-stuck.md (failed tasks)
+│   ├── stuck/                  # TASK-NNN-stuck.md (failed tasks)
+│   ├── findings/               # SPRINT-NNN-findings.md (per-sprint queue; one per pending sprint)
+│   └── compound/               # SPRINT-NNN-proposal.md (pre-archive compound draft)
 ├── archive/                    # Never read during execution
 │   ├── done/                   # TASK-NNN-done.md (completed tasks)
 │   ├── reviews/                # Human review reports
-│   └── compound/               # SPRINT-NNN-proposal.md (Phase 5 output)
+│   ├── findings/               # Archived per-sprint findings files (post-compound)
+│   └── compound/               # SPRINT-NNN-proposal.md (archived Phase 5 output)
 ├── active/backlog.json         # Ready tasks awaiting execution
 ├── active/sprint.json          # Active sprint + in-flight tasks
 ├── checkpoint.md               # Context restoration after compaction
