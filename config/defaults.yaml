@@ -18,6 +18,7 @@ models:
   codebase_pruner: opus
   claudemd_pruner: opus
   claude_md_reviewer: opus
+  sprint_code_reviewer: opus
 
 tester: false  # enable soloflow self-improvement feedback in /soloflow:compound (bucket E)
 
@@ -38,6 +39,11 @@ code_review:
   run_simplify: true
   run_security_review: true
   review_retry_max: 1  # separate retry budget for code review improvements
+
+sprint_code_review:
+  enabled: true              # end-of-sprint aggregate reviewer; independent of per-task code_review.*
+  run_simplify: true
+  run_security_review: true
 
 verification:
   run_tests: true
