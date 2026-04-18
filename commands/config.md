@@ -72,7 +72,7 @@ Use `AskUserQuestion`:
 **If Round 1 = Operations:**
 - **Question:** "Which operation setting?"
 - **Header:** "Operations"
-- **Options:** `"Limits"`, `"Git & run branches"`, `"Code review"`, `"Verification"`, `"Roadmap"` *(pick one via multiple passes if the picker cap is 4 — split as `"Limits"`, `"Git"`, `"Verification"`, `"More..."` and the "More..." path re-asks with `"Code review"`, `"Roadmap"`, `"Back"`)*
+- **Options:** `"Limits"`, `"Git & run branches"`, `"Code review"`, `"Sprint code review"`, `"Verification"`, `"Roadmap"` *(the picker cap is 4 — split as `"Limits"`, `"Git"`, `"Verification"`, `"More..."` and the "More..." path re-asks with `"Code review"`, `"Sprint code review"`, `"Roadmap"`, `"Back"`)*
 
 **If Round 1 = Reset to defaults:** see Step 6.
 
@@ -91,12 +91,13 @@ All sub-flows share a helper pattern for every individual setting:
 
 ### 5a. Models
 
-Seventeen settings — one per agent: `models.verifier`, `models.executor`,
+Eighteen settings — one per agent: `models.verifier`, `models.executor`,
 `models.idea_extractor`, `models.task_refiner`, `models.compounder`,
-`models.researcher`, `models.code_reviewer`, `models.roadmap_researcher`,
-`models.roadmap_generator`, `models.sprint_initiator`, `models.sprint_closer`,
-`models.sprint_verifier`, `models.test_writer`, `models.integration_tester`,
-`models.codebase_pruner`, `models.claudemd_pruner`, `models.claude_md_reviewer`.
+`models.researcher`, `models.code_reviewer`, `models.sprint_code_reviewer`,
+`models.roadmap_researcher`, `models.roadmap_generator`,
+`models.sprint_initiator`, `models.sprint_closer`, `models.sprint_verifier`,
+`models.test_writer`, `models.integration_tester`, `models.codebase_pruner`,
+`models.claudemd_pruner`, `models.claude_md_reviewer`.
 
 For each agent:
 
@@ -165,7 +166,7 @@ On `"Enter custom flag"`: capture free-form; pass through as-is.
 
 ### 5f. Code review
 
-Four settings:
+Four settings (per-task reviewer inside the executor loop):
 
 - `code_review.enabled` — boolean (Enable / Disable / Use default)
 - `code_review.run_simplify` — boolean
@@ -173,6 +174,18 @@ Four settings:
 - `code_review.review_retry_max` — integer (Keep / Reset / Custom)
 
 Use the same question patterns as 5b and 5d.
+
+### 5f.5. Sprint code review
+
+Three settings (end-of-sprint aggregate reviewer; independent of 5f):
+
+- `sprint_code_review.enabled` — boolean (Enable / Disable / Use default)
+- `sprint_code_review.run_simplify` — boolean
+- `sprint_code_review.run_security_review` — boolean
+
+Use the same boolean question pattern as 5b. Note in the question text that
+this reviewer runs once per sprint against the aggregate PR diff and that its
+findings go to end-of-sprint human review, never back to execution.
 
 ### 5g. Verification
 
@@ -276,6 +289,7 @@ models.task_refiner
 models.compounder
 models.researcher
 models.code_reviewer
+models.sprint_code_reviewer
 models.roadmap_researcher
 models.roadmap_generator
 models.sprint_initiator
@@ -299,6 +313,9 @@ code_review.enabled
 code_review.run_simplify
 code_review.run_security_review
 code_review.review_retry_max
+sprint_code_review.enabled
+sprint_code_review.run_simplify
+sprint_code_review.run_security_review
 verification.run_tests
 verification.run_typecheck
 verification.run_linter
