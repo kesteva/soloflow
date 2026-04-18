@@ -8,7 +8,11 @@ allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 
 Phase 6 of the SoloFlow pipeline. Reads done reports, stuck reports, human review notes, and the out-of-scope findings queue from a completed sprint, then produces a three-bucket proposal for the user to review one bucket at a time. The main agent (you) applies approved items directly for clean-ups and CLAUDE.md edits, and spawns the task-refiner for backlog tasks.
 
-Target sprint: **$ARGUMENTS** (optional — defaults to the most recently completed sprint)
+Target: **$ARGUMENTS** (optional — sprint selector). Accepted values:
+- `SPRINT-NNN` — compound that specific sprint
+- `--all` — compound every pending sprint, oldest first, one at a time
+- `--oldest` — silently pick the oldest pending sprint
+- empty — pick the single pending sprint; prompt if two or more exist
 
 ---
 
@@ -31,29 +35,50 @@ it wherever "Cap at 3 respawns" appears below.
 
 If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
 
-## Step 1: Identify the sprint
+## Step 1: Identify the sprint(s) to compound
 
-1. If `$ARGUMENTS` names a sprint (`SPRINT-NNN`), use it.
-2. Otherwise read `.soloflow/active/sprint.json`. If `sprint.status == "complete"`, use it. Otherwise find the most recently completed sprint (check `archive/compound/` for prior proposals to infer, or ask the user).
-3. **Idempotency guard:** If `.soloflow/archive/compound/SPRINT-{NNN}-proposal.md` already exists, this sprint has already been compounded. Report that and stop (unless the user explicitly re-requests).
-4. Collect relevant reports:
-   - Done reports under `.soloflow/archive/done/` (recursive — may be under epic subfolders)
-   - Stuck reports under `.soloflow/active/stuck/`
-   - `.soloflow/active/findings.md`
-   - `.soloflow/human-review-queue.md`
-5. If nothing was done and nothing was logged, tell the user: "No completed tasks or findings to learn from." and stop.
+**Resolve `compound.pending_sprints.picker_threshold`** per the three-tier recipe (fallback: `2`). Name this `PICKER_THRESHOLD` below.
+
+**Discover pending sprints.** A sprint is *pending compound* when:
+- `.soloflow/active/findings/SPRINT-*-findings.md` exists for it AND
+- `.soloflow/archive/compound/SPRINT-*-proposal.md` does NOT exist for it.
+
+Glob `.soloflow/active/findings/SPRINT-*-findings.md`, strip `-findings.md`, and drop any whose archive slot already exists. Sort the remaining list by numeric suffix ascending (oldest-first). Call this `PENDING`.
+
+**Interpret `$ARGUMENTS`:**
+
+1. **`$ARGUMENTS == SPRINT-NNN`** → target that sprint. If `PENDING` is non-empty and doesn't include it, still allow (user may be re-running against a legacy state). Proceed to the idempotency guard.
+2. **`$ARGUMENTS == --all`** → if `PENDING` is empty, report "No pending sprints to compound." and stop. Otherwise set `MODE=all` and iterate this command's Steps 2–6 once per pending sprint, oldest-first, stopping between sprints if any user prompt bails out.
+3. **`$ARGUMENTS == --oldest`** → if `PENDING` is empty, report and stop. Otherwise pick the first entry silently and continue with that sprint.
+4. **`$ARGUMENTS` empty:**
+   - `PENDING` length 0 → report "No pending sprints to compound." and stop.
+   - `PENDING` length 1 → use it silently.
+   - `PENDING` length ≥ `PICKER_THRESHOLD` → use **AskUserQuestion** with one option per pending sprint (showing its ID and the in-sprint findings `pending_count`) plus a final "Compound all pending (oldest → newest)" option. If the user picks "all", set `MODE=all` and iterate as in case 2.
+
+**Idempotency guard** (per selected sprint): if `.soloflow/archive/compound/SPRINT-{NNN}-proposal.md` already exists, report "SPRINT-{NNN} already compounded. Skipping." and stop (or move to the next sprint in `MODE=all`).
+
+**Collect relevant inputs for the selected sprint:**
+- Done reports under `.soloflow/archive/done/` (recursive — may be under epic subfolders)
+- Stuck reports under `.soloflow/active/stuck/`
+- The sprint's findings file at `.soloflow/active/findings/SPRINT-{NNN}-findings.md`
+- `.soloflow/human-review-queue.md`
+
+**Legacy findings migration (one-shot per project):** If the per-sprint findings file does NOT exist for the selected sprint BUT a legacy `.soloflow/active/findings.md` is present, treat the legacy file as this sprint's findings (read it directly and pass its path to the compounder). After Step 5 archives the sprint's proposal, delete the legacy file.
+
+If nothing was done and nothing was logged (empty done/stuck dirs AND empty findings file), report "No completed tasks or findings to learn from." and stop.
 
 ## Step 2: Spawn the compounder
 
-1. **Resolve `tester` flag.** Check `.soloflow/config.json` first, then `config/defaults.yaml` (via `${CLAUDE_PLUGIN_ROOT}`). If `tester: true`, pass `tester: true` to the compounder so it produces bucket D (SoloFlow improvements). Otherwise omit it.
-2. Spawn the **compounder** agent via the Agent tool with:
+1. **Ensure** `.soloflow/active/compound/` exists (`mkdir -p`). The per-sprint draft will be written there.
+2. **Resolve `tester` flag.** Check `.soloflow/config.json` first, then `config/defaults.yaml` (via `${CLAUDE_PLUGIN_ROOT}`). If `tester: true`, pass `tester: true` to the compounder so it produces bucket D (SoloFlow improvements). Otherwise omit it.
+3. Spawn the **compounder** agent via the Agent tool with:
    - The target sprint ID
-   - Paths to all done reports, stuck reports, findings.md, and human-review-queue.md
+   - Paths to all done reports, stuck reports, the sprint's findings file (per-sprint path, or the legacy `active/findings.md` if the migration branch applies), and human-review-queue.md
    - If tester mode is on: `tester: true`
-   - Instruction: "Produce `.soloflow/active/COMPOUND-PROPOSAL.md` with three buckets (A clean-ups, B backlog tasks, C CLAUDE.md / CODE-PATTERNS.md improvements). Route each C-item to the correct target file — rules and constraints go to CLAUDE.md, code patterns go to CODE-PATTERNS.md. {If tester: Also produce bucket D (SoloFlow improvements).} Do not apply anything. Cite concrete evidence for every item."
-3. Wait for the compounder to finish.
-   - If the compounder reports **CONTEXT_LIMIT**: read the `### Handoff` section. If a partial `COMPOUND-PROPOSAL.md` was written, read it. Spawn a **fresh compounder** with the remaining un-triaged inputs and the partial proposal content. Merge results. Cap at resolved `limits.context_limit_respawn_max`.
-   Read the resulting `COMPOUND-PROPOSAL.md`.
+   - Instruction: "Produce `.soloflow/active/compound/{sprint_id}-proposal.md` with three buckets (A clean-ups, B backlog tasks, C CLAUDE.md / CODE-PATTERNS.md improvements). Route each C-item to the correct target file — rules and constraints go to CLAUDE.md, code patterns go to CODE-PATTERNS.md. {If tester: Also produce bucket D (SoloFlow improvements).} Do not apply anything. Cite concrete evidence for every item."
+4. Wait for the compounder to finish.
+   - If the compounder reports **CONTEXT_LIMIT**: read the `### Handoff` section. If a partial `active/compound/{sprint_id}-proposal.md` was written, read it. Spawn a **fresh compounder** with the remaining un-triaged inputs and the partial proposal content. Merge results. Cap at resolved `limits.context_limit_respawn_max`.
+   Read the resulting `active/compound/{sprint_id}-proposal.md`.
 
 ## Step 3: Present proposal and collect approvals — one bucket at a time
 
@@ -124,10 +149,12 @@ If any application step fails (e.g., a diff doesn't apply cleanly because the ta
 
 ## Step 5: Archive & sweep
 
-1. Move `.soloflow/active/findings.md` → `.soloflow/archive/findings/SPRINT-{NNN}-findings.md`.
-2. Recreate an empty findings file at `.soloflow/active/findings.md` with `pending_count: 0` and `last_updated: null`.
-3. Move `.soloflow/active/COMPOUND-PROPOSAL.md` → `.soloflow/archive/compound/SPRINT-{NNN}-proposal.md` (preserves rejected items for later reference).
+1. Move `.soloflow/active/findings/SPRINT-{NNN}-findings.md` → `.soloflow/archive/findings/SPRINT-{NNN}-findings.md`. (Do NOT recreate an empty file — the next sprint's findings file is created by sprint-initiator, not here.)
+2. Move `.soloflow/active/compound/SPRINT-{NNN}-proposal.md` → `.soloflow/archive/compound/SPRINT-{NNN}-proposal.md` (preserves rejected items for later reference).
+3. **Legacy findings cleanup:** if this run used a legacy `.soloflow/active/findings.md` via the Step 1 migration branch, delete the legacy file now (its contents were captured by the archived per-sprint findings file).
 4. Commit `chore({sprint}): archive findings + compound proposal`.
+
+If running in `MODE=all`, loop back to Step 1's idempotency guard for the next pending sprint. Stop when `PENDING` is empty.
 
 ## Step 6: Report
 
@@ -146,14 +173,17 @@ Rejected : {N} (preserved in archive/compound/SPRINT-{NNN}-proposal.md)
 Findings : archived → archive/findings/SPRINT-{NNN}-findings.md
 ```
 
+**`MODE=all` wrap-up:** after the final pending sprint is processed, print a one-line roll-up (`Compounded {N} sprints: SPRINT-A, SPRINT-B, ...`).
+
 ---
 
 ## Notes
 
 - This command mutates the codebase for approved clean-ups and CLAUDE.md edits. Bucket B spawns the task-refiner to produce plans.
-- The compounder agent is read-only except for `COMPOUND-PROPOSAL.md` — it never writes directly to plans or CLAUDE.md.
+- The compounder agent is read-only except for its own per-sprint proposal draft (`active/compound/SPRINT-NNN-proposal.md`) — it never writes directly to plans or CLAUDE.md.
 - The claude-md-reviewer agent is read-only — it reviews proposals and produces diffs; the main agent applies them.
 - Rejected items are preserved in the archived proposal so they can be revisited manually.
+- Multiple sprints can await compound simultaneously. This command enables a compound backlog — use `--all` to drain it in one go, or pick a specific sprint.
 
 ---
 
