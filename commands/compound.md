@@ -25,6 +25,7 @@ and pass the resolved value as the Agent tool's `model` parameter.
 Mapping used in this command:
 - `compounder` → `models.compounder` (fallback: `sonnet`)
 - `claude-md-reviewer` → `models.claude_md_reviewer` (fallback: `opus`) — pre-review of Bucket C in Step 2.5
+- `compound-skeptic` → `models.compound_skeptic` (fallback: `opus`) — per-item IMPLEMENT / DONT_IMPLEMENT verdicts in Step 2.6
 - `task-refiner` → `models.task_refiner` (fallback: `opus`) — used when materializing backlog items
 
 ## Limits resolution
@@ -98,6 +99,20 @@ Runs before the user sees any options, so the C-bucket presented in Step 3 is al
    - Re-number the **ready items** sequentially (`C1..Cm`) so "Approve some" can reference them unambiguously. Keep the original `source_item` tag inside each item so the audit trail is preserved. Rejected items keep their `[dropped]` prefix and do not consume an index.
 5. If every C-item was rejected, note it for Step 3 (present dropped list info-only; skip the approve/reject prompt for C entirely).
 
+## Step 2.6: Skeptic review (compound-skeptic)
+
+Adds per-item IMPLEMENT / DONT_IMPLEMENT verdicts before the user sees options, giving the user an informed "accept skeptic's recommendations" shortcut in Step 3.
+
+1. **Resolve `compound.skeptic.enabled`** per the three-tier recipe (fallback: `true`). If `false`, skip this step entirely — Step 3 will omit the "Accept skeptic's recommendations" option.
+2. If every bucket is empty (`_No items._` in A, B, C, and D or D absent), skip — there's nothing to verdict.
+3. Spawn the **compound-skeptic** agent with:
+   - The target sprint ID
+   - The absolute path to `active/compound/{sprint_id}-proposal.md`
+   - (Optional) paths to the sprint's findings file and done reports for evidence
+   - Instruction: *"Walk every live item (skip `[dropped]`). Run 2–4 read-only checks per item. Insert a `### Skeptic Verdict` block under each with verdict, confidence, one-paragraph cited reasoning, and an optional counterfactual. Default to DONT_IMPLEMENT only when you have concrete evidence."*
+4. Handle **CONTEXT_LIMIT** respawns identically to Steps 2 and 2.5 (capped at resolved `limits.context_limit_respawn_max`). Preserve the skeptic's partial verdicts — a fresh skeptic picks up where the last one left off using the proposal file's existing Skeptic Verdict blocks as the record.
+5. After the skeptic returns `REPORTED`, re-read the proposal. Note per-bucket counts: `{implement}` / `{dont}` / `{skipped-dropped}` for use in Step 3.
+
 ## Step 3: Present proposal and collect approvals — one bucket at a time
 
 Walk through each bucket sequentially. For each non-empty bucket:
@@ -111,8 +126,9 @@ Walk through each bucket sequentially. For each non-empty bucket:
    - **Approve all** — accept every item in this bucket
    - **Approve some** — user lists which items to keep (e.g., `A1, A3`); anything unlisted is rejected
    - **Reject all** — skip this bucket entirely
+   - **Accept skeptic's recommendations** — accept every item the skeptic marked `IMPLEMENT`; reject every item marked `DONT_IMPLEMENT`. **Only include this option** when the skeptic ran (Step 2.6 was enabled and reached REPORTED) AND the bucket has at least one `DONT_IMPLEMENT` verdict. Omit it when every verdict is `IMPLEMENT` (in that case it degenerates into "Approve all") or when the skeptic was disabled / failed.
    - **Give feedback** — user provides notes; re-run the compounder for this bucket only with the feedback appended, then re-present
-3. Record the per-bucket decisions before moving to the next bucket.
+3. Record the per-bucket decisions before moving to the next bucket. If the user picked "Accept skeptic's recommendations", record the split explicitly so Step 6's report can call out `{N applied (skeptic IMPLEMENT) / M proposed}`.
 
 **Bucket C presentation (after claude-md-reviewer pre-review):**
 
@@ -129,11 +145,12 @@ Question format: `Bucket C — CLAUDE.md / CODE-PATTERNS.md improvements: {m} ap
 
 **Bucket D exception (SoloFlow improvements):** Do not use the standard approve/reject flow. Instead:
 1. Print the full feedback write-up inline so the user can read and copy it directly.
-2. Use **AskUserQuestion**: `SoloFlow feedback ready. Archive and continue?` with options:
-   - **Approve** — archive as-is to `SPRINT-{NNN}-feedback.md`
+2. If the skeptic ran and emitted any `DONT_IMPLEMENT` verdicts on D-items, print a one-line summary first: `Skeptic marked {N} of {M} recommendations IMPLEMENT.` If every D-item is `IMPLEMENT`, omit the summary.
+3. Use **AskUserQuestion**: `SoloFlow feedback ready. Archive and continue?` with options:
+   - **Approve** — archive as-is to `SPRINT-{NNN}-feedback.md`. If any D-item is `DONT_IMPLEMENT`, silently strip those items from the archived write-up and include a final `skeptic_stripped:` section listing their titles + reasoning so the audit trail is preserved.
    - **Edit** — user provides edits; revise the write-up, re-print, and re-ask
    - **Reject** — discard, skip archiving
-3. If approved, write to `.soloflow/archive/compound/SPRINT-{NNN}-feedback.md` and commit. No further action needed in Step 4.
+4. If approved, write to `.soloflow/archive/compound/SPRINT-{NNN}-feedback.md` and commit. No further action needed in Step 4.
 
 If a bucket is empty (`_No items._`), skip it silently — do not present an empty picker.
 
@@ -197,14 +214,16 @@ Print a one-screen summary:
 Compound complete for SPRINT-{NNN}.
 
 Applied:
-  A. Clean-ups       : {N applied} / {M proposed}  (commits: {hashes})
-  B. Backlog tasks   : {N planned} / {M proposed}  (TASK-{first}..TASK-{last})
-  C. CLAUDE.md edits : {N applied} / {M proposed}  ({files touched})
-  D. SoloFlow feedback: {N archived} / {M proposed}  (SPRINT-{NNN}-feedback.md)  {only if tester mode}
+  A. Clean-ups       : {N applied} / {skeptic_implement} IMPLEMENT / {M proposed}  (commits: {hashes})
+  B. Backlog tasks   : {N planned} / {skeptic_implement} / {M proposed}  (TASK-{first}..TASK-{last})
+  C. CLAUDE.md edits : {N applied} / {skeptic_implement} / {M proposed}  ({files touched})
+  D. SoloFlow feedback: {N archived} / {skeptic_implement} / {M proposed}  (SPRINT-{NNN}-feedback.md)  {only if tester mode}
 
 Rejected : {N} (preserved in archive/compound/SPRINT-{NNN}-proposal.md)
 Findings : archived → archive/findings/SPRINT-{NNN}-findings.md
 ```
+
+The `{skeptic_implement}` column reflects how many items the skeptic endorsed per bucket. Omit the column entirely (just show `{N applied} / {M proposed}`) if the skeptic was disabled or did not run.
 
 **`MODE=all` wrap-up:** after the final pending sprint is processed, print a one-line roll-up (`Compounded {N} sprints: SPRINT-A, SPRINT-B, ...`).
 
@@ -215,6 +234,7 @@ Findings : archived → archive/findings/SPRINT-{NNN}-findings.md
 - This command mutates the codebase for approved clean-ups and CLAUDE.md edits. Bucket B spawns the task-refiner to produce plans.
 - The compounder agent is read-only except for its own per-sprint proposal draft (`active/compound/SPRINT-NNN-proposal.md`) — it never writes directly to plans or CLAUDE.md.
 - The claude-md-reviewer agent runs as a pre-review in Step 2.5, tightening Bucket C before the user sees options. It can only edit the proposal file to insert `[reviewer: ready]` / `[dropped — reason]` markers and refined diffs.
+- The compound-skeptic agent runs in Step 2.6 (after claude-md-reviewer), adding per-item IMPLEMENT / DONT_IMPLEMENT verdicts to non-dropped items. It enables the "Accept skeptic's recommendations" option. Toggle via `compound.skeptic.enabled`.
 - Rejected items are preserved in the archived proposal so they can be revisited manually.
 - Multiple sprints can await compound simultaneously. This command enables a compound backlog — use `--all` to drain it in one go, or pick a specific sprint.
 
