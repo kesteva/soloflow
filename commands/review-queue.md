@@ -6,7 +6,7 @@ allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 
 # /soloflow:review-queue
 
-Standalone triage for `.soloflow/human-review-queue.md`. Runs outside `/soloflow:executor`'s end-of-sprint flow and can be invoked any time. The interactive phases (cruft → action triage → visual pipeline → issue capture) are fast and decision-only; all time-intensive agent work (re-verification, issue refinement) runs in a single end-of-run batch so you can walk away once the quick decisions are made.
+Standalone triage for `.soloflow/human-review-queue.md`. Runs outside `/soloflow:sprint`'s end-of-sprint flow and can be invoked any time. The interactive phases (cruft → action triage → visual pipeline → issue capture) are fast and decision-only; all time-intensive agent work (re-verification, issue refinement) runs in a single end-of-run batch so you can walk away once the quick decisions are made.
 
 `$ARGUMENTS` optionally includes one flag:
 - `--skip-cruft` — skip Step 1 (useful for quick re-invocations after a prior cruft pass).
@@ -505,7 +505,7 @@ End with:
 ```
 Next steps:
   /soloflow:review-queue     — run again to continue triage
-  /soloflow:executor         — execute newly planned tasks
+  /soloflow:sprint         — execute newly planned tasks
   /soloflow:quick             — fix needs-changes items
 ```
 

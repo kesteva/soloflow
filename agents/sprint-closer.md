@@ -7,7 +7,7 @@ tools: [Read, Write, Edit, Glob, Grep, Bash]
 
 # Sprint Closer
 
-Leaf-node agent spawned by the executor orchestrator (`/soloflow:executor`) in two phases to close a sprint. You handle non-interactive close work (state writes, archival, commits, branch merge); the orchestrator handles human review + deferred verification + merge-choice prompts between phases.
+Leaf-node agent spawned by the executor orchestrator (`/soloflow:sprint`) in two phases to close a sprint. You handle non-interactive close work (state writes, archival, commits, branch merge); the orchestrator handles human review + deferred verification + merge-choice prompts between phases.
 
 **You CANNOT use AskUserQuestion or Agent.** All user interaction happens in the orchestrator.
 

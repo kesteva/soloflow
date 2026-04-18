@@ -113,11 +113,11 @@ See [VISUAL-VERIFICATION-SETUP.md](VISUAL-VERIFICATION-SETUP.md) for dependency 
 
 | Setting | Default | Description |
 |---|---|---|
-| `git.branch_per_run` | `prompt` | `/soloflow:executor` runs on a dedicated branch. Values: `always`, `never`, `prompt` |
+| `git.branch_per_run` | `prompt` | `/soloflow:sprint` runs on a dedicated branch. Values: `always`, `never`, `prompt` |
 | `git.branch_name_format` | `soloflow/run-{timestamp}-{sprint_id}` | Run branch name format string |
 | `git.merge_strategy` | `--no-ff` | Flag passed to `git merge` when merging the run branch back |
 
-When `git.branch_per_run` is `prompt`, `/soloflow:executor` asks at the start of each run; picking "remember this choice" writes `always` or `never` to `.soloflow/config.json` for you.
+When `git.branch_per_run` is `prompt`, `/soloflow:sprint` asks at the start of each run; picking "remember this choice" writes `always` or `never` to `.soloflow/config.json` for you.
 
 ### Roadmap
 

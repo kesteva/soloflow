@@ -206,11 +206,11 @@ For each required MCP server (`maestro` if `visual_mobile`, `playwright` if `vis
 
 Never run `claude mcp add` without the explicit user choice above — registering servers silently is exactly the collision problem we're avoiding.
 
-### Q3 — Branch strategy for `/soloflow:executor`
+### Q3 — Branch strategy for `/soloflow:sprint`
 
 Use `AskUserQuestion`:
 
-- **Question:** "Should `/soloflow:executor` run each invocation on a dedicated branch that gets merged into your base branch after human review?"
+- **Question:** "Should `/soloflow:sprint` run each invocation on a dedicated branch that gets merged into your base branch after human review?"
 - **Header:** "Run branches"
 - **Options:**
   - "Ask me each run (prompt)"

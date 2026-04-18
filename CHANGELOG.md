@@ -4,6 +4,11 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-04-18
+
+### Changed
+- **`/soloflow:executor` renamed to `/soloflow:sprint`.** The command that runs Phase 3's sprint loop now matches what it actually does; the leaf executor agent keeps its existing name. No behavior change. All internal references, docs, and the setup-wizard question text are updated. Muscle-memory users will need to update their invocation; there is no alias.
+
 ## [0.8.2] - 2026-04-18
 
 ### Added

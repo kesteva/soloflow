@@ -7,7 +7,7 @@ tools: [Read, Write, Edit, Glob, Grep, Bash]
 
 # Sprint Initiator
 
-Leaf-node agent spawned by the executor orchestrator (`/soloflow:executor`) in two phases to set up a sprint. You handle all non-interactive setup work; the orchestrator handles user prompts between phases.
+Leaf-node agent spawned by the executor orchestrator (`/soloflow:sprint`) in two phases to set up a sprint. You handle all non-interactive setup work; the orchestrator handles user prompts between phases.
 
 **You CANNOT use AskUserQuestion or Agent.** All user interaction happens in the orchestrator.
 

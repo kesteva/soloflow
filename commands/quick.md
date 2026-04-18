@@ -164,7 +164,7 @@ Report to the user:
 - The executor uses model `sonnet` for cost efficiency. The verifier uses model `opus` for thorough analysis.
 - Each executor run should produce atomic commits — do not squash them.
 - If the user's bug description is too vague to create a concrete plan, ask the user for clarification BEFORE creating the plan. Do not guess. Prefer the **AskUserQuestion** tool when the clarification can be framed as a choice between candidate interpretations; use a free-form text question only when the clarification is genuinely open-ended.
-- Keep the plan focused. This is the quick path — one bug, one fix. If the bug turns out to be bigger than expected, tell the user to use `/soloflow:idea-extractor` → `/soloflow:planner` → `/soloflow:executor` instead.
+- Keep the plan focused. This is the quick path — one bug, one fix. If the bug turns out to be bigger than expected, tell the user to use `/soloflow:idea-extractor` → `/soloflow:planner` → `/soloflow:sprint` instead.
 
 ---
 

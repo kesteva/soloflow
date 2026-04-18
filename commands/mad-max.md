@@ -6,9 +6,9 @@ allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 
 # /soloflow:mad-max
 
-Unattended variant of `/soloflow:executor`. Drains every ready task in the backlog through the full per-task quality loop (executor → verifier → code-reviewer → test-writer), runs the end-of-sprint regression check, and leaves the run branch open for human review. **No interactive prompts during the run.**
+Unattended variant of `/soloflow:sprint`. Drains every ready task in the backlog through the full per-task quality loop (executor → verifier → code-reviewer → test-writer), runs the end-of-sprint regression check, and leaves the run branch open for human review. **No interactive prompts during the run.**
 
-Use this when you want to start a run and walk away. Use `/soloflow:executor` when you want to review scope, deferred items, and merge choice interactively.
+Use this when you want to start a run and walk away. Use `/soloflow:sprint` when you want to review scope, deferred items, and merge choice interactively.
 
 Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDEA-NNN` to filter; if empty, include **all** ready tasks — this is drain mode, not a capped sprint).
 
@@ -20,7 +20,7 @@ Before invoking the Agent tool, resolve `models.<name>` per the three-tier
 recipe in [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md)
 and pass the resolved value as the Agent tool's `model` parameter.
 
-Mad-max spawns the same agents as `/soloflow:executor`:
+Mad-max spawns the same agents as `/soloflow:sprint`:
 - `sprint-initiator` → `models.sprint_initiator` (fallback: `sonnet`)
 - `executor` → `models.executor` (fallback: `sonnet`)
 - `verifier` → `models.verifier` (fallback: `opus`)
@@ -50,7 +50,7 @@ Run these three checks in the orchestrator before spawning anything. Any failure
 
 1. **Not initialized.** If `.soloflow/` does not exist, print: `mad-max: SoloFlow not initialized. Run /soloflow:init first.` and stop.
 
-2. **Active sprint.** Read `.soloflow/checkpoint.md` (if present) and `.soloflow/active/sprint.json`. If either indicates an active sprint (checkpoint says mid-execution, or `sprint.json` has `sprint.status: "active"`), print: `mad-max: active sprint {SPRINT-NNN} detected. Run /soloflow:executor to resume or close it first.` and stop.
+2. **Active sprint.** Read `.soloflow/checkpoint.md` (if present) and `.soloflow/active/sprint.json`. If either indicates an active sprint (checkpoint says mid-execution, or `sprint.json` has `sprint.status: "active"`), print: `mad-max: active sprint {SPRINT-NNN} detected. Run /soloflow:sprint to resume or close it first.` and stop.
 
 3. **Dirty worktree.** Run `git status --porcelain`. If non-empty, print: `mad-max: working tree dirty. Commit or stash before starting an unattended run.` and stop.
 
@@ -68,8 +68,8 @@ Parse the structured output. Handle:
 - If `initialized: false` → print "mad-max: SoloFlow not initialized. Run /soloflow:init first." and stop. (Redundant with Step 0.5; keep for safety.)
 - If `backlog.ready_count == 0` → print `mad-max: no ready tasks in backlog. Run /soloflow:planner IDEA-NNN first.` and stop.
 - Filter `deferred_items.blocking` to entries with `severity: high`:
-  - If any high-severity blocking entries exist → print `mad-max: {N} high-severity deferred item(s) from prior sprints require human resolution. Run /soloflow:executor instead.` (list the task IDs from each high-severity blocking entry) and stop.
-  - If only medium/low-severity blocking entries exist → print `mad-max: {N} non-high-severity blocking deferred item(s) from prior sprints (continuing — re-verify in /soloflow:executor when ready).` and proceed. Do NOT stop.
+  - If any high-severity blocking entries exist → print `mad-max: {N} high-severity deferred item(s) from prior sprints require human resolution. Run /soloflow:sprint instead.` (list the task IDs from each high-severity blocking entry) and stop.
+  - If only medium/low-severity blocking entries exist → print `mad-max: {N} non-high-severity blocking deferred item(s) from prior sprints (continuing — re-verify in /soloflow:sprint when ready).` and proceed. Do NOT stop.
 
 If `deferred_items.advisory_count > 0`, print `mad-max: {N} advisory deferred item(s) from prior sprints (non-blocking, continuing).` and proceed.
 
@@ -116,7 +116,7 @@ Parse the structured output. Handle:
 
 If the phase 2 output includes `smoke_results` (non-null) AND the results show test failures or type-check failures, **abort**. Print:
 ```
-mad-max: pre-sprint smoke baseline is red (tests: {failed} failed, type-check: {passed|failed}). Refusing to start an unattended run on a broken baseline. Run /soloflow:executor (which will prompt you) or fix the baseline first.
+mad-max: pre-sprint smoke baseline is red (tests: {failed} failed, type-check: {passed|failed}). Refusing to start an unattended run on a broken baseline. Run /soloflow:sprint (which will prompt you) or fix the baseline first.
 ```
 Do not roll back the run branch — leave it for the user to investigate. Stop.
 
@@ -127,12 +127,12 @@ If `smoke_results` is null or all checks passed, proceed.
 If the phase 2 output includes `infra_check` with a non-empty `missing` list, **abort**. Print:
 
 ```
-mad-max: sprint requires infrastructure that isn't available: {categories}. Affected tasks: {task_ids}. Refusing to start an unattended run that would silently skip tests. Install the tooling or run /soloflow:executor to confirm the skip.
+mad-max: sprint requires infrastructure that isn't available: {categories}. Affected tasks: {task_ids}. Refusing to start an unattended run that would silently skip tests. Install the tooling or run /soloflow:sprint to confirm the skip.
 ```
 
 Do not roll back the run branch — leave it for the user to investigate. Stop.
 
-Rationale: mad-max is unattended, so missing infra = silently skipped tests = exactly the class of regression mad-max should refuse. Users who know the gap and still want to proceed can use `/soloflow:executor`, which prompts for explicit confirmation.
+Rationale: mad-max is unattended, so missing infra = silently skipped tests = exactly the class of regression mad-max should refuse. Users who know the gap and still want to proceed can use `/soloflow:sprint`, which prompts for explicit confirmation.
 
 ---
 
@@ -260,7 +260,7 @@ Render using fields from the closer's gather and finalize outputs and the sprint
   - Sprint-level:    mobile={sprint_level.mobile}{note if present}, web={sprint_level.web}{note if present}
 - **Head SHA:** {head_sha}
 
-Next step: run /soloflow:executor to resume human review and merge, or inspect {run.branch} manually.
+Next step: run /soloflow:sprint to resume human review and merge, or inspect {run.branch} manually.
 ```
 
 ---
@@ -268,6 +268,6 @@ Next step: run /soloflow:executor to resume human review and merge, or inspect {
 ## Limitations
 
 - **Context-limit prompts still exist.** If the orchestrator itself hits `SOLOFLOW CONTEXT CRITICAL`, it writes a checkpoint and asks the user to compact-or-exit. There's no unattended-safe alternative for an out-of-context main agent. If this matters for your run, pre-empt it by keeping batches small or splitting work across sessions.
-- **Smoke baseline must be green.** Mad-max refuses to start on a red baseline because it cannot distinguish pre-existing failures from task-caused regressions. Use `/soloflow:executor` if you need to run on a known-red baseline.
+- **Smoke baseline must be green.** Mad-max refuses to start on a red baseline because it cannot distinguish pre-existing failures from task-caused regressions. Use `/soloflow:sprint` if you need to run on a known-red baseline.
 - **High-severity deferred items must be resolved first.** Mad-max will not silently override `action_required` entries from prior sprints when their severity is `high`. Medium/low-severity blocking entries are surfaced but do not stop the run.
-- **No auto-merge.** The run branch always stays open. Use `/soloflow:executor` to merge after human review.
+- **No auto-merge.** The run branch always stays open. Use `/soloflow:sprint` to merge after human review.

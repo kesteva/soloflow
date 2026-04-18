@@ -273,7 +273,7 @@ Roadmap generated: ROADMAP-{NNN} ({title})
   Tasks created: TASK-{first}..TASK-{last}
   Added to backlog: {count} tasks ({ready} ready)
 
-  Next step: /soloflow:executor
+  Next step: /soloflow:sprint
 ```
 
 ---

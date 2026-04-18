@@ -53,7 +53,7 @@ verification:
   visual_prefer_hierarchy: true # use inspect_view_hierarchy before screenshots
 
 git:
-  # Whether /soloflow:executor runs each invocation on a dedicated branch that
+  # Whether /soloflow:sprint runs each invocation on a dedicated branch that
   # gets merged back into the starting branch after human review.
   # Values: always | never | prompt
   branch_per_run: prompt

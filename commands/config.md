@@ -145,7 +145,7 @@ If the user picks `"Enter custom value"`: the AskUserQuestion `"Other"` free-for
 Three settings:
 
 **`git.branch_per_run`:**
-- **Question:** `"Should /soloflow:executor run each invocation on a dedicated branch? (default: prompt, current: <current>)"`
+- **Question:** `"Should /soloflow:sprint run each invocation on a dedicated branch? (default: prompt, current: <current>)"`
 - **Header:** `"Branch per run"`
 - **Options:** `"Ask me each run (prompt)"`, `"Always create a run branch"`, `"Never — run on current branch"`, `"Use default"` (`(current)` labeling).
 

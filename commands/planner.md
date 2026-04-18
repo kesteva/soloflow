@@ -104,14 +104,14 @@ Planning complete for IDEA-{NNN}.
 - Tasks created: {count} (TASK-{NNN}..TASK-{NNN})
 - Ready: {count} | Deferred: {count}
 
-Next step: /soloflow:executor
+Next step: /soloflow:sprint
 ```
 
 ---
 
 ## Notes
 
-- This command does NOT execute any tasks — that's `/soloflow:executor`.
+- This command does NOT execute any tasks — that's `/soloflow:sprint`.
 - Config reference: `executor_retry_max`, `max_sprint_tasks` in `config/defaults.yaml` apply at execution time, not here.
 
 ---

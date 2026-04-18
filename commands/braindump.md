@@ -232,7 +232,7 @@ Created:
 Next steps:
   /soloflow:planner IDEA-{NNN}          — refine an idea into tasks
   /soloflow:idea-extractor IDEA-{NNN}   — full extraction with codebase grounding
-  /soloflow:executor                     — execute ready tasks from backlog
+  /soloflow:sprint                     — execute ready tasks from backlog
 ```
 
 If any IDEAs were created, use `AskUserQuestion` with options:

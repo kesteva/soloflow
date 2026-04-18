@@ -62,14 +62,14 @@ SoloFlow is a set of Claude Code hooks, agent definitions, slash commands, and s
 - **Human touchpoint:** User reviews all plans, approves/defers/requests changes
 
 ### Phase 3: Execution Sprint
-- **Agents:** `executor` (Sonnet) + `verifier` (Opus) + `code-reviewer` (Opus), coordinated by the main session via the `/soloflow:executor` command
+- **Agents:** `executor` (Sonnet) + `verifier` (Opus) + `code-reviewer` (Opus), coordinated by the main session via the `/soloflow:sprint` command
 - **Input:** Approved plan files
 - **Output:** Code changes (committed), done reports in `.soloflow/archive/done/`
 - **Loop:** Executor implements → verifier checks → retry up to 3 times if NEEDS_CHANGES → stuck report if still failing
 - **Human touchpoint:** Items marked HUMAN_NEEDED are queued for review
 
 ### Phase 4: Human Review
-- **No agent** — the `/soloflow:executor` command presents a consolidated review at the end of the sprint
+- **No agent** — the `/soloflow:sprint` command presents a consolidated review at the end of the sprint
 - **Input:** Done reports, stuck reports, human-needed items
 - **Human touchpoint:** User does taste-level review (all functional verification already done by the verifier)
 
@@ -140,4 +140,4 @@ The verifier applies checks in priority order (from the `verifier` agent):
 
 ## Key Constraint
 
-Subagents cannot spawn subagents in Claude Code. The phase commands (`/soloflow:idea-extractor`, `/soloflow:planner`, `/soloflow:executor`, `/soloflow:compound`) run in the main session and act as the orchestrator for their phase. All agents (executor, verifier, idea-extractor, task-refiner, compounder) are leaf-node subagents.
+Subagents cannot spawn subagents in Claude Code. The phase commands (`/soloflow:idea-extractor`, `/soloflow:planner`, `/soloflow:sprint`, `/soloflow:compound`) run in the main session and act as the orchestrator for their phase. All agents (executor, verifier, idea-extractor, task-refiner, compounder) are leaf-node subagents.

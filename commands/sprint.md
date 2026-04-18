@@ -4,7 +4,7 @@ argument-hint: [optional: TASK-NNN TASK-NNN ... or idea ID to filter]
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 
-# /soloflow:executor
+# /soloflow:sprint
 
 Phase 3 of the SoloFlow pipeline. Creates a sprint from ready tasks in the backlog and runs the executor → verifier → code-reviewer loop until the sprint is complete.
 
@@ -162,7 +162,7 @@ Compose the question body from these sections (omit a section if it has nothing 
 ### Options
 
 - **Continue sprint** — proceed to Step 3. If `infra_check.missing` was non-empty, append one line to `.soloflow/active/findings.md` via Bash: `SPRINT-{sprint_id} started with missing infra: {categories}; tests deferred.`
-- **Abort** — stop execution so the user can install the missing tooling or fix the baseline, then re-run `/soloflow:executor`.
+- **Abort** — stop execution so the user can install the missing tooling or fix the baseline, then re-run `/soloflow:sprint`.
 
 This step does NOT fix failures — it only surfaces baseline state and lets the user confirm a known-reduced verification surface.
 
@@ -305,7 +305,7 @@ Decisions:
 Wait for its `COMPLETED` or `ERROR` payload.
 
 Handle the outcome:
-- If `ERROR` with `merge_status: conflicts`, print the conflict paths and stop. The user must resolve the conflicts manually before re-invoking `/soloflow:executor` (which will resume via checkpoint detection in Step 1).
+- If `ERROR` with `merge_status: conflicts`, print the conflict paths and stop. The user must resolve the conflicts manually before re-invoking `/soloflow:sprint` (which will resume via checkpoint detection in Step 1).
 - If `ERROR` for any other reason, surface the error message and stop. Do not retry — the closer has already left state in a known position.
 - Otherwise capture `merge.outcome`, `merge.merge_sha` / `merge.pr_url`, and `head_sha` for Step 5.
 
@@ -381,4 +381,4 @@ When you receive a **SOLOFLOW CONTEXT CRITICAL**:
 2. Write a detailed checkpoint to `.soloflow/checkpoint.md`.
 3. Use **AskUserQuestion** with options:
    - **Compact and continue** — let compaction happen, then resume from checkpoint by re-reading `.soloflow/checkpoint.md` and `.soloflow/active/sprint.json`.
-   - **Save and exit** — stop execution. The user can resume later with `/soloflow:executor` which handles checkpoint resume (Step 1.2).
+   - **Save and exit** — stop execution. The user can resume later with `/soloflow:sprint` which handles checkpoint resume (Step 1.2).
