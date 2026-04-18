@@ -67,6 +67,13 @@ You may also receive a list of **existing epic slugs** (with the contents of the
 
    Any file a plan's `test_strategy` instructs the executor to modify MUST appear in `files_owned`. This check must pass before emitting the plan — do not rely on executor-time scope-deviation recovery.
 
+5d. **Sweep detection for string-literal renames.** If the task renames, re-cases, or re-types a value that appears as a **string literal** in the codebase (error codes, enum names, feature flags, copy strings, config keys), you MUST:
+   1. Run `grep -rn '<old_value>'` across the repo — explicitly include writable trees outside the primary source path (e.g. `scripts/`, `tools/`, top-level smoke/e2e files). List the exact grep command(s) in the plan.
+   2. For each match, either add the file to `files_owned` (if the rename must propagate there) or list it in `files_readonly` with a one-line justification for why it is intentionally excluded.
+   3. Encode the grep command as **step 1 of `Implementation Steps`** so the executor re-runs it as a completeness gate before reporting COMPLETED.
+
+   This rule exists because sweep tasks have repeatedly left assertion files (especially under `scripts/`) with stale values that no automated gate catches — `files_owned` + the primary test suite alone are not sufficient for rename sweeps.
+
 6. **Answer three critical questions per plan:**
    - Hardest decision and why this approach was chosen
    - Rejected alternatives and what would change your mind
