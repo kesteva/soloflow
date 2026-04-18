@@ -62,7 +62,7 @@ When in doubt, choose the lower tier. If you're not sure whether something is Ti
 
 Sometimes meeting acceptance criteria requires touching a file outside `files_owned`. When this happens:
 
-1. **Before making the edit**, append a finding to `.soloflow/active/findings.md` with `type: scope_deviation` and a brief justification (e.g., "required to meet AC: all 10 suites must pass").
+1. **Before making the edit**, append a finding to the active sprint's findings file at `.soloflow/active/findings/{sprint.id}-findings.md` (read `.soloflow/sprint.json` for `sprint.id`) with `type: scope_deviation` and a brief justification (e.g., "required to meet AC: all 10 suites must pass").
 2. Make the edit.
 3. In your status report, add a `Scope deviations:` line listing each out-of-scope file and the finding ID.
 
@@ -72,7 +72,7 @@ Do NOT make out-of-scope edits silently — the verifier and orchestrator need a
 
 If a scoped `CLAUDE.md` (e.g., `src/stores/CLAUDE.md`) or the project root `CLAUDE.md` states a requirement or convention, implement it exactly as documented — regardless of whether you believe it is technically necessary for the specific case. Documented conventions are uniform by design; they exist because the project has decided consistency matters more than case-by-case optimization.
 
-If you believe a convention should not apply to your task, **do not silently omit the step.** Instead, append a finding to `.soloflow/active/findings.md` with `type: question` explaining your reasoning, and implement the convention anyway. The compounder will surface your question for the user to decide.
+If you believe a convention should not apply to your task, **do not silently omit the step.** Instead, append a finding to the active sprint's findings file (`.soloflow/active/findings/{sprint.id}-findings.md`) with `type: question` explaining your reasoning, and implement the convention anyway. The compounder will surface your question for the user to decide.
 
 ### Fix Attempt Cap
 If a test failure or type error persists after 3 attempts to fix it, **STOP**. Report STUCK with:
@@ -115,9 +115,9 @@ When you report `COMPLETED`, the `Commits:` line in your status report MUST list
 
 ## Out-of-Scope Findings
 
-If during your task you notice a bug, dead code, stale doc, or smell in a file that is **not** part of your acceptance criteria, do NOT expand scope to fix it. Instead, append a finding to `.soloflow/active/findings.md` and keep going.
+If during your task you notice a bug, dead code, stale doc, or smell in a file that is **not** part of your acceptance criteria, do NOT expand scope to fix it. Instead, append a finding to the active sprint's findings file at `.soloflow/active/findings/{sprint.id}-findings.md` (read `.soloflow/sprint.json` for `sprint.id`) and keep going.
 
-Do NOT commit `findings.md`. Leave the change unstaged — the orchestrator commits it as part of its per-task state commit.
+Do NOT commit the findings file. Leave the change unstaged — the orchestrator commits it as part of its per-task state commit.
 
 Entry format (append under the `# Findings Queue` heading):
 
@@ -137,7 +137,7 @@ Pick the next unused `n` for this sprint. Bump `pending_count` (counting only `s
 
 ### Resolving Existing Findings
 
-Before reporting your status, scan `.soloflow/active/findings.md` for any `status: open` entries whose `location` falls within your `files_owned`. If your task's changes fix the issue described in a finding:
+Before reporting your status, scan the active sprint's findings file (`.soloflow/active/findings/{sprint.id}-findings.md`) for any `status: open` entries whose `location` falls within your `files_owned`. If your task's changes fix the issue described in a finding:
 
 1. Edit that finding's `- **status:** open` to `- **status:** resolved`
 2. Set `- **resolved_by:** {your task_id}` (e.g., `TASK-012`)
@@ -181,7 +181,7 @@ When finished, output exactly this structure:
 - **Changes:** [list each file modified and what changed]
 - **Commits:** [list each commit hash and message — REQUIRED when Status is COMPLETED]
 - **Tests:** PASS | FAIL (with summary if failed)
-- **Findings logged:** N (count of entries appended to findings.md, if any)
+- **Findings logged:** N (count of entries appended to the sprint's findings file, if any)
 - **Findings resolved:** [FIND IDs resolved, if any]
 - **Blocker/Issue:** [only if BLOCKED or STUCK — specific reason and what is needed]
 
