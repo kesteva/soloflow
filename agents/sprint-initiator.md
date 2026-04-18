@@ -50,9 +50,11 @@ Phase: gather
 7. **Compute next sprint ID.** Glob:
    - `.soloflow/archive/compound/SPRINT-*-proposal.md`
    - `.soloflow/archive/findings/SPRINT-*-findings.md`
+   - `.soloflow/active/findings/SPRINT-*-findings.md` (pending compound)
+   - `.soloflow/active/compound/SPRINT-*-proposal.md` (pending compound draft)
    - Read `.soloflow/active/sprint.json` for `sprint.id` (if file exists and has a sprint object)
    
-   Extract max numeric suffix + 1, zero-pad to 3 digits.
+   Extract max numeric suffix + 1, zero-pad to 3 digits. Ignore non-numeric suffixes (e.g. `SPRINT-quick-<timestamp>` from the quick path).
 
 8. **Determine smoke eligibility.** Glob `.soloflow/archive/done/**/TASK-*-done.md`. If any match, set `skip_smoke: true` (prior sprint established baseline). Otherwise `skip_smoke: false`.
 
@@ -145,6 +147,24 @@ Decisions:
      ```
    - Write both files.
 
+3.5. **Create per-sprint findings file.**
+   - Ensure `.soloflow/active/findings/` exists (`mkdir -p`).
+   - Path: `.soloflow/active/findings/{sprint_id}-findings.md`.
+   - **Legacy migration (one-shot):** If a legacy `.soloflow/active/findings.md` exists:
+     - If the per-sprint file does NOT already exist: move the legacy file to the per-sprint path (`mv .soloflow/active/findings.md .soloflow/active/findings/{sprint_id}-findings.md`) and proceed to step 3.6.
+     - If the per-sprint file already exists (resume or collision): leave both files alone and emit `migration_warning` in the output data.
+   - Otherwise, if the per-sprint file does not exist, create it with this initial content:
+     ```
+     ---
+     sprint: SPRINT-NNN
+     pending_count: 0
+     last_updated: null
+     ---
+
+     # Findings Queue
+     ```
+     Use write-exclusive semantics (Node `fs.writeFileSync(path, data, { flag: 'wx' })`, or bash `set -o noclobber; > file`) — if the file exists, leave it alone (resume path).
+
 4. **Create run branch** (only if `create_branch` is true).
    - `base_branch=$(git rev-parse --abbrev-ref HEAD)`
    - `base_sha=$(git rev-parse HEAD)`
@@ -163,6 +183,8 @@ Decisions:
 
 5. **Commit sprint start.**
    - `git add .soloflow/active/sprint.json .soloflow/active/backlog.json`
+   - Also add `.soloflow/active/findings/{sprint_id}-findings.md` (whether freshly created or migrated from legacy).
+   - Also add `.soloflow/active/findings.md` (as a deletion) if step 3.5 migrated it away.
    - Also add `.soloflow/human-review-queue.md` if modified by step 1.
    - Also add `.soloflow/config.json` if modified by step 2.
    - If `git diff --cached --quiet` → skip (no staged changes).
@@ -226,6 +248,9 @@ run:  # null if create_branch was false
   created_at: "{ISO timestamp}"
 
 commit: "chore(SPRINT-NNN): start sprint"  # or null if nothing to commit
+
+findings_file: ".soloflow/active/findings/SPRINT-NNN-findings.md"  # path to the per-sprint findings file
+migration_warning: null  # or a one-line note if a legacy .soloflow/active/findings.md could not be migrated
 
 smoke_results:  # null if skipped
   tests:
