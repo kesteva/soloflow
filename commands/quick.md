@@ -94,6 +94,20 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/state/update-task-status.js" TASK-{NNN} in_p
 
 `--create` scaffolds `sprint.json` (with a `SPRINT-quick-<timestamp>` id) if it doesn't exist yet, and inserts the task entry.
 
+After `--create` completes, read `.soloflow/sprint.json` (or `.soloflow/active/sprint.json` depending on where the script writes — check both) to get `sprint.id`, and call this value `{sprint_id}` for the rest of the command. Ensure `.soloflow/active/findings/` exists (`mkdir -p`). If `.soloflow/active/findings/{sprint_id}-findings.md` does not already exist, create it with `wx`/`noclobber` semantics:
+
+```
+---
+sprint: {sprint_id}
+pending_count: 0
+last_updated: null
+---
+
+# Findings Queue
+```
+
+All `--touched` flags below reference the per-sprint findings file.
+
 ## Step 4: Spawn Executor
 
 Use the Agent tool to spawn the **executor** agent:
@@ -108,8 +122,8 @@ Wait for the executor to complete and capture its status report.
 Read the executor's status report:
 
 - **If COMPLETED**: Proceed to Step 6 (verification).
-- **If BLOCKED**: Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} blocked --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings.md`. Report the blocker to the user. Stop here.
-- **If STUCK**: Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` with the executor's error details. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report .soloflow/active/stuck/TASK-{NNN}-stuck.md --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings.md`. Report to the user. Stop here.
+- **If BLOCKED**: Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} blocked --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings/{sprint_id}-findings.md`. Report the blocker to the user. Stop here.
+- **If STUCK**: Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` with the executor's error details. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report .soloflow/active/stuck/TASK-{NNN}-stuck.md --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings/{sprint_id}-findings.md`. Report to the user. Stop here.
 - **If CONTEXT_LIMIT**: Read the `### Handoff` section. If context-limit respawns < resolved `limits.context_limit_respawn_max`, spawn a **fresh executor** with the original plan + "Continue from previous executor's handoff: {handoff section}". Otherwise escalate as STUCK.
 
 ## Step 6: Spawn Verifier
@@ -128,7 +142,7 @@ Read the verifier's verification report:
 ### If APPROVED
 1. Spawn **test-writer** with the plan, executor's changed files, and "no code-review report" (quick path skips code review). If `TESTS_WRITTEN`, run the test suite to confirm. One retry on failure; if still failing, log a finding and proceed.
 2. Write a done report to `.soloflow/archive/done/TASK-{NNN}-done.md` using the verifier's report. Use the frontmatter spec defined in `commands/executor.md` step f3 — populate `executor_loops` from your loop counter, set `code_review_rounds: 0` (quick path skips code review), and copy `visual_mobile` / `visual_web` verbatim from the verifier's Visual Verification report block.
-3. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report .soloflow/archive/done/TASK-{NNN}-done.md --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings.md`. This removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`.
+3. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report .soloflow/archive/done/TASK-{NNN}-done.md --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings/{sprint_id}-findings.md`. This removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`.
 4. Report success to the user with a summary of changes.
 
 ### If NEEDS_CHANGES
@@ -136,11 +150,11 @@ Check the loop counter (starts at 1, capped at resolved `limits.executor_retry_m
 - **If loops < resolved cap**: Go back to Step 4, but append the verifier's feedback to the executor prompt:
   "Previous attempt had issues. The verifier found: {verifier feedback}. Fix these specific issues."
   Increment the loop counter.
-- **If loops >= resolved cap**: The task is stuck. Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` including the verifier's feedback, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report .soloflow/active/stuck/TASK-{NNN}-stuck.md --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings.md`. Report to the user that the fix needs human intervention.
+- **If loops >= resolved cap**: The task is stuck. Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` including the verifier's feedback, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report .soloflow/active/stuck/TASK-{NNN}-stuck.md --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings/{sprint_id}-findings.md`. Report to the user that the fix needs human intervention.
 
 ### If HUMAN_NEEDED
 1. Append an entry to `.soloflow/human-review-queue.md` with the verifier's notes.
-2. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings.md`.
+2. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings/{sprint_id}-findings.md`.
 3. Report to the user that the fix works technically but needs their review for product judgment.
 
 ## Step 7.5: State commit

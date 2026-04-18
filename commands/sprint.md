@@ -162,7 +162,7 @@ Compose the question body from these sections (omit a section if it has nothing 
 
 ### Options
 
-- **Continue sprint** — proceed to Step 3. If `infra_check.missing` was non-empty, append one line to `.soloflow/active/findings.md` via Bash: `SPRINT-{sprint_id} started with missing infra: {categories}; tests deferred.`
+- **Continue sprint** — proceed to Step 3. If `infra_check.missing` was non-empty, append one line to the sprint's findings file (`.soloflow/active/findings/{sprint_id}-findings.md`) via Bash: `SPRINT-{sprint_id} started with missing infra: {categories}; tests deferred.`
 - **Abort** — stop execution so the user can install the missing tooling or fix the baseline, then re-run `/soloflow:sprint`.
 
 This step does NOT fix failures — it only surfaces baseline state and lets the user confirm a known-reduced verification surface.
@@ -183,8 +183,8 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
 
    c. Handle executor result:
       - **COMPLETED** → proceed to verification.
-      - **BLOCKED** → run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} blocked --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue to next task.
-      - **STUCK** → write stuck report to `.soloflow/active/stuck/{epic}/TASK-{NNN}-stuck.md` if the plan has an epic, else flat at `.soloflow/active/stuck/TASK-{NNN}-stuck.md` (create the folder if missing). Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`, continue.
+      - **BLOCKED** → run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} blocked --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`, continue to next task.
+      - **STUCK** → write stuck report to `.soloflow/active/stuck/{epic}/TASK-{NNN}-stuck.md` if the plan has an epic, else flat at `.soloflow/active/stuck/TASK-{NNN}-stuck.md` (create the folder if missing). Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report <that path> --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`, continue.
       - **CONTEXT_LIMIT** → pass the handoff to a fresh executor. Do NOT run git commands yourself to reconstruct state — keep orchestrator context lean.
         1. Read the `### Handoff` section from the executor's status report (produced by the context monitor protocol).
         2. If context-limit respawns for this agent on this task < resolved `limits.context_limit_respawn_max`, spawn a **fresh executor** with the original plan content prepended with:
@@ -199,7 +199,7 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
       - **APPROVED** → proceed to code review (step f).
       - **APPROVED_WITH_DEFERRED** → proceed to code review (step f). The deferred checks are already queued in `.soloflow/human-review-queue.md` by the verifier — they will be re-verified in Step 4.
       - **NEEDS_CHANGES** → if `executor_loops < resolved limits.executor_retry_max`, increment `executor_loops` and re-spawn executor with verifier feedback. Otherwise write stuck report.
-      - **HUMAN_NEEDED** → append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`.
+      - **HUMAN_NEEDED** → append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`.
       - **CONTEXT_LIMIT** → read the `### Handoff` section. Spawn a **fresh verifier** with the original inputs + "Continue verification from previous verifier's handoff: {handoff section}". Same respawn budget as executor CONTEXT_LIMIT handling.
 
    f. **Code review.** Resolve `code_review.enabled` per the recipe in
@@ -210,7 +210,7 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
       Spawn **code-reviewer** with the plan + executor's changed files list. Wait for verdict.
       - **CLEAN** → proceed to step f2 (test writing).
       - **IMPROVEMENTS_NEEDED** → increment `code_review_rounds`, re-spawn executor with review feedback, then re-verify. Does NOT consume the executor retry budget. Loop allowed up to resolved `code_review.review_retry_max` (fallback: 1) rounds. After the cap, accept the remaining findings as minor and proceed to f2.
-      - **SECURITY_ISSUE** → escalate to HUMAN_NEEDED. Append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md`.
+      - **SECURITY_ISSUE** → escalate to HUMAN_NEEDED. Append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`.
       - **CONTEXT_LIMIT** → read the `### Handoff` section. Spawn a **fresh code-reviewer** with the original inputs + "Continue review from previous reviewer's handoff: {handoff section}". Same respawn budget.
 
    f2. **Test writing.** Spawn the **test-writer** agent with the plan, executor's changed files list, and code-reviewer's report. Wait for result.
@@ -235,7 +235,7 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
        ---
        ```
 
-       Use the counters you tracked in working memory for this task. Copy `visual_mobile` and `visual_web` verbatim from the verifier's Visual Verification report block (the verifier emits the enum directly — do not re-classify here). If a prior verifier round emitted a different outcome and the task is now passing on a later round, use the *most recent* verifier's values. Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <that path> --touched .soloflow/active/findings.md --touched .soloflow/checkpoint.md` — this removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`. Then perform the **epic archival check**: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no tasks from that epic remain in `sprint.json`, flag the epic for the Step 4 human review with an "archive this epic?" prompt. On user approval (not automatic), move `.soloflow/active/plans/{epic}/EPIC-{epic}.md` → `.soloflow/archive/done/{epic}/EPIC-{epic}.md` and flip its frontmatter `status` from `active` to `complete`.
+       Use the counters you tracked in working memory for this task. Copy `visual_mobile` and `visual_web` verbatim from the verifier's Visual Verification report block (the verifier emits the enum directly — do not re-classify here). If a prior verifier round emitted a different outcome and the task is now passing on a later round, use the *most recent* verifier's values. Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <that path> --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md` — this removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`. Then perform the **epic archival check**: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no tasks from that epic remain in `sprint.json`, flag the epic for the Step 4 human review with an "archive this epic?" prompt. On user approval (not automatic), move `.soloflow/active/plans/{epic}/EPIC-{epic}.md` → `.soloflow/archive/done/{epic}/EPIC-{epic}.md` and flip its frontmatter `status` from `active` to `complete`.
 
    g. Every resolved `limits.checkpoint_interval` completed tasks, write checkpoint to `.soloflow/checkpoint.md`.
 
@@ -307,7 +307,7 @@ entries.
 **Commit.** Stage and commit with explicit paths — never `git add -A`:
 - `.soloflow/active/sprint-code-review.md`
 - `.soloflow/human-review-queue.md`
-- `.soloflow/active/findings.md` (if the reviewer appended out-of-scope findings)
+- `.soloflow/active/findings/{sprint_id}-findings.md` (if the reviewer appended out-of-scope findings)
 
 Commit message: `chore(SPRINT-{NNN}): end-of-sprint code review`.
 
@@ -339,8 +339,9 @@ then `low`). For each finding, use **AskUserQuestion**: "[{SEVERITY}]
 {finding} — {recommendation}" with options **Accept — queue as finding** /
 **Defer — keep in queue** / **Dismiss — drop**.
 
-- **Accept:** Append the finding as a FIND entry to `.soloflow/active/findings.md`
-  under the `# Findings Queue` heading:
+- **Accept:** Append the finding as a FIND entry to the active sprint's
+  findings file (`.soloflow/active/findings/{sprint_id}-findings.md`) under
+  the `# Findings Queue` heading:
 
   ```
   ## FIND-{sprint_id}-{n}
@@ -354,10 +355,11 @@ then `low`). For each finding, use **AskUserQuestion**: "[{SEVERITY}]
   - **resolved_by:**
   ```
 
-  Bump `pending_count` in findings.md (counting only `status: open`) and
-  refresh `last_updated`. Then edit `.soloflow/human-review-queue.md` to
-  remove the entry and decrement its `pending_count`. The compounder picks
-  these up on the next `/soloflow:compound` run.
+  Bump `pending_count` in the sprint's findings file (counting only
+  `status: open`) and refresh `last_updated`. Then edit
+  `.soloflow/human-review-queue.md` to remove the entry and decrement its
+  `pending_count`. The compounder picks these up on the next
+  `/soloflow:compound` run.
 
 - **Defer:** Leave the entry in `human-review-queue.md`. It persists for the
   next session and can also be triaged via `/soloflow:review-queue`.

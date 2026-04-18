@@ -241,9 +241,15 @@ Options:
 - **Dismiss all** — confirm with a second `AskUserQuestion`, then remove every entry from the queue; increment `sprint_review_dismissed` accordingly.
 - **Triage item-by-item** — per-item `AskUserQuestion` (Accept / Defer / Dismiss) using the shape in 3.5b.
 
-### 3.5b. Per-item accept (append to findings.md)
+### 3.5b. Per-item accept (append to the target sprint's findings file)
 
-For each item the user accepted, append an entry to `.soloflow/active/findings.md` under the `# Findings Queue` heading:
+For each item the user accepted, determine the target findings file:
+
+- `{sprint_id}` is the `task:` field from the queue entry (already shaped `SPRINT-NNN`).
+- Target path: `.soloflow/active/findings/{sprint_id}-findings.md`.
+- **If the target file does not exist** (the originating sprint has already been compounded and archived), fall back to the currently active sprint's findings file (read `.soloflow/active/sprint.json` for `sprint.id`). If no active sprint exists either, fall back to the most recently started sprint whose findings file is still in `active/findings/` (glob + sort by mtime). Record which fallback fired so the step-3.5d commit message can mention it.
+
+Append an entry to the chosen findings file under the `# Findings Queue` heading:
 
 ```
 ## FIND-{sprint_id}-{n}
@@ -257,9 +263,9 @@ For each item the user accepted, append an entry to `.soloflow/active/findings.m
 - **resolved_by:**
 ```
 
-`{sprint_id}` is the `task:` field from the queue entry (already shaped `SPRINT-NNN`). `{n}` = next free integer for that sprint in findings.md (glob existing `## FIND-{sprint_id}-*` headings, take max+1).
+`{n}` = next free integer for that sprint in the findings file (glob existing `## FIND-{sprint_id}-*` headings, take max+1).
 
-After each append, bump findings.md frontmatter `pending_count` (count `status: open` entries) and refresh `last_updated`. Increment in-memory `sprint_review_accepted`.
+After each append, bump the findings file's frontmatter `pending_count` (count `status: open` entries) and refresh `last_updated`. Increment in-memory `sprint_review_accepted`.
 
 ### 3.5c. Atomic queue update per decision
 
@@ -270,7 +276,7 @@ After each per-item decision (Accept / Defer / Dismiss), atomically rewrite `.so
 
 ### 3.5d. Commit
 
-At end of Step 3.5: if any changes were made to findings.md or human-review-queue.md, stage explicit paths and commit `chore: review-queue — sprint-code-review: accepted {sprint_review_accepted}, dismissed {sprint_review_dismissed}`. Skip silently if not a git repo or `.soloflow/` gitignored.
+At end of Step 3.5: if any changes were made to the per-sprint findings file(s) or `human-review-queue.md`, stage explicit paths and commit `chore: review-queue — sprint-code-review: accepted {sprint_review_accepted}, dismissed {sprint_review_dismissed}`. Stage each distinct findings file individually. Skip silently if not a git repo or `.soloflow/` gitignored.
 
 ---
 
