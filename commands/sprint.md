@@ -28,6 +28,7 @@ Mapping used in this command:
 - `code-reviewer` → `models.code_reviewer` (fallback: `opus`)
 - `test-writer` → `models.test_writer` (fallback: `sonnet`)
 - `sprint-verifier` → `models.sprint_verifier` (fallback: `opus`)
+- `sprint-code-reviewer` → `models.sprint_code_reviewer` (fallback: `opus`)
 - `sprint-closer` → `models.sprint_closer` (fallback: `sonnet`)
 
 You only need to load the config file once at the start of the run; cache the
@@ -250,6 +251,66 @@ Handle the report:
 - If regressions were found (visual or integration), add each to `.soloflow/human-review-queue.md` with the failure details, evidence, and suspected responsible task.
 - Stage `.soloflow/active/sprint-verification.md` (the sprint-verifier writes it; it's the sprint-closer's single source of truth for sprint-level visual coverage) and commit any `.soloflow/` state changes with `chore(SPRINT-{NNN}): end-of-sprint verification`. Use `git add` with explicit paths — never `git add -A`.
 
+## Step 3.6: End-of-sprint code review
+
+Resolve `sprint_code_review.enabled` per the recipe in
+[docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md) (fallback:
+`true`). Resolution is **independent** of `code_review.enabled` — you can
+disable per-task review but keep sprint-level, or vice versa. If `false`, skip
+this entire step.
+
+Otherwise, spawn the **sprint-code-reviewer** agent with:
+
+```
+Sprint: SPRINT-{NNN}
+base_sha: {sha}   # from sprint.json run.base_sha, or the commit before sprint start
+completed_tasks:
+  - id: TASK-NNN
+    epic: {slug or null}
+    files_owned: [path, ...]
+  - ...
+```
+
+Wait for its status report. The agent writes its findings to
+`.soloflow/active/sprint-code-review.md` — read that file directly; the
+returned status is just a summary of counts.
+
+Handle outcomes:
+- **REPORTED** → proceed to finding-to-queue conversion below.
+- **CONTEXT_LIMIT** → read the `### Handoff` section. Spawn a **fresh
+  sprint-code-reviewer** with the original inputs + "Continue review from
+  previous reviewer's handoff: {handoff section}". Same respawn budget as
+  other agents (resolved `limits.context_limit_respawn_max`).
+- Agent errors or times out → surface a warning and continue. Sprint-level
+  code review is advisory — do NOT block sprint close.
+
+**Convert findings to human-review-queue entries.** Parse the Findings sections
+of `.soloflow/active/sprint-code-review.md`. For each finding, append an entry
+to `.soloflow/human-review-queue.md` in this shape (map Critical→high,
+Important→medium, Minor→low):
+
+```yaml
+- task: SPRINT-{NNN}   # the sprint, not a task
+  type: sprint_code_review
+  severity: high | medium | low
+  finding: "{title from the report}"
+  location: "{file:line}"
+  evidence: "{short excerpt — copy verbatim}"
+  recommendation: "{concrete action — copy verbatim}"
+  suspected_tasks: [TASK-NNN, ...]
+  status: pending
+```
+
+Update the queue's frontmatter `pending_count` to count all `status: pending`
+entries.
+
+**Commit.** Stage and commit with explicit paths — never `git add -A`:
+- `.soloflow/active/sprint-code-review.md`
+- `.soloflow/human-review-queue.md`
+- `.soloflow/active/findings.md` (if the reviewer appended out-of-scope findings)
+
+Commit message: `chore(SPRINT-{NNN}): end-of-sprint code review`.
+
 ## Step 3.7: Gather sprint close context
 
 Spawn the **sprint-closer** agent (phase: gather) with no additional input. Wait for its `GATHERED` payload.
@@ -271,6 +332,38 @@ Using the gathered payload, present a consolidated review:
 - **Yes:** Re-spawn the **verifier** (or **sprint-verifier** for sprint-level flows) with the original plan + executor report, scoped to only the previously deferred checks. Handle the verdict normally — if it passes, edit `.soloflow/human-review-queue.md` to remove the entry and decrement `pending_count`; if it fails, convert to `NEEDS_CHANGES` and present to the user.
 - **Not yet:** Leave in the queue. The entry persists for the next session.
 - **Dismiss:** Edit the queue to remove the entry and decrement `pending_count`.
+
+**Sprint-level code review findings.** If `review_queue.sprint_code_review` is
+non-empty, present findings sorted by severity (`high` first, then `medium`,
+then `low`). For each finding, use **AskUserQuestion**: "[{SEVERITY}]
+{finding} — {recommendation}" with options **Accept — queue as finding** /
+**Defer — keep in queue** / **Dismiss — drop**.
+
+- **Accept:** Append the finding as a FIND entry to `.soloflow/active/findings.md`
+  under the `# Findings Queue` heading:
+
+  ```
+  ## FIND-{sprint_id}-{n}
+  - **source:** SPRINT-{NNN} (sprint-code-reviewer)
+  - **type:** improvement
+  - **severity:** low | medium | high   # copy from the queue entry
+  - **status:** open
+  - **location:** {location from the queue entry}
+  - **description:** {finding} — {recommendation}
+  - **suggested_action:** {recommendation}
+  - **resolved_by:**
+  ```
+
+  Bump `pending_count` in findings.md (counting only `status: open`) and
+  refresh `last_updated`. Then edit `.soloflow/human-review-queue.md` to
+  remove the entry and decrement its `pending_count`. The compounder picks
+  these up on the next `/soloflow:compound` run.
+
+- **Defer:** Leave the entry in `human-review-queue.md`. It persists for the
+  next session and can also be triaged via `/soloflow:review-queue`.
+
+- **Dismiss:** Edit the queue to remove the entry and decrement
+  `pending_count`. No log is written — the finding is dropped.
 
 **PAUSE HERE.** The user's job is taste-level review — everything functional has already been verified.
 
