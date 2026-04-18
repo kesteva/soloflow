@@ -38,9 +38,11 @@ Phase: gather
    - **Total code review rounds:** sum the `code_review_rounds` frontmatter field across all done reports for this sprint (treat missing as 0).
    - **Per-task visual coverage:** for each platform (`visual_mobile`, `visual_web`), tally how many done reports emit each of the five enum values: `pass`, `fail`, `not_applicable`, `skipped_user_preference`, `skipped_unable`. Treat a missing field as `not_applicable` (backward compatibility with reports written before this schema).
    - **Sprint-level visual coverage:** read `.soloflow/active/sprint-verification.md` if it exists. Extract `visual_mobile`, `visual_web`, their note fields, and `regressions_count`. If the file is missing, treat both platforms as `not_applicable` with note `"sprint-verifier did not run"`.
+   - **Sprint-level code review:** read `.soloflow/active/sprint-code-review.md` if it exists. Extract `ran_simplify`, `ran_security_review`, and `findings_count` (`critical`, `important`, `minor`) from its frontmatter. If the file is missing, record `ran: false` with zero counts (the step was skipped or disabled).
 
 4. **Parse human-review-queue.** Read `.soloflow/human-review-queue.md` (if it exists). Separate:
    - **action_required:** entries with `type: action_required`. Group by `action` text. For each group, list the blocked checks, originating task IDs, and the **maximum severity** across the group (rank `high > medium > low`; treat a missing `severity` field as `medium` for backward compatibility with entries written before severity was tracked).
+   - **sprint_code_review:** entries with `type: sprint_code_review`. Keep each entry separately (do NOT group by action — each finding is standalone). Capture `severity`, `finding`, `location`, `recommendation`, and `suspected_tasks`.
    - **other:** non-actionable entries (informational verifier notes, HUMAN_NEEDED escalations, already-overridden entries). Capture brief summaries and a count.
 
 5. **Detect stale compound proposal.** If `.soloflow/active/COMPOUND-PROPOSAL.md` exists, read its YAML frontmatter and extract the `sprint:` field. Note whether the destination `.soloflow/archive/compound/{sprint}-proposal.md` already exists.
@@ -111,8 +113,25 @@ review_queue:
       blocked_checks: ["{check1}", ...]
       task_ids: [TASK-NNN, ...]
     # empty list if none
+  sprint_code_review:
+    - task: "SPRINT-NNN"
+      severity: "{low|medium|high}"
+      finding: "{title}"
+      location: "{file:line}"
+      recommendation: "{action}"
+      suspected_tasks: [TASK-NNN, ...]
+    # empty list if none
   other_count: {N}
   other_summaries: ["{brief1}", ...]
+
+sprint_code_review:
+  ran: {true|false}           # false if .soloflow/active/sprint-code-review.md was missing
+  ran_simplify: {true|false}
+  ran_security_review: {true|false}
+  findings_count:
+    critical: {N}
+    important: {N}
+    minor: {N}
 
 compound_proposal:
   exists: {true|false}
@@ -154,12 +173,16 @@ Decisions:
 
 2b. **Archive sprint-verification file.** If `.soloflow/active/sprint-verification.md` exists, move it to `.soloflow/archive/sprint-verifications/{sprint.id}-verification.md` (create the folder if missing). If the destination already exists, leave the active file in place and record `skipped_reason: already_exists` in the output's `archived_sprint_verification` field. If the file doesn't exist, record `archived_sprint_verification.moved: false` and move on.
 
+2c. **Archive sprint-code-review file.** If `.soloflow/active/sprint-code-review.md` exists, move it to `.soloflow/archive/sprint-code-reviews/{sprint.id}-code-review.md` (create the folder if missing). If the destination already exists, leave the active file in place and record `skipped_reason: already_exists` in the output's `archived_sprint_code_review` field. If the file doesn't exist, record `archived_sprint_code_review.moved: false` and move on.
+
 3. **Commit sprint close.**
    - `git add .soloflow/active/sprint.json`
    - Also add `.soloflow/human-review-queue.md` if it exists.
+   - Also add `.soloflow/active/findings.md` if it exists.
    - Also add `.soloflow/checkpoint.md` if it exists.
    - Also add `.soloflow/archive/compound/{sprint_field}-proposal.md` if step 2 moved a file.
    - Also add `.soloflow/archive/sprint-verifications/{sprint.id}-verification.md` if step 2b moved a file (and `.soloflow/active/sprint-verification.md` for the deletion).
+   - Also add `.soloflow/archive/sprint-code-reviews/{sprint.id}-code-review.md` if step 2c moved a file (and `.soloflow/active/sprint-code-review.md` for the deletion).
    - If `git diff --cached --quiet` reports no staged changes, skip the commit.
    - Otherwise: `git commit -m "chore({sprint_id}): close sprint"`.
    - Stage only listed paths — never `git add .` / `git add -A`.
@@ -206,6 +229,11 @@ archived_proposal:
   skipped_reason: "{already_exists|missing_sprint_field|null}"
 
 archived_sprint_verification:
+  moved: {true|false}
+  destination: "{path or null}"
+  skipped_reason: "{already_exists|null}"
+
+archived_sprint_code_review:
   moved: {true|false}
   destination: "{path or null}"
   skipped_reason: "{already_exists|null}"
