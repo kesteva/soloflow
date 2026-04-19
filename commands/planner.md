@@ -55,6 +55,21 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
    - If more than 3 plans required auto-correction in a single refinement run, that is a signal the refiner misunderstood scope — flag it prominently in the Step 3 review and offer the "Request changes" option proactively.
 
    This gate closes the parity loop at plan-authoring time so the executor never has to trigger a `scope_deviation` finding for this pattern.
+3b. **Validate `acceptance_criteria` ↔ `files_owned`/`files_readonly` parity (deterministic gate).** For each parsed plan, scan every `acceptance_criteria[].verification` string for file-path references. Match these patterns (case-sensitive; extract the path argument):
+   - `grep ... <path>` (ripgrep or GNU grep; any flags)
+   - `cat <path>` / `head <path>` / `tail <path>`
+   - `test -e <path>` / `test -f <path>`
+   - `python3 -c '...'` invocations that reference `open("<path>")` or `Path("<path>")`
+   - a bare path token followed by a contains-check (e.g. `| grep 'X' <path>`, `assert 'Y' in open("<path>").read()`)
+
+   Ignore paths that are clearly command flags (e.g. `-e`, `--file`) or shell metacharacters. For each extracted path, resolve it relative to the repo root and compare against the plan's `files_owned` and `files_readonly` lists:
+   - If the path is in `files_owned` → ✓ proceed.
+   - If the path is in `files_readonly` → move it to `files_owned` (swap); record the move.
+   - If the path is absent from both → insert it into `files_owned`; record the insert.
+
+   Record every auto-correction (task ID + path + `readonly→owned` | `inserted`) and surface the combined list in Step 3 alongside the 3a corrections. Apply the same escalation rule: if 3a + 3b together required auto-correction on more than 3 plans in a single refinement run, flag it prominently and offer "Request changes" proactively — that threshold signals systemic refiner misread.
+
+   Rationale: AC verification that grep-asserts a file's contents after the task implies the executor wrote that file; listing it readonly (or omitting it) produces a guaranteed `scope_deviation` finding. This gate closes the AC-side parity loop at plan-authoring time.
 4. Write each plan based on its `epic` frontmatter field:
    - If `epic: <slug>` is set → write to `.soloflow/active/plans/{slug}/TASK-{NNN}-plan.md`, creating the folder if missing.
    - If `epic` is absent or `null` → write to `.soloflow/active/plans/TASK-{NNN}-plan.md` (flat, orphan).

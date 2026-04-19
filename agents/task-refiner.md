@@ -74,6 +74,13 @@ You may also receive a list of **existing epic slugs** (with the contents of the
 
    This rule exists because sweep tasks have repeatedly left assertion files (especially under `scripts/`) with stale values that no automated gate catches — `files_owned` + the primary test suite alone are not sufficient for rename sweeps.
 
+5e. **Validate `acceptance_criteria` ↔ `files_owned` parity.** Before emitting a plan, scan every `acceptance_criteria[].verification` string for file paths named via write-confirming reads — `grep`, `cat`, `head`, `tail`, `test -e`, `test -f`, `python3 -c '... open("<path>") ...'`, or a bare path piped into a contains-check. For each extracted path:
+   - If it is already in `files_owned` → ✓ proceed.
+   - If it is in `files_readonly` → move it to `files_owned` (AC verification that grep-asserts the file's contents implies the executor wrote it).
+   - If it is absent from both → insert into `files_owned`.
+
+   Self-contradictory plans (AC verification says the file contains X after the task, plan says readonly) produce a guaranteed `scope_deviation` finding at execution time. This check must pass before emitting the plan — do not rely on executor-time recovery.
+
 6. **Answer three critical questions per plan:**
    - Hardest decision and why this approach was chosen
    - Rejected alternatives and what would change your mind
