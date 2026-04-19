@@ -210,7 +210,7 @@ Decisions:
         - `maestro` — `test_strategy.targets[*].type: integration` AND any of `ios|android|mobile|maestro|simulator|react-native` appears (case-insensitive) in `files_owned`, acceptance criteria, objective, or implementation steps.
         - `playwright` — `test_strategy.targets[*].type: integration` AND any of `browser|playwright|e2e|\bweb\b|page\.|screenshot` appears AND no mobile keywords matched.
         - `docker` — any of `docker|container|compose|dockerfile` appears, OR (`postgres|redis|rabbitmq|mysql`) paired with (`start|spin up|local|test against|container`) in acceptance criteria or implementation steps.
-      - If the set is empty, emit `infra_check` with empty arrays and skip to step c.
+      - If the set is empty, emit `infra_check` with empty `required`/`available`/`missing` arrays and skip to step b2 (still run per-task prereq probes).
 
    b. **Probe availability** via Bash. For each required category:
       - `maestro`: `claude mcp list 2>/dev/null | grep -qi maestro && which maestro >/dev/null`
@@ -223,6 +223,15 @@ Decisions:
       - CLI (`maestro` / `npx`) not found → `"CLI not found"`.
       - Docker binary missing → `"not installed"`.
       - Docker binary present but `docker info` fails (or times out) → `"daemon not running"`.
+
+   b2. **Probe per-task `prerequisites[]`.** For each task in `selected_task_ids`, read the plan's `prerequisites` frontmatter list (absent = skip, treat as empty). For each entry:
+      - Run `check` via Bash with a 5-second timeout: `timeout 5 bash -c '<check>'`.
+      - Classify: `pass` (exit 0), `fail` (exit non-zero), or `timeout` (exit 124).
+      - Record `{task_id, description, status, blocking, fix}`.
+
+      A task with **any `blocking: true` entry** whose status is `fail` or `timeout` is a **gated task** — the orchestrator's Step 2.8 will offer to gate it out of the sprint. Non-blocking failures are surfaced as advisory only. Plans with no `prerequisites` field emit nothing in `task_prerequisites`.
+
+      This probe runs AFTER the commit in Step 5 — prereq failures do not block sprint setup itself, only the affected task's execution. The orchestrator resolves the gating decision at Step 2.8.
 
    c. **Format `infra_check`** into structured output (see schema below). Diagnostic only — do NOT prompt the user; the orchestrator handles the prompt in Step 2.8. Note: the heuristic may produce false positives (e.g., a plan that mentions "postgres" in prose without needing Docker); the user can override by choosing Continue at the orchestrator prompt.
 
@@ -272,6 +281,12 @@ infra_check:  # ALWAYS present (never null). Empty arrays if nothing required.
       impacts:
         - task_id: "TASK-NNN"
           test_targets: ["{behavior from test_strategy.targets[].behavior}"]
+  task_prerequisites:                              # per-task plan-declared probes (see Step 6.5.b2). Empty if no plan had prerequisites.
+    - task_id: "TASK-NNN"
+      description: "{prereq description from plan}"
+      status: "pass|fail|timeout"
+      blocking: {true|false}
+      fix: "{suggested install/fix command, never auto-run}"
 `` `
 ```
 

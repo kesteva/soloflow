@@ -81,6 +81,23 @@ You may also receive a list of **existing epic slugs** (with the contents of the
 
    Self-contradictory plans (AC verification says the file contains X after the task, plan says readonly) produce a guaranteed `scope_deviation` finding at execution time. This check must pass before emitting the plan — do not rely on executor-time recovery.
 
+5f. **Prerequisite enumeration for external-CLI steps.** If any Implementation Step invokes an external CLI whose success depends on package-level or config-level state — examples include `eas build`, `expo run:*`, `xcodebuild`, `docker build/run`, `gcloud deploy`, `supabase db push`, `firebase deploy`, `terraform apply`, `kubectl apply` — enumerate the relevant probes in a `prerequisites` frontmatter list. For each prereq, emit one entry with:
+   - `check`: a cheap, deterministic bash command (exit 0 = pass; exit non-0 = fail). Prefer `grep -q 'pattern' <config>`, `test -f <path>`, or `test -n "$VAR"`.
+   - `fix`: the command the user would run to resolve the failure (e.g. `npx expo install expo-dev-client`). Never auto-run; informational only.
+   - `description`: one sentence explaining why this prereq blocks the task.
+   - `blocking`: `true` if a failed check means the task cannot start; `false` if it's a warning the executor can work around.
+
+   Three heuristic categories to cover (apply whichever are relevant):
+   1. **Declared-dependency checks** — `grep '"<pkg>"' package.json` (or `requirements.txt` / `Gemfile` / `go.mod` / `Cargo.toml`) for every package the CLI's config references.
+   2. **Config-file presence checks** — `grep '<required-key>' <config>` for any CLI config the step assumes (e.g. `expo.extra.eas.projectId` in `app.json`, `apiVersion` in a k8s manifest, `[project]` in `supabase/config.toml`).
+   3. **Env-var checks** — `test -n "$VAR"` for any env var named in `.env.example` that the CLI reads at runtime and fails silently without.
+
+   System CLIs themselves (maestro, playwright, docker) are already probed by sprint-initiator's infra check — do NOT duplicate those in `prerequisites[]`. Only encode task-specific dep/config/env state.
+
+   If you cannot name a specific deterministic probe but suspect a failure class (native-module registration, credential expiry, cache corruption), surface it in **Lowest Confidence Area** instead. `prerequisites[]` is for cheap, machine-checkable probes only.
+
+   Omit the `prerequisites` field entirely for plans that do not invoke an external CLI (pure code changes, docs, config edits). Absence is the common case.
+
 6. **Answer three critical questions per plan:**
    - Hardest decision and why this approach was chosen
    - Rejected alternatives and what would change your mind
@@ -115,6 +132,11 @@ test_strategy:
     - behavior: "{what to test}"
       test_file: "{path to existing or new test file}"
       type: {unit|component|integration}
+prerequisites:               # OMIT ENTIRELY for pure-code tasks with no external CLI deps (common case)
+  - check: "{bash probe; exit 0 = pass}"
+    fix: "{command the user would run to resolve}"
+    description: "{why this prereq matters}"
+    blocking: {true|false}
 ---
 
 # {Task Title}

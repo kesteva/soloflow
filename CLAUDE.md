@@ -101,6 +101,7 @@ State format: Markdown with YAML frontmatter (optimized for LLM parsing + git di
 ## Verification Layer
 
 Multi-layered verification hierarchy (in order of authority):
+0. Pre-execution prerequisites: sprint-initiator probes per-task `prerequisites[]` (declared in each plan's frontmatter) + the existing maestro/playwright/docker infra check. Failing `blocking: true` probes gate the affected task out of the sprint at Step 2.8 with a human-review-queue entry carrying the suggested fix command. See `agents/task-refiner.md` step 5f for authoring.
 1. Ground truth: test suite, type checker, linter
 2. Visual: Maestro MCP (mobile), Playwright MCP (web)
 3. Requirements adherence with concrete evidence

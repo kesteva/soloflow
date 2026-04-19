@@ -140,11 +140,14 @@ Parse its structured output. Handle:
 
 ## Step 2.8: Smoke and infra decision
 
-Surface two orthogonal signals from the phase 2 output: the smoke baseline and the task-level infra availability. Present a single **AskUserQuestion** only if at least one of the following is true:
+Surface three orthogonal signals from the phase 2 output: the smoke baseline, task-level infra availability, and per-task plan-declared prerequisites. Present a single **AskUserQuestion** only if at least one of the following is true:
 - `smoke_results` is non-null AND (any failures OR `smoke_results.missing_infra` is non-empty)
 - `infra_check.missing` is non-empty
+- `infra_check.task_prerequisites` contains any entry with `status: "fail"` or `status: "timeout"` (blocking or advisory)
 
-Otherwise print `Smoke baseline clean; all required infra available.` and proceed to Step 3 with no prompt.
+Otherwise print `Smoke baseline clean; all required infra available; all task prerequisites satisfied.` and proceed to Step 3 with no prompt.
+
+Let `gated_task_ids` = the set of task IDs in `task_prerequisites` with at least one failing entry where `blocking: true`. This set drives the gating behavior below.
 
 ### Prompt body
 
@@ -160,10 +163,30 @@ Compose the question body from these sections (omit a section if it has nothing 
 - Per `missing` entry: `- {category} — {reason}. Affected: {task_id list}. Tests that will be skipped: {flattened test_targets}.`
 - Trailer: `Continuing will skip these checks; verifier will mark them SKIPPED — {category} not available.`
 
+**Task prerequisites** (only if `task_prerequisites` contains any `fail`/`timeout` entry):
+- Blocking failures header (only if `gated_task_ids` is non-empty): `{N} task(s) have failing BLOCKING prerequisites and will be gated out of the sprint if you continue:`
+  - Per gated task, per failing blocking entry: `- {task_id}: {description} — suggested fix: {fix}`
+- Advisory failures header (only if any non-blocking `fail`/`timeout` exist): `{N} advisory prereq check(s) failed (task will still run, executor may hit the failure):`
+  - Per advisory: `- {task_id}: {description} — suggested fix: {fix}`
+
 ### Options
 
-- **Continue sprint** — proceed to Step 3. If `infra_check.missing` was non-empty, append one line to the sprint's findings file (`.soloflow/active/findings/{sprint_id}-findings.md`) via Bash: `SPRINT-{sprint_id} started with missing infra: {categories}; tests deferred.`
-- **Abort** — stop execution so the user can install the missing tooling or fix the baseline, then re-run `/soloflow:sprint`.
+- **Continue sprint** — proceed to Step 3. Two side effects before Step 3 begins:
+  1. If `infra_check.missing` was non-empty, append one line to the sprint's findings file (`.soloflow/active/findings/{sprint_id}-findings.md`) via Bash: `SPRINT-{sprint_id} started with missing infra: {categories}; tests deferred.`
+  2. **If `gated_task_ids` is non-empty, gate those tasks out.** For each gated task:
+     a. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" {task_id} blocked --touched .soloflow/active/findings/{sprint_id}-findings.md` — matches the BLOCKED handling in Step 3 and removes the task from the active sprint loop.
+     b. Append to `.soloflow/human-review-queue.md` one entry per failing blocking prereq on that task:
+        ```yaml
+        - task: {task_id}
+          type: action_required
+          action: "{fix}"
+          blocked_checks: ["prerequisite: {description}"]
+          level: "ground_truth"
+          severity: "high"
+        ```
+     c. Append one line to the sprint's findings file: `{task_id} gated: failing blocking prereq ({description}).`
+     After gating, if `sprint.json.tasks` is now empty, print `All selected tasks were gated out — nothing to execute. Re-run /soloflow:sprint after installing the missing prerequisites.` and stop instead of proceeding to Step 3.
+- **Abort** — stop execution so the user can install the missing tooling, fix the baseline, or resolve prereqs, then re-run `/soloflow:sprint`.
 
 This step does NOT fix failures — it only surfaces baseline state and lets the user confirm a known-reduced verification surface.
 
