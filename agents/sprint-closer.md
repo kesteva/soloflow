@@ -45,7 +45,12 @@ Phase: gather
    - **sprint_code_review:** entries with `type: sprint_code_review`. Keep each entry separately (do NOT group by action — each finding is standalone). Capture `severity`, `finding`, `location`, `recommendation`, and `suspected_tasks`.
    - **other:** non-actionable entries (informational verifier notes, HUMAN_NEEDED escalations, already-overridden entries). Capture brief summaries and a count.
 
-5. **Detect stale compound proposal drafts.** Glob `.soloflow/active/compound/SPRINT-*-proposal.md` (per-sprint drafts) AND `.soloflow/active/COMPOUND-PROPOSAL.md` (pre-migration legacy single slot). For each match, read the YAML frontmatter to extract the `sprint:` field, and check whether the destination `.soloflow/archive/compound/{sprint_field}-proposal.md` already exists. Emit one entry per draft so the orchestrator can see every pending proposal.
+5. **Detect stale compound proposal drafts.** Glob `.soloflow/active/compound/SPRINT-*-proposal.md` (single-sprint and span-named drafts) AND `.soloflow/active/COMPOUND-PROPOSAL.md` (pre-migration legacy single slot). For each match, read the YAML frontmatter and normalize the sprint membership:
+   - Prefer `sprints:` (array form used by merged-batch drafts).
+   - Fall back to `sprint:` (legacy scalar) and treat it as a single-element list.
+   - Record both fields in the output so consumers written against either shape keep working.
+
+   Derive the archive destination by the span rule: single-element list → `SPRINT-NNN-proposal.md`; multi-element → `SPRINT-{MIN}-{MAX}-proposal.md` (zero-pad to 3 digits; use the numeric min/max of the array, which is authoritative even if the filename span is wider because of a non-contiguous batch). Check whether that destination already exists. Emit one entry per draft so the orchestrator can see every pending proposal.
 
    **Note:** sprint-closer does NOT archive the per-sprint findings file (`.soloflow/active/findings/{sprint.id}-findings.md`). It must stay in `active/findings/` until `/soloflow:compound` consumes it. Archival is a compound-phase responsibility.
 
@@ -137,7 +142,9 @@ sprint_code_review:
 
 compound_drafts:  # one entry per draft found in active/compound/ (plus legacy single-slot if present)
   - source_path: "{path to active draft}"
-    sprint_field: "{SPRINT-NNN or null}"
+    sprint_field: "{SPRINT-NNN or null}"        # populated when legacy scalar form is used
+    sprints_field: ["SPRINT-NNN", ...]          # normalized array; single-element for scalar form; null when neither field was present
+    destination_path: "{archive path derived by span rule, or null when membership is unknown}"
     destination_exists: {true|false}
   # empty list if none
 
@@ -169,10 +176,11 @@ Decisions:
 1. **Mark sprint complete.** Read `.soloflow/active/sprint.json`. If `sprint.status != "complete"`, set it to `"complete"` and write back. (Idempotent.)
 
 2. **Archive stale compound proposal drafts.** For each entry in `compound_drafts` from Phase 1:
-   a. Read the file's YAML frontmatter to extract the `sprint:` field (already captured in gather — re-read here to avoid stale data).
-   b. If a `sprint:` field is present and `.soloflow/archive/compound/{sprint_field}-proposal.md` does NOT exist, move the file there.
-   c. If the destination already exists, leave the active file in place — do not overwrite. Record `skipped_reason: already_exists` for that draft.
-   d. If the frontmatter lacks a `sprint:` field, leave the file in place. Record `skipped_reason: missing_sprint_field`.
+   a. Re-read the file's YAML frontmatter to avoid stale data. Normalize membership identically to Phase 1 step 5: prefer `sprints:` (array), fall back to `sprint:` (scalar) as a single-element list.
+   b. Derive the archive destination via the span rule: single-element → `.soloflow/archive/compound/SPRINT-NNN-proposal.md`; multi-element → `.soloflow/archive/compound/SPRINT-{MIN}-{MAX}-proposal.md` (numeric min/max of the array, zero-padded to 3 digits). This yields the same path as the `destination_path` captured in Phase 1.
+   c. If the destination does NOT exist, move the file there.
+   d. If the destination already exists, leave the active file in place — do not overwrite. Record `skipped_reason: already_exists` for that draft.
+   e. If the frontmatter carries neither `sprints:` nor `sprint:`, leave the file in place. Record `skipped_reason: missing_sprint_field`.
 
    **Do NOT archive the per-sprint findings file.** `.soloflow/active/findings/{sprint.id}-findings.md` stays in place for `/soloflow:compound` to consume later.
 
@@ -185,8 +193,8 @@ Decisions:
    - Also add `.soloflow/human-review-queue.md` if it exists.
    - Do NOT add the per-sprint findings file — it stays active for `/soloflow:compound` to archive later.
    - Also add `.soloflow/checkpoint.md` if it exists.
-   - Also add every `.soloflow/archive/compound/{sprint_field}-proposal.md` that step 2 moved (one per archived draft).
-   - Also add the corresponding `.soloflow/active/compound/{sprint_field}-proposal.md` (or the legacy `.soloflow/active/COMPOUND-PROPOSAL.md`) for the deletion side of each archived draft.
+   - Also add every destination path that step 2 moved (one per archived draft) — single-sprint form `SPRINT-NNN-proposal.md` or span form `SPRINT-{MIN}-{MAX}-proposal.md` as derived per draft.
+   - Also add the corresponding source path for the deletion side of each archived draft (either the matching active `active/compound/*-proposal.md` or the legacy `.soloflow/active/COMPOUND-PROPOSAL.md`).
    - Also add `.soloflow/archive/sprint-verifications/{sprint.id}-verification.md` if step 2b moved a file (and `.soloflow/active/sprint-verification.md` for the deletion).
    - Also add `.soloflow/archive/sprint-code-reviews/{sprint.id}-code-review.md` if step 2c moved a file (and `.soloflow/active/sprint-code-review.md` for the deletion).
    - If `git diff --cached --quiet` reports no staged changes, skip the commit.
