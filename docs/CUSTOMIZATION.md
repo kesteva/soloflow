@@ -152,6 +152,8 @@ See [VISUAL-VERIFICATION-SETUP.md](VISUAL-VERIFICATION-SETUP.md) for dependency 
 
 When `git.branch_per_run` is `prompt`, `/soloflow:sprint` asks at the start of each run; picking "remember this choice" writes `always` or `never` to `.soloflow/config.json` for you.
 
+**How run branches work.** When enabled, `/soloflow:sprint` creates a dedicated branch per invocation (default name pattern `soloflow/run-{timestamp}-{sprint_id}`), executor commits accumulate on it, and the branch is merged back (`--no-ff` by default) after human review. `sprint.json` carries a `run` object (`branch`, `base_branch`, `base_sha`, `created_at`) so resume detects the branch across sessions.
+
 ### Roadmap
 
 | Setting | Default | Description |
