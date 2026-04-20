@@ -153,7 +153,16 @@ Check the loop counter (starts at 1, capped at resolved `limits.executor_retry_m
 - **If loops >= resolved cap**: The task is stuck. Write a stuck report to `.soloflow/active/stuck/TASK-{NNN}-stuck.md` including the verifier's feedback, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report .soloflow/active/stuck/TASK-{NNN}-stuck.md --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/active/findings/{sprint_id}-findings.md`. Report to the user that the fix needs human intervention.
 
 ### If HUMAN_NEEDED
-1. Append an entry to `.soloflow/human-review-queue.md` with the verifier's notes.
+1. Append an entry to `.soloflow/human-review-queue.md` using this schema:
+   ```
+   - task: TASK-{NNN}
+     type: HUMAN_NEEDED
+     plan_ref: .soloflow/active/plans/[{epic}/]TASK-{NNN}-plan.md
+     verdict_notes: "{verifier's HUMAN_NEEDED rationale}"
+     action: "{what the human should review or decide}"
+     severity: "{low | medium | high}"
+   ```
+   `plan_ref` is the task's plan path — include `{epic}/` if the plan has an epic, omit otherwise. This is the canonical HUMAN_NEEDED task-entry schema; other writers (e.g. sprint orchestrator) reference this template.
 2. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings/{sprint_id}-findings.md`.
 3. Report to the user that the fix works technically but needs their review for product judgment.
 

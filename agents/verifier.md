@@ -68,12 +68,14 @@ If `visual_mobile` resolves to `false`, skip Maestro entirely. If `visual_web` r
    ```
    - task: {TASK-NNN}
      type: config_issue
+     plan_ref: .soloflow/active/plans/[{epic}/]TASK-{NNN}-plan.md
      action: "Verifier could not reach {maestro|playwright} MCP tools despite visual_{mobile|web}=true. Confirm the MCP server is registered and its tool bindings reach subagent sessions (see docs/VISUAL-VERIFICATION-SETUP.md)."
      blocked_checks:
        - "Level 2 visual verification for {platform}"
      level: "visual"
      severity: "medium"
    ```
+   `plan_ref` is the path to the task's plan file — include the `{epic}/` subfolder if the plan has an epic, omit it otherwise. The operator reads the plan for full acceptance-criteria and protocol context.
 2. **Append a FIND entry** to the active sprint's findings file with `type: claude-md` and `description` naming the specific binding gap (e.g., "mcp__maestro__* bindings not exposed to verifier subagent despite project .mcp.json registration") so the compounder can propose a setup-doc fix.
 
 Do NOT emit `skipped_unable` without both of the above when the settings gate was enabled. Silent `skipped_unable` is only acceptable when `not_applicable` or `skipped_user_preference` would have been the correct classification — but those are different outcomes with different escalation rules.
@@ -154,12 +156,15 @@ At any level, if a check cannot run until a human performs a prerequisite action
 ```
 - task: {TASK-NNN}
   type: action_required
+  plan_ref: .soloflow/active/plans/[{epic}/]TASK-{NNN}-plan.md
   action: "{what the human must do}"
   blocked_checks:
     - "{criterion or verification step blocked}"
   level: "{ground_truth | visual | requirements | goal_backward}"
   severity: "{low | medium | high}"
 ```
+
+`plan_ref` is the path to the task's plan file — include the `{epic}/` subfolder if the plan has an epic, omit it otherwise. The operator reads the plan for full acceptance-criteria and archive-schema context.
 
 Pick `severity` so the user can scan the queue and tell which deferred items matter most:
 
