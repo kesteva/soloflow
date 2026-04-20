@@ -59,7 +59,24 @@ If `visual_mobile` resolves to `false`, skip Maestro entirely. If `visual_web` r
 **Availability check (only if settings gate and decision gate both pass):**
 1. Run `which maestro` (for mobile) or `which npx` (for web) via Bash
 2. If the tool is not installed, log "SKIPPED — tool not installed" and proceed to Level 3
-3. Attempt a probe call (e.g., `inspect_view_hierarchy` for Maestro). If the MCP server is not running, log "SKIPPED — MCP server not available" and proceed to Level 3
+3. Attempt a lightweight probe call (e.g., `list_flows` for Maestro, a noop `browser_install` check for Playwright) BEFORE running any real verification. The probe confirms the MCP tool surface is actually bound to this verifier session. If the probe returns an error OR the `mcp__{server}__*` tool binding is not present in your available tools list, the MCP server is not reachable from this session.
+4. If the probe fails, emit `skipped_unable` AND escalate the config gap — `skipped_unable` alone is not a valid escalation when the user has *enabled* visual verification. See "Config-gap escalation" below.
+
+**Config-gap escalation (required when emitting `skipped_unable`):** When the settings gate resolves to enabled but the MCP / tool surface is unavailable, the user's configured verification is silently degraded. You MUST make this visible:
+
+1. **Append to `.soloflow/human-review-queue.md`** so the user sees it immediately after the sprint:
+   ```
+   - task: {TASK-NNN}
+     type: config_issue
+     action: "Verifier could not reach {maestro|playwright} MCP tools despite visual_{mobile|web}=true. Confirm the MCP server is registered and its tool bindings reach subagent sessions (see docs/VISUAL-VERIFICATION-SETUP.md)."
+     blocked_checks:
+       - "Level 2 visual verification for {platform}"
+     level: "visual"
+     severity: "medium"
+   ```
+2. **Append a FIND entry** to the active sprint's findings file with `type: claude-md` and `description` naming the specific binding gap (e.g., "mcp__maestro__* bindings not exposed to verifier subagent despite project .mcp.json registration") so the compounder can propose a setup-doc fix.
+
+Do NOT emit `skipped_unable` without both of the above when the settings gate was enabled. Silent `skipped_unable` is only acceptable when `not_applicable` or `skipped_user_preference` would have been the correct classification — but those are different outcomes with different escalation rules.
 
 **Maestro verification (mobile):**
 1. Resolve `verification.visual_maestro_flow_dirs` per the config recipe
