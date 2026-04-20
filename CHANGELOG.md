@@ -4,6 +4,26 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-04-20
+
+### Changed
+- **SoloFlow is now framed as a personal workflow tool.** README and `docs/CONTRIBUTING.md` clarify that this is built for the maintainer's own shipping workflow. Issues and PRs are welcome, but changes only land if they help the maintainer's workflow. Forking is encouraged for divergent use cases.
+
+### Added (since 0.8.3)
+- **`/soloflow:compound` supports batched multi-sprint runs.** The command accepts a pending-sprint picker or `--all` drain, and the compounder reads/writes per-sprint paths. Compound-skeptic is span-aware and preserves Source-Sprint when reviewing bucket C items. Sprint-closer archives span-named compound drafts. Compound emits a scannable summary before bucket-by-bucket review.
+- **`compound-skeptic` agent.** Second-pass skeptical reviewer for compound proposals — wired into `/soloflow:compound` to gate bucket acceptance. Learns about span proposals and Source-Sprint tracking.
+- **`claude-md-reviewer` runs pre-user-presentation (Step 2.5)** and reviews all C-bucket items before the user decision, instead of after approval.
+- **Per-sprint findings + compound drafts layout.** `init` and `session-start` support the new per-sprint paths; writer agents point at the per-sprint findings file; `sprint-initiator` creates it; `sprint-closer` handles per-sprint compound drafts while keeping findings active.
+- **Sprint-level code review.** New `sprint-code-reviewer` agent runs at the end of a sprint; `/soloflow:review-queue` adds sprint-code-review triage; `sprint-closer` handles sprint-level code review; `sprint_code_review` config defaults and sub-flow in `/soloflow:config`.
+- **Plan-authoring parity gates.** `acceptance_criteria` / `files_owned` and `test_strategy` / `files_owned` parity is enforced at plan-authoring time; per-task prerequisites gate at sprint initiation.
+- **String-literal rename guardrail.** Repo-wide grep is required for string-literal rename sweeps.
+
+### Changed (since 0.8.3)
+- **MCP-unavailable escalates to human-review** and findings instead of silent skip.
+- **`HUMAN_NEEDED` queue entries require `plan_ref`** for traceability.
+- **Findings status sync** happens in-commit and verifier-side, so status stays consistent across agents.
+- **Prose-only findings are blocked inside CLEAN code-review verdicts** to prevent hidden carve-outs.
+
 ## [0.8.3] - 2026-04-18
 
 ### Changed
