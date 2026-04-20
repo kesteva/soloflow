@@ -33,12 +33,13 @@ For each CLAUDE.md file, evaluate:
 - Cross-references that have drifted from their targets
 
 #### C. Content that doesn't belong in CLAUDE.md
-CLAUDE.md is for **rules, constraints, and context agents must know upfront**. Move to specialized files:
+CLAUDE.md is for **rules and context every agent invocation needs upfront**. If only some agents need it (e.g., only the executor), it belongs in that agent's definition or a reference file it loads on demand. Move to specialized files:
 - **Reusable code patterns / templates** → `CODE-PATTERNS.md` (at appropriate directory level) — this is mandatory, not optional
 - **Architecture diagrams / detailed system descriptions** → `ARCHITECTURE.md`
 - **API conventions / endpoint documentation** → `API-CONVENTIONS.md`
 - **Setup / onboarding instructions** → `CONTRIBUTING.md` or `docs/`
 - **Historical context / decision records** → `docs/decisions/` or ADRs
+- **Obvious-from-code patterns** → drop entirely. Content only belongs in CLAUDE.md *or* a reference file if it is (a) non-obvious from a quick glance at the relevant files, OR (b) referenced frequently enough that re-discovering it each time would waste agent effort. If neither applies, recommend removal rather than relocation.
 
 #### D. Staleness
 - References to files, functions, or patterns that no longer exist in the codebase
@@ -54,7 +55,7 @@ CLAUDE.md is for **rules, constraints, and context agents must know upfront**. M
 For every finding, verify against the actual codebase:
 - If a CLAUDE.md references a file path, confirm it exists
 - If a CLAUDE.md describes a pattern, confirm the code actually follows it
-- If a CLAUDE.md states a rule, check whether the codebase already makes it self-evident
+- If a CLAUDE.md or reference file states a rule or pattern, check whether the codebase already makes it self-evident and whether it comes up often enough to be worth summarizing at all
 
 ## Output Format
 
