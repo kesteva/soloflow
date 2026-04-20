@@ -1,6 +1,6 @@
 # Architecture
 
-SoloFlow is a set of Claude Code hooks, agent definitions, slash commands, and skills that orchestrate a 5-phase product development workflow. It has no runtime dependencies beyond Claude Code and Node.js. All state is stored as markdown files with YAML frontmatter in the `.soloflow/` directory.
+SoloFlow is a set of Claude Code hooks, agent definitions, slash commands, and skills that orchestrate a product development workflow. It has no runtime dependencies beyond Claude Code and Node.js. All state is stored as markdown files with YAML frontmatter in the `.soloflow/` directory — see [State Layer](STATE-LAYER.md) for layout, ID allocation, findings queue, and epics.
 
 ## Workflow
 
@@ -46,7 +46,15 @@ SoloFlow is a set of Claude Code hooks, agent definitions, slash commands, and s
    Reusable Solutions
 ```
 
-## Five Phases
+## Phases
+
+### Phase 0: Roadmap Generation (optional)
+- **Agents:** `roadmap-researcher` (Sonnet, parallel) + `roadmap-generator` (Opus)
+- **Input:** Project vision
+- **Output:** `ROADMAP-NNN.md` in `.soloflow/active/roadmaps/`
+- **Flow:** deep questioning → parallel research → phased epics
+- **Materializes as:** ideas (normal pipeline) or plans (immediate execution)
+- Pre-pipeline accelerator; does not replace any phase.
 
 ### Phase 1: Idea Extraction
 - **Agent:** `idea-extractor` (Sonnet)
@@ -74,10 +82,12 @@ SoloFlow is a set of Claude Code hooks, agent definitions, slash commands, and s
 - **Human touchpoint:** User does taste-level review (all functional verification already done by the verifier)
 
 ### Phase 5: Compound Learning
-- **Agent:** `compounder` (Sonnet)
+- **Agent:** `compounder` (Sonnet, interactive)
 - **Input:** Done reports, stuck reports, and the sprint's per-sprint findings file (`active/findings/SPRINT-NNN-findings.md`)
-- **Output:** `active/compound/SPRINT-NNN-proposal.md` with three buckets (clean-ups, backlog tasks, CLAUDE.md improvements). Compound does not block the next sprint; multiple sprints' findings+proposals can await compound simultaneously. Drain in bulk with `/soloflow:compound --all`.
-- **Optional:** `compound-skeptic` pre-review and `claude-md-reviewer` C-bucket refinement (see `docs/CUSTOMIZATION.md`)
+- **Output:** `active/compound/SPRINT-NNN-proposal.md` with three buckets: (A) clean-ups to apply immediately, (B) backlog ideas → `active/ideas/IDEA-NNN.md`, (C) CLAUDE.md improvements
+- **Optional pre-review:** `claude-md-reviewer` (Opus) tightens/drops Bucket C; `compound-skeptic` (Opus) adds per-item IMPLEMENT / DONT_IMPLEMENT verdicts. Both toggleable via `compound.*` config.
+- **Flow:** user approves per-item (including "Accept skeptic's recommendations"); main agent applies approved items with atomic commits, then archives the proposal and findings file(s). Compound does not block the next sprint.
+- **Batching:** when multiple sprints are pending, `/soloflow:compound --all` (or a multi-select picker) batches them into ONE merged proposal (`active/compound/SPRINT-{MIN}-{MAX}-proposal.md`) with globally numbered items carrying a `Source-Sprint:` field, one review flow, and one apply pass. Each sprint's findings file still archives individually to `archive/findings/SPRINT-NNN-findings.md`. A single-sprint run keeps today's format (`SPRINT-NNN-proposal.md`).
 
 ## Hook System
 
@@ -135,12 +145,19 @@ All workflow state lives in `.soloflow/`, created by `scripts/init.sh`:
 
 ## Verification Hierarchy
 
-The verifier applies checks in priority order (from the `verifier` agent):
+Multi-layered verification, in order of authority:
 
+0. **Pre-execution prerequisites** — sprint-initiator probes per-task `prerequisites[]` (declared in each plan's frontmatter) + the maestro/playwright/docker infra check. Failing `blocking: true` probes gate the affected task out of the sprint at Step 2.8 with a human-review-queue entry carrying the suggested fix command. See `agents/task-refiner.md` step 5f for authoring.
 1. **Ground truth** — tests, type checker, linter (non-negotiable, automated)
-2. **Visual verification** — Maestro MCP for mobile, Playwright MCP for web (optional, gated on config). See [Visual Verification Setup](VISUAL-VERIFICATION-SETUP.md).
-3. **Requirements adherence** — each acceptance criterion checked with evidence
-4. **Goal-backward** — "what must be TRUE for this to work in production?"
+2. **Visual** — Maestro MCP (mobile), Playwright MCP (web), optional and gated on config. See [Visual Verification Setup](VISUAL-VERIFICATION-SETUP.md).
+3. **Requirements adherence** — each acceptance criterion checked with concrete evidence
+4. **Goal-backward** — "What must be TRUE for production?"
+5. **Per-task code review** — `/simplify` (quality/reuse) + `/security-review` (security audit). Can send the executor back with `IMPROVEMENTS_NEEDED`. Toggles: `code_review.enabled/.run_simplify/.run_security_review`.
+6. **Sprint-level code review** — aggregate `/simplify` + `/security-review` across `base_sha..HEAD` + cross-task redundancy sweep. **Advisory only** — findings go to human review (accept → active sprint's findings file / defer / dismiss), never back to execution. Toggles: `sprint_code_review.enabled/.run_simplify/.run_security_review` (resolve independently from `code_review.*`).
+
+**Visual verification runtime.** The verifier checks tool availability (`which maestro`, `which npx`) before attempting MCP interactions; if tools aren't installed or MCP servers aren't running, Level 2 is skipped gracefully.
+
+**Token budget.** Use `inspect_view_hierarchy` (~50 tokens) over `take_screenshot` (~1600 tokens) when layout-only checks suffice. Limit to 3 screenshots per verification. Never run `maestro test` via Bash while Maestro MCP is active (port 7001 conflict).
 
 ## Key Constraint
 
