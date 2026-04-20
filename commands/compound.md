@@ -1,18 +1,20 @@
 ---
-description: Propose learnings from a completed sprint in three buckets (clean-ups, backlog tasks, CLAUDE.md improvements) plus optional SoloFlow self-improvement feedback (tester mode), then apply what the user approves
-argument-hint: [optional: SPRINT-NNN]
+description: Propose learnings from completed sprint(s) in three buckets (clean-ups, backlog tasks, CLAUDE.md improvements) plus optional SoloFlow self-improvement feedback (tester mode), then apply what the user approves. Batches multiple pending sprints into one merged proposal when --all or multi-select subset is used.
+argument-hint: [optional: SPRINT-NNN | --all | --oldest]
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 
 # /soloflow:compound
 
-Phase 6 of the SoloFlow pipeline. Reads done reports, stuck reports, human review notes, and the out-of-scope findings queue from a completed sprint, then produces a three-bucket proposal for the user to review one bucket at a time. The main agent (you) applies approved items directly for clean-ups and CLAUDE.md edits, and spawns the task-refiner for backlog tasks.
+Phase 6 of the SoloFlow pipeline. Reads done reports, stuck reports, human review notes, and out-of-scope findings queues, then produces a three-bucket proposal for the user to review one bucket at a time. The main agent (you) applies approved items directly for clean-ups and CLAUDE.md edits, and spawns the task-refiner for backlog tasks.
+
+**Batching.** When two or more sprints are pending, `--all` (or a multi-select picker) batches them into ONE compounder invocation → ONE merged proposal (`SPRINT-{MIN}-{MAX}-proposal.md`) → ONE review flow → ONE apply pass. Each sprint's findings file still archives individually. Single-sprint runs are unchanged (no span, no batching logic engages).
 
 Target: **$ARGUMENTS** (optional — sprint selector). Accepted values:
-- `SPRINT-NNN` — compound that specific sprint
-- `--all` — compound every pending sprint, oldest first, one at a time
-- `--oldest` — silently pick the oldest pending sprint
-- empty — pick the single pending sprint; prompt if two or more exist
+- `SPRINT-NNN` — compound that specific sprint (single-sprint path)
+- `--all` — batch every pending sprint into one merged proposal
+- `--oldest` — silently pick the oldest pending sprint (single-sprint path)
+- empty — single pending sprint auto-selected; multi-select picker when two or more exist (user can pick a subset, all, or type free-text IDs for unusual subsets)
 
 ---
 
@@ -37,61 +39,102 @@ it wherever "Cap at 3 respawns" appears below.
 
 If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
 
-## Step 1: Identify the sprint(s) to compound
+## Step 1: Identify sprint(s) and build the batch
 
 **Resolve `compound.pending_sprints.picker_threshold`** per the three-tier recipe (fallback: `2`). Name this `PICKER_THRESHOLD` below.
 
-**Discover pending sprints.** A sprint is *pending compound* when:
-- `.soloflow/active/findings/SPRINT-*-findings.md` exists for it AND
-- `.soloflow/archive/compound/SPRINT-*-proposal.md` does NOT exist for it.
+### 1a. Discover pending sprints
 
-Glob `.soloflow/active/findings/SPRINT-*-findings.md`, strip `-findings.md`, and drop any whose archive slot already exists. Sort the remaining list by numeric suffix ascending (oldest-first). Call this `PENDING`.
+A sprint is *pending compound* when its `active/findings/SPRINT-NNN-findings.md` exists AND no archived proposal covers it.
 
-**Interpret `$ARGUMENTS`:**
+Procedure:
+1. Glob `.soloflow/active/findings/SPRINT-*-findings.md` and extract each sprint's numeric suffix as `NNN`.
+2. Build a **coverage set** by scanning `.soloflow/archive/compound/*-proposal.md`. A sprint `NNN` is covered iff any archived basename (matched anchored on `-proposal.md$`) is either `SPRINT-NNN-proposal.md` (exact) or `SPRINT-AAA-BBB-proposal.md` with `min(AAA,BBB) <= NNN <= max(AAA,BBB)` (span range, inclusive). The frontmatter `sprints:` array is the canonical membership source of truth — when in doubt about a non-contiguous batch, read the frontmatter — but filename-range coverage is correct for every contiguous case and is cheap at discovery time.
+3. Drop covered sprints from the pending list. Sort remaining by numeric suffix ascending (oldest-first). Call this `PENDING`.
 
-1. **`$ARGUMENTS == SPRINT-NNN`** → target that sprint. If `PENDING` is non-empty and doesn't include it, still allow (user may be re-running against a legacy state). Proceed to the idempotency guard.
-2. **`$ARGUMENTS == --all`** → if `PENDING` is empty, report "No pending sprints to compound." and stop. Otherwise set `MODE=all` and iterate this command's Steps 2–6 once per pending sprint, oldest-first, stopping between sprints if any user prompt bails out.
-3. **`$ARGUMENTS == --oldest`** → if `PENDING` is empty, report and stop. Otherwise pick the first entry silently and continue with that sprint.
+### 1b. Interpret `$ARGUMENTS` and resolve `BATCH_SPRINTS`
+
+1. **`$ARGUMENTS == SPRINT-NNN`** → `BATCH_SPRINTS = [SPRINT-NNN]`. If `PENDING` is non-empty and doesn't include this sprint, still allow (user may be re-running against legacy state). Proceed to the idempotency guard.
+2. **`$ARGUMENTS == --all`** → if `PENDING` is empty, report "No pending sprints to compound." and stop. Otherwise `BATCH_SPRINTS = PENDING`.
+3. **`$ARGUMENTS == --oldest`** → if `PENDING` is empty, report and stop. Otherwise `BATCH_SPRINTS = [PENDING[0]]`.
 4. **`$ARGUMENTS` empty:**
    - `PENDING` length 0 → report "No pending sprints to compound." and stop.
-   - `PENDING` length 1 → use it silently.
-   - `PENDING` length ≥ `PICKER_THRESHOLD` → use **AskUserQuestion** with one option per pending sprint (showing its ID and the in-sprint findings `pending_count`) plus a final "Compound all pending (oldest → newest)" option. If the user picks "all", set `MODE=all` and iterate as in case 2.
+   - `PENDING` length 1 → `BATCH_SPRINTS = PENDING` silently.
+   - `PENDING` length ≥ `PICKER_THRESHOLD` → **multi-select picker**. Use **AskUserQuestion** with `multiSelect: true`. Options (capped at 4 per tool contract):
+     - When `|PENDING| <= 3`: one option per pending sprint (label: `SPRINT-NNN ({pending_count} findings)`), plus a final "Compound all pending ({N})" option — everything fits.
+     - When `|PENDING| >= 4`: one "Compound all pending ({N})" option, plus the first 3 pending sprints as individual options. Users who need an unusual subset (e.g., a later sprint only, or a mix excluding the first 3) use the automatic **Other** free-text escape and type a comma-separated list like `SPRINT-003, SPRINT-005`.
+     
+     **Post-processing the selection:**
+     - If the set includes "Compound all pending" → `BATCH_SPRINTS = PENDING` (overrides any individual checks).
+     - Else if one or more specific sprints are checked → `BATCH_SPRINTS = checked set`, preserved in numeric-ascending order.
+     - Else if the user provided free-text via Other → parse IDs, validate each against `PENDING`. Unknown or already-compounded IDs → re-prompt once, noting the bad IDs in the question text. Empty or all-invalid selection → re-prompt.
+     - If `BATCH_SPRINTS` resolves to a single element, the single-sprint path kicks in naturally (no span naming, no `[SPRINT-NNN]` row prefixes, commit scopes unchanged).
 
-**Idempotency guard** (per selected sprint): if `.soloflow/archive/compound/SPRINT-{NNN}-proposal.md` already exists, report "SPRINT-{NNN} already compounded. Skipping." and stop (or move to the next sprint in `MODE=all`).
+### 1c. Derive `SPAN_LABEL` and `PROPOSAL_BASENAME`
 
-**Collect relevant inputs for the selected sprint:**
-- Done reports under `.soloflow/archive/done/` (recursive — may be under epic subfolders)
-- Stuck reports under `.soloflow/active/stuck/`
-- The sprint's findings file at `.soloflow/active/findings/SPRINT-{NNN}-findings.md`
-- `.soloflow/human-review-queue.md`
+- When `|BATCH_SPRINTS| == 1`: `SPAN_LABEL = SPRINT-NNN`, `PROPOSAL_BASENAME = SPRINT-NNN-proposal.md`.
+- When `|BATCH_SPRINTS| >= 2`: let `MIN` and `MAX` be the numeric min and max of the batch (zero-padded to 3 digits). `SPAN_LABEL = SPRINT-{MIN}-{MAX}`, `PROPOSAL_BASENAME = SPRINT-{MIN}-{MAX}-proposal.md`.
+- **Non-contiguous batches are supported.** If the user picks SPRINT-001 and SPRINT-003 (skipping 002 because it was already compounded), the span label and filename span `001-003`; the frontmatter `sprints:` array holds exactly `[SPRINT-001, SPRINT-003]` and is the canonical membership truth.
 
-**Legacy findings migration (one-shot per project):** If the per-sprint findings file does NOT exist for the selected sprint BUT a legacy `.soloflow/active/findings.md` is present, treat the legacy file as this sprint's findings (read it directly and pass its path to the compounder). After Step 5 archives the sprint's proposal, delete the legacy file.
+### 1d. Idempotency guard
 
-If nothing was done and nothing was logged (empty done/stuck dirs AND empty findings file), report "No completed tasks or findings to learn from." and stop.
+Apply the coverage check from 1a to every sprint in `BATCH_SPRINTS`. If ANY member is already covered by an archived proposal, report which members are already compounded and stop. (This can fire when `$ARGUMENTS == SPRINT-NNN` is re-run on a completed sprint, or when PENDING discovery is stale.)
+
+### 1e. Stale-draft safety
+
+Before spawning the compounder, glob `.soloflow/active/compound/*-proposal.md`. If any active draft's frontmatter (prefer `sprints:` array, fall back to `sprint:` scalar) contains ANY sprint in `BATCH_SPRINTS`, stop with:
+
+`"Stale compound draft at {path} covers SPRINT-NNN. Resolve it first (re-run /soloflow:compound against the draft, run sprint-closer to archive it, or delete it manually) before continuing."`
+
+Do NOT silently overwrite — the draft may represent in-progress work from a crashed prior run.
+
+### 1f. Collect inputs
+
+Build a per-sprint input list for the compounder:
+
+```
+inputs: [
+  { sprint_id: SPRINT-NNN,
+    findings_path: ".soloflow/active/findings/SPRINT-NNN-findings.md",  # or legacy path (see below)
+    done_reports: ["... paths under .soloflow/archive/done/ whose frontmatter sprint: == SPRINT-NNN ..."],
+    stuck_reports: ["... paths under .soloflow/active/stuck/ whose frontmatter sprint: == SPRINT-NNN ..."]
+  },
+  ...
+]
+```
+
+- Done reports glob: `.soloflow/archive/done/**/TASK-*-done.md`. Route each report to the sprint whose ID matches its frontmatter `sprint:` field. Reports whose sprint is NOT in `BATCH_SPRINTS` are ignored for this run.
+- Stuck reports glob: `.soloflow/active/stuck/**/TASK-*-stuck.md`. Same routing rule.
+- `.soloflow/human-review-queue.md` is passed ONCE (shared across sprints, not per-sprint).
+
+**Legacy findings migration (one-shot per project).** If the per-sprint findings file does NOT exist for some sprint in `BATCH_SPRINTS` but the legacy `.soloflow/active/findings.md` is present, treat the legacy file as that sprint's findings (only fires for one batch member — typically the oldest). After Step 5 archives the proposal, delete the legacy file.
+
+If the batch is entirely empty (every sprint has empty done/stuck inputs AND an empty findings file), report "No completed tasks or findings to learn from." and stop.
 
 ## Step 2: Spawn the compounder
 
-1. **Ensure** `.soloflow/active/compound/` exists (`mkdir -p`). The per-sprint draft will be written there.
+1. **Ensure** `.soloflow/active/compound/` exists (`mkdir -p`). The draft will be written there as `{PROPOSAL_BASENAME}` (single-sprint or span-named).
 2. **Resolve `tester` flag.** Check `.soloflow/config.json` first, then `config/defaults.yaml` (via `${CLAUDE_PLUGIN_ROOT}`). If `tester: true`, pass `tester: true` to the compounder so it produces bucket D (SoloFlow improvements). Otherwise omit it.
 3. Spawn the **compounder** agent via the Agent tool with:
-   - The target sprint ID
-   - Paths to all done reports, stuck reports, the sprint's findings file (per-sprint path, or the legacy `active/findings.md` if the migration branch applies), and human-review-queue.md
-   - If tester mode is on: `tester: true`
-   - Instruction: "Produce `.soloflow/active/compound/{sprint_id}-proposal.md` with three buckets (A clean-ups, B backlog tasks, C CLAUDE.md / CODE-PATTERNS.md improvements). Route each C-item to the correct target file — rules and constraints go to CLAUDE.md, code patterns go to CODE-PATTERNS.md. {If tester: Also produce bucket D (SoloFlow improvements).} Do not apply anything. Cite concrete evidence for every item."
+   - `sprints: BATCH_SPRINTS` (the full array) and `span_label: SPAN_LABEL`.
+   - The `inputs` list from Step 1f (per-sprint findings/done/stuck paths).
+   - `.soloflow/human-review-queue.md` path (shared).
+   - If tester mode is on: `tester: true`.
+   - Instruction: *"Triage across ALL sprints' inputs together. Dedupe cross-sprint findings into a single item; set `Source-Sprint:` to the comma-joined sprint list for deduped items. Number items globally across the batch (A1..An, B1..Bm, C1..Cp, D1..Dq). Write `.soloflow/active/compound/{PROPOSAL_BASENAME}` with frontmatter `sprints: [...]` (ascending array), `span_label: {SPAN_LABEL}`, and every item carrying `**Source-Sprint:**`. Route each C-item to the correct target file — rules/constraints go to CLAUDE.md, code patterns go to CODE-PATTERNS.md. {If tester: Also produce bucket D (SoloFlow improvements).} Do not apply anything. Cite concrete evidence for every item."*
 4. Wait for the compounder to finish.
-   - If the compounder reports **CONTEXT_LIMIT**: read the `### Handoff` section. If a partial `active/compound/{sprint_id}-proposal.md` was written, read it. Spawn a **fresh compounder** with the remaining un-triaged inputs and the partial proposal content. Merge results. Cap at resolved `limits.context_limit_respawn_max`.
-   Read the resulting `active/compound/{sprint_id}-proposal.md`.
+   - If the compounder reports **CONTEXT_LIMIT**: read the `### Handoff` section. If a partial `active/compound/{PROPOSAL_BASENAME}` was written, read it. Spawn a **fresh compounder** with the same `sprints` + `span_label`, the `sprints_remaining` subset (and their inputs), plus the partial proposal content. The fresh compounder resumes from where the previous one stopped. Cap at resolved `limits.context_limit_respawn_max`.
+   - Read the resulting `active/compound/{PROPOSAL_BASENAME}`.
 
 ## Step 2.5: Pre-review Bucket C (claude-md-reviewer)
 
 Runs before the user sees any options, so the C-bucket presented in Step 3 is already tightened.
 
 1. **Resolve `compound.claude_md_reviewer.enabled`** per the three-tier recipe (fallback: `true`). If `false`, skip this step entirely and carry raw C-items into Step 3.
-2. Parse Bucket C from `active/compound/{sprint_id}-proposal.md`. If the bucket is empty (`_No items._`) or has zero entries, skip.
+2. Parse Bucket C from `active/compound/{PROPOSAL_BASENAME}`. If the bucket is empty (`_No items._`) or has zero entries, skip.
 3. Spawn the **claude-md-reviewer** agent with:
-   - The full list of C-items (all of them — not user-filtered)
-   - The target sprint ID
-   - Instruction: *"Review every proposed CLAUDE.md / CODE-PATTERNS.md improvement against the existing codebase and CLAUDE.md files. Produce tightly scoped diffs at the lowest appropriate directory level. Reject redundant, stale, or overly broad proposals with a reason code. When an item mixes rule content and pattern content, SPLIT it into two ready items (one for CLAUDE.md, one for CODE-PATTERNS.md) both tagged source_item: C{n}."*
+   - The full list of C-items (all of them — not user-filtered), each carrying its `**Source-Sprint:**` field verbatim.
+   - The target `SPAN_LABEL` (used for commit message context).
+   - Instruction: *"Review every proposed CLAUDE.md / CODE-PATTERNS.md improvement against the existing codebase and CLAUDE.md files. Produce tightly scoped diffs at the lowest appropriate directory level. Reject redundant, stale, or overly broad proposals with a reason code. When an item mixes rule content and pattern content, SPLIT it into two ready items (one for CLAUDE.md, one for CODE-PATTERNS.md) both tagged source_item: C{n}. Preserve each item's Source-Sprint field verbatim — copy it into both halves of a split."*
    - Handle **CONTEXT_LIMIT** respawns identically to Step 2 (capped at resolved `limits.context_limit_respawn_max`).
 4. **Rewrite Bucket C in the proposal file** using the reviewer's output:
    - **Ready items:** replace the original item's content with the reviewer's refined diff + `**Status:** ready` tag. Preserve the item's title and source citation. For split items, insert both halves contiguously and keep both with their `source_item: C{n}` tag.
@@ -106,10 +149,10 @@ Adds per-item IMPLEMENT / DONT_IMPLEMENT verdicts before the user sees options, 
 1. **Resolve `compound.skeptic.enabled`** per the three-tier recipe (fallback: `true`). If `false`, skip this step entirely — Step 3 will omit the "Accept skeptic's recommendations" option.
 2. If every bucket is empty (`_No items._` in A, B, C, and D or D absent), skip — there's nothing to verdict.
 3. Spawn the **compound-skeptic** agent with:
-   - The target sprint ID
-   - The absolute path to `active/compound/{sprint_id}-proposal.md`
-   - (Optional) paths to the sprint's findings file and done reports for evidence
-   - Instruction: *"Walk every live item (skip `[dropped]`). Run 2–4 read-only checks per item. Insert a `### Skeptic Verdict` block under each with verdict, confidence, one-paragraph cited reasoning, and an optional counterfactual. Default to DONT_IMPLEMENT only when you have concrete evidence."*
+   - The target `SPAN_LABEL`.
+   - The absolute path to `active/compound/{PROPOSAL_BASENAME}`.
+   - (Optional) paths to each sprint's findings file and done reports for evidence.
+   - Instruction: *"Walk every live item (skip `[dropped]`). Run 2–4 read-only checks per item. Insert a `### Skeptic Verdict` block under each with verdict, confidence, one-paragraph cited reasoning, and an optional counterfactual. Default to DONT_IMPLEMENT only when you have concrete evidence. Do not touch any item's Source-Sprint field."*
 4. Handle **CONTEXT_LIMIT** respawns identically to Steps 2 and 2.5 (capped at resolved `limits.context_limit_respawn_max`). Preserve the skeptic's partial verdicts — a fresh skeptic picks up where the last one left off using the proposal file's existing Skeptic Verdict blocks as the record.
 5. After the skeptic returns `REPORTED`, re-read the proposal. Note per-bucket counts: `{implement}` / `{dont}` / `{skipped-dropped}` for use in Step 3.
 
@@ -117,41 +160,42 @@ Adds per-item IMPLEMENT / DONT_IMPLEMENT verdicts before the user sees options, 
 
 This is the final output the user sees **before** the bucket-by-bucket AskUserQuestion flow in Step 3. Its job is to let the user skim every recommendation and its skeptic verdict at a glance, with a link to the full proposal for any item they want to dig into.
 
-1. Re-read the finalized `.soloflow/active/compound/{sprint_id}-proposal.md` (it now has item Summary fields from the compounder, ready/dropped C-items from Step 2.5, and skeptic verdict blocks from Step 2.6 where applicable).
-2. For every non-dropped item in every non-empty bucket, extract: `title`, `Summary`, `Skeptic Verdict` (IMPLEMENT | DONT_IMPLEMENT), `Skeptic Confidence`, and the one-sentence `Skeptic Reasoning`.
-3. For every dropped C-item (from Step 2.5), extract: `original title`, `Summary`, reviewer `Reason` and reason code. Dropped items carry no skeptic verdict.
+1. Re-read the finalized `.soloflow/active/compound/{PROPOSAL_BASENAME}` (it now has item Summary + Source-Sprint fields from the compounder, ready/dropped C-items from Step 2.5, and skeptic verdict blocks from Step 2.6 where applicable).
+2. For every non-dropped item in every non-empty bucket, extract: `title`, `Summary`, `Source-Sprint`, `Skeptic Verdict` (IMPLEMENT | DONT_IMPLEMENT), `Skeptic Confidence`, and the one-sentence `Skeptic Reasoning`.
+3. For every dropped C-item (from Step 2.5), extract: `original title`, `Summary`, `Source-Sprint`, reviewer `Reason` and reason code. Dropped items carry no skeptic verdict.
 4. Compose the block below and print it **inline as a standalone message** (not via AskUserQuestion, and not embedded in the Step 3 per-bucket prompt — it is a pre-read, not a question payload). Then proceed immediately to Step 3.
 
 ### Emitted block format
 
 ```
-## Compound Proposal — SPRINT-{NNN} (scannable)
+## Compound Proposal — {SPAN_LABEL} (scannable)
 
-Full proposal: [active/compound/SPRINT-{NNN}-proposal.md]({absolute path on disk})
+Full proposal: [active/compound/{PROPOSAL_BASENAME}]({absolute path on disk})
 
 ### A. Clean-ups ({live} items)
-- **A1. {title}** — {Summary} _Skeptic: IMPLEMENT ({conf})_ — {Reasoning}.
-- **A2. {title}** — {Summary} _Skeptic: DONT_IMPLEMENT ({conf})_ — {Reasoning}.
+- **A1. [{Source-Sprint}] {title}** — {Summary} _Skeptic: IMPLEMENT ({conf})_ — {Reasoning}.
+- **A2. [{Source-Sprint}] {title}** — {Summary} _Skeptic: DONT_IMPLEMENT ({conf})_ — {Reasoning}.
 
 ### B. Backlog tasks ({live} items)
-- **B1. {title}** — {Summary} _Skeptic: IMPLEMENT ({conf})_ — {Reasoning}.
+- **B1. [{Source-Sprint}] {title}** — {Summary} _Skeptic: IMPLEMENT ({conf})_ — {Reasoning}.
 
 ### C. CLAUDE.md / CODE-PATTERNS.md ({ready} ready, {dropped} dropped)
-- **C1. {title}** — {Summary} _Skeptic: IMPLEMENT ({conf})_ — {Reasoning}.
-- **[dropped — {reason code}] {original title}** — {Summary} _Reviewer: {one-sentence reason}_.
+- **C1. [{Source-Sprint}] {title}** — {Summary} _Skeptic: IMPLEMENT ({conf})_ — {Reasoning}.
+- **[dropped — {reason code}] [{Source-Sprint}] {original title}** — {Summary} _Reviewer: {one-sentence reason}_.
 
 ### D. SoloFlow improvements ({live} items)     # only in tester mode
-- **D1. {title}** — {Summary} _Skeptic: IMPLEMENT ({conf})_ — {Reasoning}.
+- **D1. [{Source-Sprint}] {title}** — {Summary} _Skeptic: IMPLEMENT ({conf})_ — {Reasoning}.
 ```
 
 ### Rules for the block
 
+- **Source-Sprint prefix:** render `[{Source-Sprint}]` in front of each item's title only when `|BATCH_SPRINTS| >= 2`. For single-sprint runs, omit the prefix entirely (UX is identical to today). For deduped items (multi-sprint Source-Sprint), render the comma-joined list, e.g., `[SPRINT-001, SPRINT-003]`.
 - **Empty buckets:** omit the entire `### {letter}. …` section. Do not print `_No items._` in the scannable summary.
 - **All buckets empty:** print `No items to review — proposal is empty.` as the body and continue. Step 3 will skip naturally.
 - **Dropped C-items:** render with the `[dropped — {reason code}]` prefix and the reviewer's one-sentence reason in place of a skeptic verdict. They are not indexable (consistent with Step 3's Bucket C rule) but the line keeps the user informed.
 - **Tester mode off:** omit the D section entirely.
 - **Tester mode on:** render Bucket D the same way. Step 3's Bucket D handling (full inline write-up before the Approve/Edit/Reject prompt) is unchanged — the scannable row is a pointer, not a replacement.
-- **Skeptic disabled or did not run (Step 2.6 skipped or failed):** omit the `_Skeptic: … — …_` tail on every row; keep `**A1. {title}** — {Summary}` only. Dropped C-items are unaffected.
+- **Skeptic disabled or did not run (Step 2.6 skipped or failed):** omit the `_Skeptic: … — …_` tail on every row; keep `**A1. [{Source-Sprint}] {title}** — {Summary}` only (with the prefix still governed by the multi-sprint rule). Dropped C-items are unaffected.
 - The `[{absolute path on disk}]` link target must be the absolute filesystem path to the proposal so the user can open it directly.
 
 ## Step 3: Present proposal and collect approvals — one bucket at a time
@@ -160,10 +204,12 @@ The scannable summary from Step 2.7 is already on screen — the user has read t
 
 Walk through each bucket sequentially. For each non-empty bucket:
 
-1. Build a compact summary: item count and one-line title per item.
+1. Build a compact summary: item count and one-line title per item. When `|BATCH_SPRINTS| >= 2`, prefix each title with its `[Source-Sprint]` (same rule as Step 2.7). Single-sprint batches render titles without the prefix.
 2. Use **AskUserQuestion** with the summary **embedded in the question text** (not printed separately before the call — text printed before AskUserQuestion gets visually cut off by the question UI). Format the question as:
 
-   `Bucket {letter} — {name} ({N} items): {one-line title per item, comma-separated}. Approve?`
+   Multi-sprint: `Bucket {letter} — {name} ({N} items): {[Source-Sprint] title}, {[Source-Sprint] title}, ... Approve?`
+
+   Single-sprint: `Bucket {letter} — {name} ({N} items): {title}, {title}, ... Approve?`
 
    Options:
    - **Approve all** — accept every item in this bucket
@@ -176,24 +222,24 @@ Walk through each bucket sequentially. For each non-empty bucket:
 **Bucket C presentation (after claude-md-reviewer pre-review):**
 
 Bucket C's summary has two parts:
-- Count of ready items — *approvable*. Use `Cn` indices from the renumbered list.
+- Count of ready items — *approvable*. Use `Cn` indices from the renumbered list. Apply the multi-sprint `[Source-Sprint]` prefix to approvable titles when batching.
 - Count of dropped items — *info-only*, with their reason codes. Shown as `[dropped — reason]`. Not indexable by "Approve some".
 
-Question format: `Bucket C — CLAUDE.md / CODE-PATTERNS.md improvements: {m} approvable, {k} dropped by reviewer ({reason codes}). {approvable titles comma-separated}. Approve?`
+Question format: `Bucket C — CLAUDE.md / CODE-PATTERNS.md improvements: {m} approvable, {k} dropped by reviewer ({reason codes}). {approvable titles with [Source-Sprint] prefix when batching, comma-separated}. Approve?`
 
 - "Approve all" accepts every ready item.
 - "Approve some" lists ready indices only (e.g., `C1, C3`); unlisted ready items are rejected.
 - If every C-item was dropped (`m == 0`), skip the AskUserQuestion entirely — just print the dropped list as info and continue to the next bucket.
-- **"Give feedback" on Bucket C:** re-run the compounder with the feedback appended **and then re-run Step 2.5** (claude-md-reviewer) before re-presenting. Cap the loop at resolved `compound.claude_md_reviewer.pre_review_feedback_rounds` (fallback: `2`). When the cap is hit, print `Feedback budget exhausted — using last reviewer output as final.` and treat the current state of Bucket C as the final presentation. Feedback on buckets A/B/D does not re-trigger Step 2.5.
+- **"Give feedback" on Bucket C:** re-run the compounder with the feedback appended. The re-run passes the FULL `inputs` list (all of `BATCH_SPRINTS`) so the compounder rebuilds Bucket C end-to-end with cross-sprint context intact. Then re-run Step 2.5 (claude-md-reviewer) before re-presenting. Cap the loop at resolved `compound.claude_md_reviewer.pre_review_feedback_rounds` (fallback: `2`). When the cap is hit, print `Feedback budget exhausted — using last reviewer output as final.` and treat the current state of Bucket C as the final presentation. Feedback on buckets A/B/D does not re-trigger Step 2.5, but it DOES re-run the compounder against the full `inputs` list.
 
 **Bucket D exception (SoloFlow improvements):** Do not use the standard approve/reject flow. Instead:
-1. Print the full feedback write-up inline so the user can read and copy it directly.
+1. Print the full feedback write-up inline so the user can read and copy it directly. When batching, each D-item's title in the write-up carries its `[Source-Sprint]` prefix so maintainers can correlate recommendations back to the originating sprint(s).
 2. If the skeptic ran and emitted any `DONT_IMPLEMENT` verdicts on D-items, print a one-line summary first: `Skeptic marked {N} of {M} recommendations IMPLEMENT.` If every D-item is `IMPLEMENT`, omit the summary.
 3. Use **AskUserQuestion**: `SoloFlow feedback ready. Archive and continue?` with options:
-   - **Approve** — archive as-is to `SPRINT-{NNN}-feedback.md`. If any D-item is `DONT_IMPLEMENT`, silently strip those items from the archived write-up and include a final `skeptic_stripped:` section listing their titles + reasoning so the audit trail is preserved.
+   - **Approve** — archive as-is to `{SPAN_LABEL}-feedback.md` (single-sprint → `SPRINT-NNN-feedback.md`; merged batch → `SPRINT-{MIN}-{MAX}-feedback.md`). If any D-item is `DONT_IMPLEMENT`, silently strip those items from the archived write-up and include a final `skeptic_stripped:` section listing their titles + reasoning so the audit trail is preserved.
    - **Edit** — user provides edits; revise the write-up, re-print, and re-ask
    - **Reject** — discard, skip archiving
-4. If approved, write to `.soloflow/archive/compound/SPRINT-{NNN}-feedback.md` and commit. No further action needed in Step 4.
+4. If approved, write to `.soloflow/archive/compound/{SPAN_LABEL}-feedback.md` and commit. No further action needed in Step 4.
 
 If a bucket is empty (`_No items._`), skip it silently — do not present an empty picker.
 
@@ -203,10 +249,14 @@ After all buckets have been reviewed, print a one-line summary of accepted/rejec
 
 Use atomic commits per the global atomic-commits rule.
 
+**Commit scope rule.** Each item's commit `scope` is derived from its `**Source-Sprint:**` field:
+- Single source sprint → use it directly (e.g., `chore(SPRINT-002): {title}`).
+- Multi-source (dedup item, comma-joined Source-Sprint) → scope = the **earliest** source sprint by numeric suffix; include a body line `Also surfaced by: SPRINT-NNN[, SPRINT-MMM]` naming the other contributing sprints. This keeps conventional-commit parsers happy while preserving the full audit trail in the commit body.
+
 ### Bucket A — clean-ups
 For each approved A-item:
 1. Make the edits described in the proposal using `Edit` / `Write`.
-2. Commit with `chore({sprint}): {title}` including only the files touched by this item.
+2. Commit with `chore({scope}): {title}` per the Commit scope rule above, including only the files touched by this item. For multi-source items, add the `Also surfaced by:` body line.
 3. Do not batch multiple A-items into one commit.
 
 ### Bucket B — backlog tasks (refine into plans)
@@ -214,12 +264,16 @@ For the set of approved B-items, produce execution-ready task plans by spawning 
 
 1. Compute the starting task counter from the filesystem (see "ID allocation" in the project `CLAUDE.md`).
 2. Discover existing epics (glob `.soloflow/active/plans/*/EPIC-*.md`).
-3. Assemble the approved B-items into a single brief: for each item include its title, problem, proposed direction, scope, and source. Prefix with: *"These work items were surfaced by the compounder during SPRINT-{NNN}. Refine each into an execution-ready task plan."*
+3. Assemble the approved B-items into a single brief: for each item include its title, **Source-Sprint**, problem, proposed direction, scope, and source. Prefix with:
+   - Single-sprint batch: *"These work items were surfaced by the compounder during SPRINT-{NNN}. Refine each into an execution-ready task plan."*
+   - Multi-sprint batch: *"These work items were surfaced by the compounder during {comma-separated BATCH_SPRINTS}. Each item below carries its own Source-Sprint field — use it to pick epic/scope if applicable. Refine each into an execution-ready task plan."*
 4. Spawn the **task-refiner** agent via the Agent tool with the brief, starting task counter, and existing epics — same interface as `/soloflow:planner` Step 2.
 5. Capture the output. Parse into individual plan files and any new EPIC-{slug}.md blocks.
 6. Write each plan file to `.soloflow/active/plans/` (respecting epic subfolders), using `noclobber`/`wx` semantics. Retry on collision.
 7. Add each task to `.soloflow/active/backlog.json` with `status: "ready"`.
-8. Commit `feat({sprint}): plan TASK-{NNN}..TASK-{MMM} from compound` including all plan files and backlog.json.
+8. Commit the batch as one commit:
+   - Single-sprint: `feat(SPRINT-{NNN}): plan TASK-{NNN}..TASK-{MMM} from compound` (unchanged).
+   - Multi-sprint: `feat(SPRINT-{MIN}..{MAX}): plan TASK-{NNN}..TASK-{MMM} from compound` including all plan files and backlog.json.
 
 ### Bucket C — CLAUDE.md / CODE-PATTERNS.md improvements
 
@@ -228,7 +282,7 @@ The diffs are already tightened by Step 2.5. No re-spawn of claude-md-reviewer h
 For each approved C-item (already `ready` in the proposal):
 1. Read the item's `**Target file:**` and `**Diff:**`.
 2. Apply the diff using `Edit` (or `Write` if the target file does not exist — applies when creating a new scoped CLAUDE.md or CODE-PATTERNS.md).
-3. Commit with `docs({sprint}): {title}` per item.
+3. Commit with `docs({scope}): {title}` per the Commit scope rule above (per-item; multi-source items get the `Also surfaced by:` body line).
 
 Dropped items (from Step 2.5) are never applied — they stay in the archived proposal as an audit trail only.
 
@@ -242,16 +296,17 @@ If any application step fails (e.g., a diff doesn't apply cleanly because the ta
 
 ## Step 5: Archive & sweep
 
-1. Move `.soloflow/active/findings/SPRINT-{NNN}-findings.md` → `.soloflow/archive/findings/SPRINT-{NNN}-findings.md`. (Do NOT recreate an empty file — the next sprint's findings file is created by sprint-initiator, not here.)
-2. Move `.soloflow/active/compound/SPRINT-{NNN}-proposal.md` → `.soloflow/archive/compound/SPRINT-{NNN}-proposal.md` (preserves rejected items for later reference).
-3. **Legacy findings cleanup:** if this run used a legacy `.soloflow/active/findings.md` via the Step 1 migration branch, delete the legacy file now (its contents were captured by the archived per-sprint findings file).
-4. Commit `chore({sprint}): archive findings + compound proposal`.
-
-If running in `MODE=all`, loop back to Step 1's idempotency guard for the next pending sprint. Stop when `PENDING` is empty.
+1. For **each** sprint in `BATCH_SPRINTS`, move `.soloflow/active/findings/SPRINT-NNN-findings.md` → `.soloflow/archive/findings/SPRINT-NNN-findings.md`. Each findings file archives individually. (Do NOT recreate an empty file — the next sprint's findings file is created by sprint-initiator, not here.)
+2. Move `.soloflow/active/compound/{PROPOSAL_BASENAME}` → `.soloflow/archive/compound/{PROPOSAL_BASENAME}` (preserves rejected items for later reference). Single-sprint batch → `SPRINT-NNN-proposal.md`; merged batch → `SPRINT-{MIN}-{MAX}-proposal.md`.
+3. **Legacy findings cleanup:** if this run used a legacy `.soloflow/active/findings.md` via the Step 1 migration branch, delete the legacy file now (its contents were captured by whichever sprint's archived findings file absorbed it).
+4. Commit the archive:
+   - Single-sprint: `chore(SPRINT-NNN): archive findings + compound proposal` (unchanged).
+   - Multi-sprint: `chore(SPRINT-{MIN}..{MAX}): archive merged compound + findings`.
+   - Stage list is driven by the actual moves performed (per-sprint findings additions/deletions + the single proposal add/delete + any legacy findings deletion). Do not hardcode the stage list to a single-sprint template.
 
 ## Step 6: Report
 
-Print a one-screen summary:
+### Single-sprint batch (`|BATCH_SPRINTS| == 1`):
 
 ```
 Compound complete for SPRINT-{NNN}.
@@ -266,21 +321,40 @@ Rejected : {N} (preserved in archive/compound/SPRINT-{NNN}-proposal.md)
 Findings : archived → archive/findings/SPRINT-{NNN}-findings.md
 ```
 
+### Multi-sprint batch (`|BATCH_SPRINTS| >= 2`):
+
+```
+Compound complete for {SPAN_LABEL} ({N} sprints: {comma-joined BATCH_SPRINTS}).
+
+Applied (across all sprints):
+  A. Clean-ups       : {N applied} / {skeptic_implement} IMPLEMENT / {M proposed}  (commits: {hashes})
+  B. Backlog tasks   : {N planned} / {skeptic_implement} / {M proposed}  (TASK-{first}..TASK-{last})
+  C. CLAUDE.md edits : {N applied} / {skeptic_implement} / {M proposed}  ({files touched})
+  D. SoloFlow feedback: {N archived} / {skeptic_implement} / {M proposed}  ({SPAN_LABEL}-feedback.md)  {only if tester mode}
+
+By sprint:
+  SPRINT-NNN: A:{x/y} B:{x/y} C:{x/y}{ D:{x/y} only if tester}
+  ...
+
+Rejected : {N} (preserved in archive/compound/{PROPOSAL_BASENAME})
+Findings : archived → {comma-joined archive/findings/SPRINT-NNN-findings.md paths}
+```
+
 The `{skeptic_implement}` column reflects how many items the skeptic endorsed per bucket. Omit the column entirely (just show `{N applied} / {M proposed}`) if the skeptic was disabled or did not run.
 
-**`MODE=all` wrap-up:** after the final pending sprint is processed, print a one-line roll-up (`Compounded {N} sprints: SPRINT-A, SPRINT-B, ...`).
+The **By sprint** block attributes each bucket's applied/proposed counts back to the contributing sprint via each item's `**Source-Sprint:**`. Dedup items (multi-sprint Source-Sprint) count toward every sprint they cite.
 
 ---
 
 ## Notes
 
 - This command mutates the codebase for approved clean-ups and CLAUDE.md edits. Bucket B spawns the task-refiner to produce plans.
-- The compounder agent is read-only except for its own per-sprint proposal draft (`active/compound/SPRINT-NNN-proposal.md`) — it never writes directly to plans or CLAUDE.md.
-- The claude-md-reviewer agent runs as a pre-review in Step 2.5, tightening Bucket C before the user sees options. It can only edit the proposal file to insert `[reviewer: ready]` / `[dropped — reason]` markers and refined diffs.
-- The compound-skeptic agent runs in Step 2.6 (after claude-md-reviewer), adding per-item IMPLEMENT / DONT_IMPLEMENT verdicts to non-dropped items. It enables the "Accept skeptic's recommendations" option. Toggle via `compound.skeptic.enabled`.
-- Step 2.7 emits a single scannable summary (one line per item: title + Summary + skeptic verdict + reasoning) with a link to the full proposal file. It fires once, just before Step 3's bucket-by-bucket flow, so the user can triage the whole sprint at a glance.
+- The compounder agent is read-only except for its own proposal draft (`active/compound/{PROPOSAL_BASENAME}` — single-sprint or span-named) — it never writes directly to plans or CLAUDE.md.
+- The claude-md-reviewer agent runs as a pre-review in Step 2.5, tightening Bucket C before the user sees options. It can only edit the proposal file to insert `[reviewer: ready]` / `[dropped — reason]` markers and refined diffs, preserving each item's Source-Sprint field.
+- The compound-skeptic agent runs in Step 2.6 (after claude-md-reviewer), adding per-item IMPLEMENT / DONT_IMPLEMENT verdicts to non-dropped items. It enables the "Accept skeptic's recommendations" option. Toggle via `compound.skeptic.enabled`. It never touches an item's Source-Sprint field.
+- Step 2.7 emits a single scannable summary (one line per item: `[Source-Sprint]` prefix when batching + title + Summary + skeptic verdict + reasoning) with a link to the full proposal file. It fires once, just before Step 3's bucket-by-bucket flow, so the user can triage the whole batch at a glance.
 - Rejected items are preserved in the archived proposal so they can be revisited manually.
-- Multiple sprints can await compound simultaneously. This command enables a compound backlog — use `--all` to drain it in one go, or pick a specific sprint.
+- **Batching.** Multiple sprints can await compound simultaneously. When two or more sprints are in the batch (`--all` or a multi-select picker subset), this command runs ONCE over the merged set — one compounder invocation with cross-sprint dedup, one review flow, one apply pass, one archive. Each per-sprint findings file archives individually. Per-item commits scope to each item's originating sprint (dedup items scope to the earliest source sprint with an `Also surfaced by:` body line).
 
 ---
 
