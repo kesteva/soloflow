@@ -8,6 +8,8 @@ SoloFlow is a hooks-based Claude Code workflow orchestration system that automat
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the phase workflow, hook system, agent model strategy, and verification hierarchy.
 
+**This repo does not dogfood SoloFlow on itself.** SoloFlow is the product built here, not the workflow used to build it. Do not run `/soloflow:*` commands, create `.soloflow/` state, spawn SoloFlow agents, or otherwise invoke the SoloFlow pipeline to make changes to this codebase. Work on SoloFlow the way you'd work on any other repo: read files, make edits, run tests, commit. If a request seems to imply "use SoloFlow to improve SoloFlow," stop and ask — it's almost certainly not what the user meant.
+
 ## Constraints every agent must know
 
 **Subagents cannot spawn subagents.** Orchestration runs in the main session (`/soloflow:sprint`, `/soloflow:compound`, etc.); executors, verifiers, reviewers, and all other agent definitions are leaf nodes only.
