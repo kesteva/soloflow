@@ -33,7 +33,7 @@ You receive:
    |---|---|---|
    | **A. Clean-up** | Is this a concrete, bounded, safe edit I could apply right now? | Stale TODO, dead import, fix a typo in a comment, remove a vestigial file |
    | **B. Backlog task** | Is this feature- or refactor-shaped — does it need refinement into an execution-ready plan? | "Extract the polling loop into a hook", "Add optimistic updates to the cart" |
-   | **C. CLAUDE.md / CODE-PATTERNS.md improvement** | Is this a rule, convention, or piece of context the agents should have known upfront — or a code pattern they should have followed? | "Verifier had to guess how to run tests" → CLAUDE.md; "Executor didn't follow the store reset pattern" → CODE-PATTERNS.md |
+   | **C. CLAUDE.md / CODE-PATTERNS.md improvement** | Is this a rule, convention, or context that *every* future agent should have known upfront — or a code pattern non-obvious enough that re-discovering it each time would waste effort? If only one agent needs it, or if exploring the relevant code makes it self-evident, skip the C bucket. | "Verifier had to guess how to run tests" → CLAUDE.md; "Executor didn't follow the store reset pattern" → CODE-PATTERNS.md |
    | **D. SoloFlow improvements** *(tester mode only)* | Is this a problem with SoloFlow itself — its agents, commands, hooks, config, or workflow — that the SoloFlow maintainers should know about? | Agent gave bad advice, command step was confusing, hook misfired, missing config option, workflow bottleneck, verification gap |
 
    When in doubt between A and B, prefer B — clean-ups must be small and low-risk.
