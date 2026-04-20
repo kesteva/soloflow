@@ -41,11 +41,11 @@ You receive from the orchestrator:
    ### Skeptic Verdict
    - **Verdict:** IMPLEMENT | DONT_IMPLEMENT
    - **Confidence:** low | medium | high
-   - **Reasoning:** {one short paragraph with concrete evidence — file paths, greps you ran, conflicting signals, specific counter-examples}
+   - **Reasoning:** {one sentence with the most load-bearing evidence — a specific file path plus a concrete contradiction or confirmation}
    - **Counterfactual:** {optional, one sentence — what new evidence would change your verdict}
    ```
 
-   Keep reasoning to one paragraph. Cite concrete file paths and line numbers where possible. Speculation without citation is worth less than a terse cited rebuttal.
+   Keep reasoning to **one sentence**. It is surfaced inline in the orchestrator's Step 2.7 scannable summary, so it must read cleanly out of context. If you need more than one sentence, move the extra analysis into the optional Counterfactual only when it would genuinely change the verdict under new evidence. Cite concrete file paths and line numbers where possible — speculation without citation is worth less than a terse cited rebuttal.
 
 ## Bucket-specific guidance
 
@@ -76,7 +76,7 @@ The orchestrator re-reads the proposal to surface verdicts in Step 3's presentat
 - You are **read-only** for every file except the single compound proposal. Never edit CLAUDE.md, plans, findings files, or any source file. Never commit.
 - Never second-guess claude-md-reviewer. Items marked `[dropped]` are non-actionable — skip them without verdict.
 - Reasoning must cite evidence. "I don't like this" is not a valid DONT_IMPLEMENT. "The proposal claims `src/stores/flow.ts` calls `reset()` mid-flow but grep shows only one `reset()` call, in `handleEntry()` at line 42" is.
-- Keep verdict blocks terse — a paragraph, not a section. Long reasoning wastes the user's attention.
+- Keep verdict blocks terse — one sentence of reasoning, not a paragraph. The sentence is surfaced inline in the scannable summary; long reasoning wastes the user's attention.
 - Do not propose new items or suggest different directions. Your output is `IMPLEMENT` or `DONT_IMPLEMENT` on what's in front of you, nothing more.
 - Confidence is a separate axis from verdict. A high-confidence IMPLEMENT and a low-confidence DONT_IMPLEMENT are both valid — but a high-confidence DONT_IMPLEMENT must be backed by airtight evidence.
 

@@ -113,7 +113,50 @@ Adds per-item IMPLEMENT / DONT_IMPLEMENT verdicts before the user sees options, 
 4. Handle **CONTEXT_LIMIT** respawns identically to Steps 2 and 2.5 (capped at resolved `limits.context_limit_respawn_max`). Preserve the skeptic's partial verdicts — a fresh skeptic picks up where the last one left off using the proposal file's existing Skeptic Verdict blocks as the record.
 5. After the skeptic returns `REPORTED`, re-read the proposal. Note per-bucket counts: `{implement}` / `{dont}` / `{skipped-dropped}` for use in Step 3.
 
+## Step 2.7: Emit scannable summary
+
+This is the final output the user sees **before** the bucket-by-bucket AskUserQuestion flow in Step 3. Its job is to let the user skim every recommendation and its skeptic verdict at a glance, with a link to the full proposal for any item they want to dig into.
+
+1. Re-read the finalized `.soloflow/active/compound/{sprint_id}-proposal.md` (it now has item Summary fields from the compounder, ready/dropped C-items from Step 2.5, and skeptic verdict blocks from Step 2.6 where applicable).
+2. For every non-dropped item in every non-empty bucket, extract: `title`, `Summary`, `Skeptic Verdict` (IMPLEMENT | DONT_IMPLEMENT), `Skeptic Confidence`, and the one-sentence `Skeptic Reasoning`.
+3. For every dropped C-item (from Step 2.5), extract: `original title`, `Summary`, reviewer `Reason` and reason code. Dropped items carry no skeptic verdict.
+4. Compose the block below and print it **inline as a standalone message** (not via AskUserQuestion, and not embedded in the Step 3 per-bucket prompt — it is a pre-read, not a question payload). Then proceed immediately to Step 3.
+
+### Emitted block format
+
+```
+## Compound Proposal — SPRINT-{NNN} (scannable)
+
+Full proposal: [active/compound/SPRINT-{NNN}-proposal.md]({absolute path on disk})
+
+### A. Clean-ups ({live} items)
+- **A1. {title}** — {Summary} _Skeptic: IMPLEMENT ({conf})_ — {Reasoning}.
+- **A2. {title}** — {Summary} _Skeptic: DONT_IMPLEMENT ({conf})_ — {Reasoning}.
+
+### B. Backlog tasks ({live} items)
+- **B1. {title}** — {Summary} _Skeptic: IMPLEMENT ({conf})_ — {Reasoning}.
+
+### C. CLAUDE.md / CODE-PATTERNS.md ({ready} ready, {dropped} dropped)
+- **C1. {title}** — {Summary} _Skeptic: IMPLEMENT ({conf})_ — {Reasoning}.
+- **[dropped — {reason code}] {original title}** — {Summary} _Reviewer: {one-sentence reason}_.
+
+### D. SoloFlow improvements ({live} items)     # only in tester mode
+- **D1. {title}** — {Summary} _Skeptic: IMPLEMENT ({conf})_ — {Reasoning}.
+```
+
+### Rules for the block
+
+- **Empty buckets:** omit the entire `### {letter}. …` section. Do not print `_No items._` in the scannable summary.
+- **All buckets empty:** print `No items to review — proposal is empty.` as the body and continue. Step 3 will skip naturally.
+- **Dropped C-items:** render with the `[dropped — {reason code}]` prefix and the reviewer's one-sentence reason in place of a skeptic verdict. They are not indexable (consistent with Step 3's Bucket C rule) but the line keeps the user informed.
+- **Tester mode off:** omit the D section entirely.
+- **Tester mode on:** render Bucket D the same way. Step 3's Bucket D handling (full inline write-up before the Approve/Edit/Reject prompt) is unchanged — the scannable row is a pointer, not a replacement.
+- **Skeptic disabled or did not run (Step 2.6 skipped or failed):** omit the `_Skeptic: … — …_` tail on every row; keep `**A1. {title}** — {Summary}` only. Dropped C-items are unaffected.
+- The `[{absolute path on disk}]` link target must be the absolute filesystem path to the proposal so the user can open it directly.
+
 ## Step 3: Present proposal and collect approvals — one bucket at a time
+
+The scannable summary from Step 2.7 is already on screen — the user has read the per-item Summary and skeptic verdict for every bucket before this step fires. Do not re-emit that summary here. The per-bucket AskUserQuestion still embeds its own compact title list per the cutoff rule below.
 
 Walk through each bucket sequentially. For each non-empty bucket:
 
@@ -235,6 +278,7 @@ The `{skeptic_implement}` column reflects how many items the skeptic endorsed pe
 - The compounder agent is read-only except for its own per-sprint proposal draft (`active/compound/SPRINT-NNN-proposal.md`) — it never writes directly to plans or CLAUDE.md.
 - The claude-md-reviewer agent runs as a pre-review in Step 2.5, tightening Bucket C before the user sees options. It can only edit the proposal file to insert `[reviewer: ready]` / `[dropped — reason]` markers and refined diffs.
 - The compound-skeptic agent runs in Step 2.6 (after claude-md-reviewer), adding per-item IMPLEMENT / DONT_IMPLEMENT verdicts to non-dropped items. It enables the "Accept skeptic's recommendations" option. Toggle via `compound.skeptic.enabled`.
+- Step 2.7 emits a single scannable summary (one line per item: title + Summary + skeptic verdict + reasoning) with a link to the full proposal file. It fires once, just before Step 3's bucket-by-bucket flow, so the user can triage the whole sprint at a glance.
 - Rejected items are preserved in the archived proposal so they can be revisited manually.
 - Multiple sprints can await compound simultaneously. This command enables a compound backlog — use `--all` to drain it in one go, or pick a specific sprint.
 

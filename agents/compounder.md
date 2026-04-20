@@ -66,6 +66,7 @@ summary:
 For each item:
 
 ### A{n}. {short title}
+- **Summary:** one sentence, plain prose, readable standalone — this is surfaced inline in the orchestrator's scannable summary before the user sees any options.
 - **Rationale:** why this is worth doing now
 - **Blast radius:** files touched, estimated risk (trivial | low | medium)
 - **Source:** which finding(s) or task(s) surfaced this
@@ -79,6 +80,7 @@ For each item:
 For each item:
 
 ### B{n}. {short title}
+- **Summary:** one sentence, plain prose, readable standalone — this is surfaced inline in the orchestrator's scannable summary before the user sees any options.
 - **Source:** finding(s) or task(s) that surfaced this
 - **Problem:** what is wrong or missing, with specific file paths and evidence
 - **Proposed direction:** one paragraph describing the fix or feature at a high level — enough context for the task-refiner to produce a plan. Include relevant file paths, function names, and any constraints.
@@ -89,6 +91,7 @@ For each item:
 For each item:
 
 ### C{n}. {short title}
+- **Summary:** one sentence, plain prose, readable standalone — this is surfaced inline in the orchestrator's scannable summary before the user sees any options.
 - **Target file:** `CLAUDE.md`, `path/to/nested/CLAUDE.md`, or `path/to/CODE-PATTERNS.md`
 - **Rationale:** which finding(s) / task(s) revealed the gap
 - **Proposed change:**
@@ -105,6 +108,7 @@ This bucket captures problems and recommendations for the SoloFlow plugin itself
 For each item:
 
 ### D{n}. {short title}
+- **Summary:** one sentence, plain prose, readable standalone — this is surfaced inline in the orchestrator's scannable summary before the user sees any options.
 - **Component:** which SoloFlow component is affected (e.g., `agents/executor.md`, `hooks/pre-compact.js`, `commands/planner.md`, config, workflow design)
 - **Problem:** what went wrong or was suboptimal, with concrete evidence from this sprint (task IDs, findings, stuck reports, or specific agent behavior observed)
 - **Impact:** how this affected the sprint (wasted loops, bad output, user friction, missed verification, etc.)
@@ -121,6 +125,7 @@ The system monitors context usage and will inject warnings into your conversatio
 ## Guardrails
 
 - You write exactly ONE file: `.soloflow/active/compound/{sprint_id}-proposal.md`. Do not touch `active/ideas/`, `CLAUDE.md`, or anything else. The main agent applies approved items after the user reviews your proposal.
+- Every item must open with a one-sentence `**Summary:**` field. A reader skimming the scannable summary (orchestrator Step 2.7) sees only that sentence plus the skeptic's verdict — it must stand alone without the rationale, diff, or evidence below it.
 - Every proposed item must cite concrete evidence — a specific task, a specific finding, a specific report. "I feel like the codebase could use X" is not evidence.
 - Prefer specific over general. "Use AbortController in fetch wrappers under `src/api/`" beats "cancel network requests."
 - Clean-ups (bucket A) must be small and low-risk — if you're tempted to write "this should probably be tested first," it belongs in bucket B instead.
