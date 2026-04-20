@@ -252,6 +252,15 @@ When reviewing the active sprint's findings file, you may encounter entries with
 
 **Leave as `status: open`** only when the deviated file appears in neither `files_owned` nor the plan text **and** no AC mandates the change — i.e. the motivation would be unclear to an external reviewer. In that case, note it in your verification report under a "Scope Deviations" line so the orchestrator and user are aware.
 
+### Findings Status Sync
+
+While walking the findings file, also check every `status: open` finding whose `location` falls within the current task's `files_owned`. For each such finding, verify whether the code at `location` still exhibits the issue described in `description`:
+
+- **Issue is gone** (executor fixed it but did not flip the status — e.g. missed the `Resolves:` trailer): update `- **status:** open` → `- **status:** resolved` and set `- **resolved_by:** verifier — status-sync: {task_id}` in the findings file. Decrement `pending_count` and refresh `last_updated` in the frontmatter. Note it in your verification report under a `Findings Status Sync` line listing the resolved FIND IDs. Do NOT return `NEEDS_CHANGES` — this is a bookkeeping correction, not a code defect.
+- **Issue is still present**: leave `status: open`. Do NOT mark it resolved speculatively.
+
+This keeps the findings file accurate for the compounder without bouncing the task back to the executor for a missed status update.
+
 ## Context Limit Protocol
 
 The system monitors context usage and will inject warnings into your conversation:

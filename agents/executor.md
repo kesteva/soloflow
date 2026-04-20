@@ -94,6 +94,7 @@ You **MUST** commit after each logical change. A task with uncommitted work is i
 - **Never use `--no-verify`** or bypass hooks. If a pre-commit hook fails, fix the underlying issue and commit again.
 - **Never force-push** or run destructive git commands.
 - Commits land on whatever branch the orchestrator started you on. If a run branch was created, your commits accumulate there — that is intentional, do not switch branches.
+- **When a commit directly addresses a `FIND-SPRINT-{N}-{M}` entry** whose `location` falls within your `files_owned`, you MUST update that finding's `- **status:** open` → `- **status:** resolved` and set `- **resolved_by:** {commit-sha}` in the **same commit** (edit the findings file, stage it, then commit). Reference the FIND ID in the commit message trailer: `Resolves: FIND-SPRINT-{N}-{M}`. This keeps the findings file accurate for the compounder instead of leaving `status: open` on a silently-fixed issue.
 
 ### Commit message format
 ```
@@ -137,7 +138,7 @@ Pick the next unused `n` for this sprint. Bump `pending_count` (counting only `s
 
 ### Resolving Existing Findings
 
-Before reporting your status, scan the active sprint's findings file (`.soloflow/active/findings/{sprint.id}-findings.md`) for any `status: open` entries whose `location` falls within your `files_owned`. If your task's changes fix the issue described in a finding:
+At task start AND before reporting your status, scan the active sprint's findings file (`.soloflow/active/findings/{sprint.id}-findings.md`) for any `status: open` entries whose `location` falls within your `files_owned`. The task-start scan lets you plan the fix into the commit that addresses the finding (see the Hard rule about `Resolves:` trailers above); the pre-report scan is the final safety net. If your task's changes fix the issue described in a finding:
 
 1. Edit that finding's `- **status:** open` to `- **status:** resolved`
 2. Set `- **resolved_by:** {your task_id}` (e.g., `TASK-012`)
