@@ -112,7 +112,9 @@ These toggles resolve independently from `code_review.*` — you can disable the
 
 ### Compound
 
-Compound is Phase 6 — the end-of-sprint learning pass. Findings, proposals, and archives are all per-sprint, so multiple sprints can wait for compound simultaneously (compound backlog). Drain in bulk with `/soloflow:compound --all` or pick a specific `SPRINT-NNN`.
+Compound is Phase 6 — the end-of-sprint learning pass. Findings files are per-sprint (always), and multiple sprints can wait for compound simultaneously (compound backlog). Drain in bulk with `/soloflow:compound --all`, pick a specific `SPRINT-NNN`, or use the multi-select picker (no argument) to batch any subset of pending sprints.
+
+**Batching.** When `--all` or the multi-select picker resolves to two or more sprints, compound runs ONCE over the merged batch: one compounder invocation triages inputs across every sprint (enabling cross-sprint dedup — e.g., the same CLAUDE.md gap surfaced by three sprints becomes one item with `Source-Sprint: SPRINT-001, SPRINT-002, SPRINT-003`), one merged proposal is written to `active/compound/SPRINT-{MIN}-{MAX}-proposal.md`, one reviewer / skeptic / bucket review flow runs, and approved items are applied with per-item commits whose scope comes from each item's Source-Sprint (multi-source dedup items scope to the earliest contributing sprint with an `Also surfaced by:` body line). Each sprint's findings file still archives individually to `archive/findings/SPRINT-NNN-findings.md`. Single-sprint runs (explicit `SPRINT-NNN`, `--oldest`, `--all` with one pending, or the picker picking one) keep today's format (`SPRINT-NNN-proposal.md`, no span prefix on bucket rows). Non-contiguous subsets are supported — the frontmatter `sprints:` array is the canonical membership truth, the span filename is a label.
 
 | Setting | Default | Description |
 |---|---|---|
@@ -123,7 +125,7 @@ Compound is Phase 6 — the end-of-sprint learning pass. Findings, proposals, an
 
 Bucket C pre-review, the skeptic pass, and the picker are all independent — disabling one does not affect the others. The "Accept skeptic's recommendations" option only appears in Step 3 when the skeptic ran AND the bucket has at least one `DONT_IMPLEMENT` verdict (otherwise it's redundant with Approve all).
 
-Findings are stored at `.soloflow/active/findings/SPRINT-NNN-findings.md` — one file per sprint, created by `sprint-initiator` at sprint start. After a sprint is compounded, its findings file is archived to `.soloflow/archive/findings/`. Sprint close does NOT archive findings — they stay in `active/findings/` until `/soloflow:compound` runs against the sprint. Likewise compound proposals are drafted at `.soloflow/active/compound/SPRINT-NNN-proposal.md` and archived after the user reviews them.
+Findings are stored at `.soloflow/active/findings/SPRINT-NNN-findings.md` — one file per sprint, created by `sprint-initiator` at sprint start. After a sprint is compounded, its findings file is archived to `.soloflow/archive/findings/` individually (even when a merged batch compounded it alongside other sprints). Sprint close does NOT archive findings — they stay in `active/findings/` until `/soloflow:compound` runs against the sprint. Compound proposals are drafted at `.soloflow/active/compound/{span_label}-proposal.md` (single-sprint → `SPRINT-NNN-proposal.md`; merged batch → `SPRINT-{MIN}-{MAX}-proposal.md`) and archived after the user reviews them.
 
 ### Verification
 
