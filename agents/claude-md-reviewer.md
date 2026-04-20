@@ -53,6 +53,7 @@ For each C-item, output one of:
 ```
 ### C{n}. {title}
 - **Summary:** {one sentence — copy the input item's Summary verbatim unless the rewrite changes its meaning; keep it readable standalone since it is surfaced in the orchestrator's scannable summary}
+- **Source-Sprint:** {copied verbatim from the input C-item — single sprint or comma-joined list for dedup}
 - **Target file:** {path to CLAUDE.md or CODE-PATTERNS.md}
 - **Action:** append | insert-after "{anchor line}" | create-section "{heading}"
 - **Status:** ready
@@ -64,12 +65,13 @@ For each C-item, output one of:
 ```
 
 ### If splitting (one rule + one pattern):
-Emit two `ready` blocks, both tagged with the same `source_item: C{n}`. Write a **distinct Summary** for each half (rule vs. pattern) — do not copy the same sentence into both. Make the CLAUDE.md half a short pointer referencing the CODE-PATTERNS.md location.
+Emit two `ready` blocks, both tagged with the same `source_item: C{n}`. Write a **distinct Summary** for each half (rule vs. pattern) — do not copy the same sentence into both. Carry the input C-item's `**Source-Sprint:**` value into BOTH halves verbatim — it is load-bearing for per-item commit scoping at apply time. Make the CLAUDE.md half a short pointer referencing the CODE-PATTERNS.md location.
 
 ### If rejecting:
 ```
 ### C{n}. {title}
 - **Summary:** {copied verbatim from the input C-item so the scannable summary still has a one-liner for the dropped entry}
+- **Source-Sprint:** {copied verbatim from the input C-item — preserves the audit trail even for dropped items}
 - **Status:** redundant | stale | too-broad | belongs-in-code-patterns
 - **source_item:** C{n}
 - **Reason:** {one sentence}
