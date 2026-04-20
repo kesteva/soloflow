@@ -51,6 +51,12 @@ You receive:
    - **IMPROVEMENTS_NEEDED** — important quality findings that should be addressed. No security issues.
    - **SECURITY_ISSUE** — one or more critical security findings. Must be escalated to human review.
 
+   **CLEAN + actionable-observation rule.** A CLEAN verdict is compatible with *no* actionable observations, only noise-level minor notes. If your review surfaces any named, actionable item (a specific hardcoded value to extract, a stale `eslint-disable` to remove, a specific call-site to refactor, etc.), you have two — and only two — valid paths:
+   - **(a) Upgrade to `IMPROVEMENTS_NEEDED`** if the item meaningfully affects maintainability or performance and should be fixed before shipping.
+   - **(b) File a `FIND-{sprint}-{n}` entry** in the active sprint's findings file with `status: open` and a concrete `location` + `suggested_action`, so it enters the authoritative triage channel.
+
+   Naming a specific actionable finding only in verdict prose — without either upgrading the verdict or filing a FIND entry — is **not** a valid escalation path. Prose-only findings inside a CLEAN verdict are invisible to automated triage and compound review. The Minor section of your report may describe *categories* of nit (e.g., "a few long functions could be split") without listing them, but the moment you name a specific file / line / value, it must land in (a) or (b).
+
 ## Output Format
 
 ```markdown
