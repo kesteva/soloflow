@@ -4,6 +4,8 @@ Hooks-based workflow orchestration for solo product development with Claude Code
 
 Automates the full product development lifecycle: **idea extraction → refinement → execution → verification → learning**. Built for solo developers shipping real products with AI leverage — not a framework, but a workflow that handles the orchestration so you can focus on taste and direction.
 
+> **This is my personal workflow tool.** I build it for how I ship products, and I make it public so others can learn from it, fork it, or run it on their own projects. I'm happy to review issues and PRs, but I only merge changes that help *my* workflow. If something you want doesn't fit that, fork it — the MIT license makes that easy. See [Contributing](docs/CONTRIBUTING.md) for details.
+
 ## Quick Start
 
 Install the plugin inside Claude Code (two steps — add the marketplace, then install):
