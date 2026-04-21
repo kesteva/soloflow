@@ -192,7 +192,16 @@ Decisions:
    - `git add .soloflow/active/sprint.json`
    - Also add `.soloflow/human-review-queue.md` if it exists.
    - Do NOT add the per-sprint findings file — it stays active for `/soloflow:compound` to archive later.
-   - Also add `.soloflow/checkpoint.md` if it exists.
+   - Reset `.soloflow/checkpoint.md` to the null-state template (matching `scripts/init.sh`'s initial content — `active_sprint: null`, empty `tasks_in_flight`) so the next sprint's Step 0.5 check sees no active sprint. Skip if the file is missing. Then `git add .soloflow/checkpoint.md` so the reset lands in the close commit. The template body must be byte-identical to:
+     ```
+     ---
+     last_updated: null
+     active_sprint: null
+     tasks_in_flight: []
+     ---
+
+     # Session Checkpoint
+     ```
    - Also add every destination path that step 2 moved (one per archived draft) — single-sprint form `SPRINT-NNN-proposal.md` or span form `SPRINT-{MIN}-{MAX}-proposal.md` as derived per draft.
    - Also add the corresponding source path for the deletion side of each archived draft (either the matching active `active/compound/*-proposal.md` or the legacy `.soloflow/active/COMPOUND-PROPOSAL.md`).
    - Also add `.soloflow/archive/sprint-verifications/{sprint.id}-verification.md` if step 2b moved a file (and `.soloflow/active/sprint-verification.md` for the deletion).
