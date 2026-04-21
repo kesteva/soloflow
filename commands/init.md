@@ -202,6 +202,34 @@ For each required MCP server (`maestro` if `visual_mobile`, `playwright` if `vis
 
 Never run `claude mcp add` without the explicit user choice above — registering servers silently is exactly the collision problem we're avoiding.
 
+### Optional plugin probes (advisory)
+
+Two Anthropic-published plugins can improve SoloFlow agent output when installed. **Neither is required** — SoloFlow's runtime agents fall back silently when they're missing. Probe each and surface an advisory notice if absent; never block init.
+
+**context7** (MCP plugin) — gives the researcher and roadmap-researcher version-accurate library docs via `resolve-library-id` + `query-docs`, reducing hallucinated APIs.
+
+1. Probe: `claude mcp list 2>/dev/null | grep -qi context7`
+2. If present: print `✓ context7 MCP detected — researcher will prefer it for library docs.`
+3. If absent: print:
+   ```
+   ℹ context7 MCP is not installed. Optional — the researcher will fall back to WebFetch.
+     To enable version-accurate library docs:
+       /plugin install context7@anthropics
+   ```
+
+**frontend-design** (plugin with skill) — gives the task-refiner and executor a distinctive UI design direction (aesthetic, typography, motion, spatial composition) for UI tasks.
+
+1. Probe: `claude plugin list 2>/dev/null | grep -qi frontend-design` first; if that command fails or returns empty, fall back to `ls ~/.claude/plugins 2>/dev/null | grep -qi frontend-design`.
+2. If either probe passes: print `✓ frontend-design plugin detected — task-refiner will establish Design Direction for UI slices.`
+3. If both probes fail: print:
+   ```
+   ℹ frontend-design plugin is not installed. Optional — UI tasks will ship with conventional defaults.
+     To enable distinctive UI direction:
+       /plugin install frontend-design@anthropics
+   ```
+
+Both probes are informational only — do not prompt the user, do not install anything, do not write to config. A backend-only project has no need for frontend-design; a project that doesn't rely on third-party libraries has no need for context7.
+
 ### Q3 — Branch strategy for `/soloflow:sprint`
 
 Use `AskUserQuestion`:
