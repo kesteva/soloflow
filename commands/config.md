@@ -1,6 +1,7 @@
 ---
 description: Walk through SoloFlow configuration and adjust settings interactively
 allowed-tools: [Read, Write, Bash, AskUserQuestion]
+model: haiku
 ---
 
 # /soloflow:config
@@ -27,8 +28,8 @@ and stop.
 
 ## Step 2: Load current config
 
-- Run `test -e .soloflow/config.json`.
-- If present: Read it and parse into memory as `config`.
+- Run `test -e .soloflow/config.json` via Bash to check existence.
+- If present: use the **Read** tool (not `cat`) to load `.soloflow/config.json` and parse into memory as `config`.
 - If absent: start with `config = {}`.
 
 Keep track of the **original** config state (e.g. `original = deep-copy of config`)
@@ -39,10 +40,10 @@ in "Managed keys" below are edited or removed by this command.
 
 ## Step 3: Load defaults
 
-Read `$CLAUDE_PLUGIN_ROOT/config/defaults.yaml` via Bash
-(`cat $CLAUDE_PLUGIN_ROOT/config/defaults.yaml`) and parse into `defaults`.
-Used throughout to show the default value next to the current value, and to
-compute the diff on exit.
+Resolve `$CLAUDE_PLUGIN_ROOT` via a single Bash call (`echo "$CLAUDE_PLUGIN_ROOT"`),
+then use the **Read** tool (not `cat`) on `<plugin_root>/config/defaults.yaml`
+and parse into `defaults`. Used throughout to show the default value next to the
+current value, and to compute the diff on exit.
 
 If `$CLAUDE_PLUGIN_ROOT` is empty, fall back to the directory containing this
 command file (two levels up from `commands/config.md`).
