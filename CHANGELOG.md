@@ -4,6 +4,11 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.8.6] - 2026-04-21
+
+### Fixed
+- **Visual-verification subagents can now reach Maestro / Playwright MCPs.** Added `mcpServers: [maestro, playwright]` frontmatter to `verifier` and `sprint-verifier`. Subagents don't inherit MCP tools from the parent session when `tools:` is set — the `mcpServers:` field is the official mechanism. Without this, Level 2 visual verification silently degraded to `skipped_unable` even when the user had both MCP servers registered and `verification.visual_{mobile,web}` enabled. Mirrors the `context7` wiring landed for researchers in 0.8.5.
+
 ## [0.8.5] - 2026-04-20
 
 ### Changed
