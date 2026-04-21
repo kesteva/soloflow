@@ -100,6 +100,14 @@ You may also receive a list of **existing epic slugs** (with the contents of the
 
    Omit the `prerequisites` field entirely for plans that do not invoke an external CLI (pure code changes, docs, config edits). Absence is the common case.
 
+5g. **Pre-flight grep for global-grep ACs.** For each AC whose `verification` contains a recursive/global grep — explicitly, if the verification string names a `grep -r` / `grep -rn` invocation, or uses the phrases "matches outside", "no occurrences of", or "0 <X> matches" — you MUST:
+
+   1. Run the equivalent `grep -rn '<pattern>'` (or the exact grep the AC names) against the current codebase **before** drafting `files_owned` / `files_readonly`.
+   2. Add **every** file the grep reports to that plan's `files_owned`. A file that matches the grep but is absent from `files_owned` guarantees a scope deviation at execution time — the AC will demand editing it while the plan forbids touching it. Omitting the file from both `files_owned` and `files_readonly` does NOT escape this rule; the grep output is the authoritative list.
+   3. Encode the grep command as **step 1 of `Implementation Steps`** so the executor re-runs it as a completeness gate before reporting COMPLETED — same pattern as step 5d.
+
+   This rule exists because global-grep ACs recurrently diverge from `files_owned` (SPRINT-008 through SPRINT-012). Passive "don't do X" rules did not eliminate the deviation class; running the grep pre-flight and letting its output drive the file lists does. Trigger conservatively — only when the verification literally names a recursive grep or one of the phrases above, not any AC that incidentally mentions grep.
+
 6. **Answer three critical questions per plan:**
    - Hardest decision and why this approach was chosen
    - Rejected alternatives and what would change your mind
