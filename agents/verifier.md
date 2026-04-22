@@ -45,11 +45,13 @@ If the project has no test suite, type checker, or linter (despite the toggle be
 
 Visual verification gives you "eyes" on the running app. It is **off by default** and must be explicitly enabled by the user.
 
-**Settings gate (check first):** Resolve `visual_mobile` and `visual_web` in this order — first hit wins:
-
-1. **Project override:** if `.soloflow/config.json` exists and defines `verification.visual_mobile` or `verification.visual_web`, use it.
-2. **Plugin default:** read `${CLAUDE_PLUGIN_ROOT}/config/defaults.yaml` (fall back to `config/defaults.yaml` if the env var isn't set) and use the `verification.visual_mobile` / `verification.visual_web` fields.
-3. **Fallback:** `false` for both.
+**Settings gate (check first):** Resolve `visual_mobile` and `visual_web` via the shared config resolver:
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/config/resolve.js" \
+    --key verification.visual_mobile --key verification.visual_web \
+    --fallback false --fallback false
+```
+First line is `visual_mobile`, second is `visual_web`. Both fall back to `false` when no config is set.
 
 If `visual_mobile` resolves to `false`, skip Maestro entirely. If `visual_web` resolves to `false`, skip Playwright entirely. If both are `false`, skip Level 2 completely and proceed to Level 3. Do NOT run any availability checks or MCP probes unless the setting is enabled.
 
@@ -65,19 +67,12 @@ If `visual_mobile` resolves to `false`, skip Maestro entirely. If `visual_web` r
 
 **Config-gap escalation (required when emitting `skipped_unable`):** When the settings gate resolves to enabled but the MCP / tool surface is unavailable, the user's configured verification is silently degraded. You MUST make this visible:
 
-1. **Append to `.soloflow/human-review-queue.md`** so the user sees it immediately after the sprint:
+1. **Append to `.soloflow/human-review-queue.md`** via `review-queue.js append`. `plan_ref` is the path to the task's plan file — include the `{epic}/` subfolder if the plan has an epic, omit it otherwise.
    ```
-   - task: {TASK-NNN}
-     type: config_issue
-     plan_ref: .soloflow/active/plans/[{epic}/]TASK-{NNN}-plan.md
-     action: "Verifier could not reach {maestro|playwright} MCP tools despite visual_{mobile|web}=true. Confirm the MCP server is registered and its tool bindings reach subagent sessions (see docs/VISUAL-VERIFICATION-SETUP.md)."
-     blocked_checks:
-       - "Level 2 visual verification for {platform}"
-     level: "visual"
-     severity: "medium"
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" append --entry-json \
+     '{"task":"TASK-NNN","type":"config_issue","plan_ref":".soloflow/active/plans/[{epic}/]TASK-NNN-plan.md","action":"Verifier could not reach {maestro|playwright} MCP tools despite visual_{mobile|web}=true. Confirm the MCP server is registered and its tool bindings reach subagent sessions (see docs/VISUAL-VERIFICATION-SETUP.md).","blocked_checks":["Level 2 visual verification for {platform}"],"level":"visual","severity":"medium"}'
    ```
-   `plan_ref` is the path to the task's plan file — include the `{epic}/` subfolder if the plan has an epic, omit it otherwise. The operator reads the plan for full acceptance-criteria and protocol context.
-2. **Append a FIND entry** to the active sprint's findings file with `type: claude-md` and `description` naming the specific binding gap (e.g., "mcp__maestro__* bindings not exposed to verifier subagent despite project .mcp.json registration") so the compounder can propose a setup-doc fix.
+2. **Append a FIND entry** to the active sprint's findings file via `findings.js append --sprint {sprint.id} --fields-json '{"type":"claude-md",...}'` with a `description` naming the specific binding gap (e.g., "mcp__maestro__* bindings not exposed to verifier subagent despite project .mcp.json registration") so the compounder can propose a setup-doc fix.
 
 Do NOT emit `skipped_unable` without both of the above when the settings gate was enabled. Silent `skipped_unable` is only acceptable when `not_applicable` or `skipped_user_preference` would have been the correct classification — but those are different outcomes with different escalation rules.
 
@@ -152,17 +147,11 @@ Check each condition. This catches things the acceptance criteria might have mis
 
 ### Deferred Checks — Human Action Required
 
-At any level, if a check cannot run until a human performs a prerequisite action (deploy an edge function, run a migration, provision a service, etc.), mark it `DEFERRED_ACTION` — do not fail or skip it. Append an entry to `.soloflow/human-review-queue.md`:
+At any level, if a check cannot run until a human performs a prerequisite action (deploy an edge function, run a migration, provision a service, etc.), mark it `DEFERRED_ACTION` — do not fail or skip it. Append to `.soloflow/human-review-queue.md` via:
 
 ```
-- task: {TASK-NNN}
-  type: action_required
-  plan_ref: .soloflow/active/plans/[{epic}/]TASK-{NNN}-plan.md
-  action: "{what the human must do}"
-  blocked_checks:
-    - "{criterion or verification step blocked}"
-  level: "{ground_truth | visual | requirements | goal_backward}"
-  severity: "{low | medium | high}"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" append --entry-json \
+  '{"task":"TASK-NNN","type":"action_required","plan_ref":".soloflow/active/plans/[{epic}/]TASK-NNN-plan.md","action":"{what the human must do}","blocked_checks":["{criterion blocked}"],"level":"{ground_truth|visual|requirements|goal_backward}","severity":"{low|medium|high}"}'
 ```
 
 `plan_ref` is the path to the task's plan file — include the `{epic}/` subfolder if the plan has an epic, omit it otherwise. The operator reads the plan for full acceptance-criteria and archive-schema context.
