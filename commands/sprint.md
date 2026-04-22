@@ -1,6 +1,6 @@
 ---
 description: Run an execution sprint over ready tasks in the backlog
-argument-hint: [optional: TASK-NNN TASK-NNN ... or idea ID to filter]
+argument-hint: [TASK-NNN... | IDEA-NNN] [--quick | --no-code-review | --no-verification]
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 
@@ -8,7 +8,34 @@ allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 
 Phase 3 of the SoloFlow pipeline. Creates a sprint from ready tasks in the backlog and runs the executor → verifier → code-reviewer loop until the sprint is complete.
 
-Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDEA-NNN` to filter; if empty, include all ready tasks up to resolved `limits.max_sprint_tasks`)
+Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDEA-NNN` to filter; if empty, include all ready tasks up to resolved `limits.max_sprint_tasks`). May also include review/verification flags — see Step 0.4.
+
+---
+
+## Step 0.4: Parse flags
+
+Before any other step, split `$ARGUMENTS` on whitespace and partition the tokens:
+
+- **Recognized flags** (collected into a `flags` set, extracted from the token stream):
+  - `--quick` — shorthand for `--no-code-review --no-verification`
+  - `--no-code-review` — disables per-task code review (Step 3.f) and end-of-sprint code review (Step 3.6)
+  - `--no-verification` — disables per-task verification (Step 3.d) and end-of-sprint verification (Step 3.5)
+- **Positional args** — everything else (TASK-NNN IDs, an `IDEA-NNN` filter). These become the effective `$ARGUMENTS` consumed by Step 1.5d and elsewhere.
+- **Unknown `--flags`** — any remaining token beginning with `--` that isn't in the recognized list. Stop immediately and print:
+  `Unknown flag: {token}. Recognized flags: --quick, --no-code-review, --no-verification.`
+  Do not proceed. (Fail-closed on typos like `--no-codereview`.)
+
+Derive four in-memory booleans used by downstream steps. These override (rather than replace) the normal config-resolution recipe:
+
+- `per_task_verification_enabled` = `false` if `flags` contains `--no-verification` or `--quick`, else `true`.
+- `per_task_code_review_enabled` = start from resolved `code_review.enabled` (Step 3.f recipe, fallback `true`); force to `false` if `flags` contains `--no-code-review` or `--quick`.
+- `sprint_verification_enabled` = `false` if `flags` contains `--no-verification` or `--quick`, else `true`.
+- `sprint_code_review_enabled` = start from resolved `sprint_code_review.enabled` (Step 3.6 recipe, fallback `true`); force to `false` if `flags` contains `--no-code-review` or `--quick`.
+
+If any of the four booleans is `false`, print one line summarizing what's disabled, e.g.:
+`Flags active: per-task verification disabled, end-of-sprint verification disabled.`
+
+Flags compose — passing `--quick` alongside `--no-code-review` is a no-op. The flag layer sits on top of config resolution; the existing `.soloflow/config.json` → `defaults.yaml` → inline fallback recipe still runs, flags just force the two review-enabled keys to `false` when set.
 
 ---
 
@@ -216,19 +243,19 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
            - In both cases, include: *"Continue from where the previous executor left off."*
         3. Increment context-limit respawn counter (tracked separately from `executor_retry_max`). If respawn limit reached, escalate as STUCK.
 
-   d. Spawn **verifier** with plan + executor report. Wait for verdict.
+   d. **Verification.** If `per_task_verification_enabled` (Step 0.4) is `false`, skip the verifier spawn entirely. Synthesize a stub verdict: `{ verdict: "APPROVED", visual_mobile: "skipped_user_preference", visual_web: "skipped_user_preference" }` and proceed directly to step f. The NEEDS_CHANGES retry loop and APPROVED_WITH_DEFERRED branch cannot trigger without a verifier. Otherwise (default): spawn **verifier** with plan + executor report and wait for verdict.
 
-   e. Handle verifier verdict:
+   e. Handle verifier verdict (skipped when `per_task_verification_enabled` is `false` — use the stub verdict from step d):
       - **APPROVED** → proceed to code review (step f).
       - **APPROVED_WITH_DEFERRED** → proceed to code review (step f). The deferred checks are already queued in `.soloflow/human-review-queue.md` by the verifier — they will be re-verified in Step 4.
       - **NEEDS_CHANGES** → if `executor_loops < resolved limits.executor_retry_max`, increment `executor_loops` and re-spawn executor with verifier feedback. Otherwise write stuck report.
       - **HUMAN_NEEDED** → append an entry to `.soloflow/human-review-queue.md` using the canonical HUMAN_NEEDED task-entry schema in `commands/quick.md` under "If HUMAN_NEEDED" (fields: `task`, `type`, `plan_ref`, `verdict_notes`, `action`, `severity`). Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`.
       - **CONTEXT_LIMIT** → read the `### Handoff` section. Spawn a **fresh verifier** with the original inputs + "Continue verification from previous verifier's handoff: {handoff section}". Same respawn budget as executor CONTEXT_LIMIT handling.
 
-   f. **Code review.** Resolve `code_review.enabled` per the recipe in
-      [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md)
-      (fallback: `true`). If `false`, skip this entire step — treat the task as
-      CLEAN and go straight to f2. Otherwise:
+   f. **Code review.** Use `per_task_code_review_enabled` from Step 0.4 (which
+      folds the resolved `code_review.enabled` config — fallback `true` — with
+      any `--no-code-review` / `--quick` flag override). If `false`, skip this
+      entire step — treat the task as CLEAN and go straight to f2. Otherwise:
 
       Spawn **code-reviewer** with the plan + executor's changed files list. Wait for verdict.
       - **CLEAN** → proceed to step f2 (test writing).
@@ -258,7 +285,7 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
        ---
        ```
 
-       Use the counters you tracked in working memory for this task. Copy `visual_mobile` and `visual_web` verbatim from the verifier's Visual Verification report block (the verifier emits the enum directly — do not re-classify here). If a prior verifier round emitted a different outcome and the task is now passing on a later round, use the *most recent* verifier's values. Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <that path> --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md` — this removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`. Then perform the **epic archival check**: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no tasks from that epic remain in `sprint.json`, flag the epic for the Step 4 human review with an "archive this epic?" prompt. On user approval (not automatic), move `.soloflow/active/plans/{epic}/EPIC-{epic}.md` → `.soloflow/archive/done/{epic}/EPIC-{epic}.md` and flip its frontmatter `status` from `active` to `complete`.
+       Use the counters you tracked in working memory for this task. Copy `visual_mobile` and `visual_web` verbatim from the verifier's Visual Verification report block (the verifier emits the enum directly — do not re-classify here). If a prior verifier round emitted a different outcome and the task is now passing on a later round, use the *most recent* verifier's values. If `per_task_verification_enabled` (Step 0.4) was `false` for this run, the verifier never ran — write `visual_mobile: skipped_user_preference` and `visual_web: skipped_user_preference` instead. Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <that path> --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md` — this removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`. Then perform the **epic archival check**: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no tasks from that epic remain in `sprint.json`, flag the epic for the Step 4 human review with an "archive this epic?" prompt. On user approval (not automatic), move `.soloflow/active/plans/{epic}/EPIC-{epic}.md` → `.soloflow/archive/done/{epic}/EPIC-{epic}.md` and flip its frontmatter `status` from `active` to `complete`.
 
    g. Every resolved `limits.checkpoint_interval` completed tasks, write checkpoint to `.soloflow/checkpoint.md`.
 
@@ -268,7 +295,9 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
 
 ## Step 3.5: End-of-sprint verification
 
-Spawn the **sprint-verifier** agent with the sprint ID, base SHA (from `sprint.json`'s `run.base_sha` or the commit before sprint start), the list of completed tasks with their plans and changed files, and the resolved visual verification config. Wait for its report.
+If `sprint_verification_enabled` (Step 0.4) is `false`, skip this entire step — do not spawn the sprint-verifier and do not create `.soloflow/active/sprint-verification.md`. The sprint-closer handles the missing file (tallies sprint-level mobile/web as `not_applicable` with note "sprint-verifier did not run").
+
+Otherwise, spawn the **sprint-verifier** agent with the sprint ID, base SHA (from `sprint.json`'s `run.base_sha` or the commit before sprint start), the list of completed tasks with their plans and changed files, and the resolved visual verification config. Wait for its report.
 
 Handle the report:
 - If regressions were found (visual or integration), add each to `.soloflow/human-review-queue.md` with the failure details, evidence, and suspected responsible task.
@@ -276,11 +305,11 @@ Handle the report:
 
 ## Step 3.6: End-of-sprint code review
 
-Resolve `sprint_code_review.enabled` per the recipe in
-[docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md) (fallback:
-`true`). Resolution is **independent** of `code_review.enabled` — you can
-disable per-task review but keep sprint-level, or vice versa. If `false`, skip
-this entire step.
+Use `sprint_code_review_enabled` from Step 0.4 (which folds the resolved
+`sprint_code_review.enabled` config — fallback `true` — with any
+`--no-code-review` / `--quick` flag override). Resolution is **independent** of
+`per_task_code_review_enabled` — you can disable per-task review but keep
+sprint-level, or vice versa. If `false`, skip this entire step.
 
 Otherwise, spawn the **sprint-code-reviewer** agent with:
 
