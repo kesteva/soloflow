@@ -4,6 +4,31 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.8.8] - 2026-04-22
+
+### Added
+- **New script library under `scripts/`** — 13 extracted helpers that replace deterministic prose previously executed by the LLM inside agents and orchestrator commands:
+  - `scripts/config/resolve.js` — 3-tier config/limits resolver (`.soloflow/config.json` → `defaults.yaml` → fallback).
+  - `scripts/state/next-ids.js` — sprint / task / finding ID allocation.
+  - `scripts/state/findings.js` + `lib/findings.js` — per-sprint findings file library (ensure-exists / append / set-status / reconcile / recompute).
+  - `scripts/state/review-queue.js` + `lib/review-queue.js` — human-review-queue library (gather / append / remove / override / recompute).
+  - `scripts/state/commit-atomic.js` — generalized "stage explicit paths, never `-A`, skip-if-not-repo" wrapper.
+  - `scripts/state/cruft-detect.js` — read-only detection for `/soloflow:review-queue` step 1a (6 scenarios).
+  - `scripts/sprint/parse-flags.js` — `--quick` / `--no-code-review` / `--no-verification` parser with config fold-in.
+  - `scripts/sprint/ready-tasks.js` — topological sort of sprint.json `depends_on` graph.
+  - `scripts/sprint/close-gather.js` — replaces `sprint-closer` Phase 1 entirely (stats, reconciliation, compound-proposal span math).
+  - `scripts/sprint/probe-infra.js` — keyword-scan + shell probes for maestro/playwright/docker + per-task prerequisites.
+  - `scripts/compound/batch-select.js` — pending-sprint discovery + batch input assembly for `/soloflow:compound`.
+  - `scripts/refiner/grep-preflight.js` — recursive grep helper for task-refiner step 5g.
+  - `scripts/refiner/ac-parity.js` — AC ↔ files_owned / test_strategy parity check for task-refiner steps 5c/5e.
+- **`scripts/__tests__/`** — 22 unit tests covering the new libraries and scripts (`node --test scripts/__tests__/*.test.js`).
+- **`scripts/install.sh`** now bundles `scripts/` under `.claude/soloflow-install/scripts/` so script-install users get the new helpers.
+
+### Changed
+- **Agents rewired to call scripts instead of executing deterministic prose in-context.** `sprint-initiator`, `sprint-closer`, `executor`, `verifier`, and `task-refiner` each drop ~15-60 lines of JSON/YAML/git manipulation prose in favor of script invocations.
+- **Orchestrator commands rewired to call scripts.** `commands/sprint.md`, `compound.md`, `review-queue.md`, `mad-max.md`, `quick.md`, `planner.md`, and `prune.md` replace their inline 3-tier config recipe, ID allocation, dependency-graph, findings-file, and queue-mutation prose with script calls.
+- **`commands/sprint.md` step 3.7 retires the `sprint-closer` gather-phase agent spawn** entirely — it now calls `close-gather.js` directly and consumes the same JSON payload shape.
+
 ## [0.8.7] - 2026-04-22
 
 ### Added
