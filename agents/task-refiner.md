@@ -62,9 +62,12 @@ You may also receive a list of **existing epic slugs** (with the contents of the
    - If the task is purely config, docs, or trivial wiring, note `test_strategy: none` with a one-line justification.
    - The test-writer agent uses this section after execution — make it concrete enough to act on.
 
-5c. **Validate `test_strategy` ↔ `files_owned` parity.** Before emitting a plan, cross-check every `test_strategy.targets[].test_file` against that plan's `files_owned`:
-   - If the test file is already in `files_owned` → ✓ proceed.
-   - If the test file is absent but the strategy requires **modifying** it → move it into `files_owned` (or add the new path the executor must create).
+5c. **Validate `test_strategy` ↔ `files_owned` parity.** Before emitting a plan, run:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/refiner/ac-parity.js" --plan <plan-path>
+   ```
+   The script reports `test_targets_missing` — any `test_strategy.targets[].test_file` not in `files_owned`. For each:
+   - If the strategy requires **modifying** the test file → add it to `files_owned` (or add the new path the executor must create).
    - If the test file only needs to be **executed** (not modified) → reframe the strategy step as "run `<command>`, confirm exit 0" and keep it out of `files_owned`.
 
    Any file a plan's `test_strategy` instructs the executor to modify MUST appear in `files_owned`. This check must pass before emitting the plan — do not rely on executor-time scope-deviation recovery.
@@ -76,10 +79,9 @@ You may also receive a list of **existing epic slugs** (with the contents of the
 
    This rule exists because sweep tasks have repeatedly left assertion files (especially under `scripts/`) with stale values that no automated gate catches — `files_owned` + the primary test suite alone are not sufficient for rename sweeps.
 
-5e. **Validate `acceptance_criteria` ↔ `files_owned` parity.** Before emitting a plan, scan every `acceptance_criteria[].verification` string for file paths named via write-confirming reads — `grep`, `cat`, `head`, `tail`, `test -e`, `test -f`, `python3 -c '... open("<path>") ...'`, or a bare path piped into a contains-check. For each extracted path:
-   - If it is already in `files_owned` → ✓ proceed.
-   - If it is in `files_readonly` → move it to `files_owned` (AC verification that grep-asserts the file's contents implies the executor wrote it).
-   - If it is absent from both → insert into `files_owned`.
+5e. **Validate `acceptance_criteria` ↔ `files_owned` parity.** Before emitting a plan, run the same `ac-parity.js` invocation as 5c and consume its `move_to_owned` and `insert_to_owned` arrays:
+   - Every path in `move_to_owned` (currently in `files_readonly`): move it to `files_owned`. AC verification that grep-asserts the file's contents implies the executor wrote it.
+   - Every path in `insert_to_owned` (absent from both lists): insert into `files_owned`.
 
    Self-contradictory plans (AC verification says the file contains X after the task, plan says readonly) produce a guaranteed `scope_deviation` finding at execution time. This check must pass before emitting the plan — do not rely on executor-time recovery.
 
@@ -102,8 +104,13 @@ You may also receive a list of **existing epic slugs** (with the contents of the
 
 5g. **Pre-flight grep for global-grep ACs.** For each AC whose `verification` contains a recursive/global grep — explicitly, if the verification string names a `grep -r` / `grep -rn` invocation, or uses the phrases "matches outside", "no occurrences of", or "0 <X> matches" — you MUST:
 
-   1. Run the equivalent `grep -rn '<pattern>'` (or the exact grep the AC names) against the current codebase **before** drafting `files_owned` / `files_readonly`.
-   2. Add **every** file the grep reports to that plan's `files_owned`. A file that matches the grep but is absent from `files_owned` guarantees a scope deviation at execution time — the AC will demand editing it while the plan forbids touching it. Omitting the file from both `files_owned` and `files_readonly` does NOT escape this rule; the grep output is the authoritative list.
+   1. Run the pre-flight script before drafting `files_owned` / `files_readonly`:
+      ```
+      node "${CLAUDE_PLUGIN_ROOT}/scripts/refiner/grep-preflight.js" --pattern '<pattern>'
+      # or if the AC names a full grep command:
+      node "${CLAUDE_PLUGIN_ROOT}/scripts/refiner/grep-preflight.js" --cmd 'grep -rn "old" src/ tests/'
+      ```
+   2. Add **every** file in the script's `files` array to that plan's `files_owned`. A file that matches the grep but is absent from `files_owned` guarantees a scope deviation at execution time — the AC will demand editing it while the plan forbids touching it. Omitting the file from both `files_owned` and `files_readonly` does NOT escape this rule; the grep output is the authoritative list.
    3. Encode the grep command as **step 1 of `Implementation Steps`** so the executor re-runs it as a completeness gate before reporting COMPLETED — same pattern as step 5d.
 
    This rule exists because global-grep ACs recurrently diverge from `files_owned` (SPRINT-008 through SPRINT-012). Passive "don't do X" rules did not eliminate the deviation class; running the grep pre-flight and letting its output drive the file lists does. Trigger conservatively — only when the verification literally names a recursive grep or one of the phrases above, not any AC that incidentally mentions grep.
