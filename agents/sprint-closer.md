@@ -40,6 +40,10 @@ Phase: gather
    - **Sprint-level visual coverage:** read `.soloflow/active/sprint-verification.md` if it exists. Extract `visual_mobile`, `visual_web`, their note fields, and `regressions_count`. If the file is missing, treat both platforms as `not_applicable` with note `"sprint-verifier did not run"`.
    - **Sprint-level code review:** read `.soloflow/active/sprint-code-review.md` if it exists. Extract `ran_simplify`, `ran_security_review`, and `findings_count` (`critical`, `important`, `minor`) from its frontmatter. If the file is missing, record `ran: false` with zero counts (the step was skipped or disabled).
 
+3b. **Reconcile findings status from done reports.** For each done report collected in step 3, read its body and extract every FIND ID that appears on a `**Findings resolved:**` line (the executor's status report format from `agents/executor.md`). Read `.soloflow/active/findings/{sprint.id}-findings.md` and, for each extracted FIND ID, check its current `- **status:**` value. Build a `findings_reconciliation` list containing one entry per FIND ID that is still `status: open` in the findings file but was reported resolved in a done report. For each entry capture: the FIND ID, the `id` from the done report's frontmatter (the task that actually resolved it), and the done report path.
+
+   This catches cases the executor's `Resolves:` commit-trailer rule and the verifier's status-sync walk both missed — typically when the finding's `location` was outside the task's `files_owned` so the verifier never scanned it. If the findings file itself is missing, emit an empty reconciliation list and proceed.
+
 4. **Parse human-review-queue.** Read `.soloflow/human-review-queue.md` (if it exists). Separate:
    - **action_required:** entries with `type: action_required`. Group by `action` text. For each group, list the blocked checks, originating task IDs, and the **maximum severity** across the group (rank `high > medium > low`; treat a missing `severity` field as `medium` for backward compatibility with entries written before severity was tracked).
    - **sprint_code_review:** entries with `type: sprint_code_review`. Keep each entry separately (do NOT group by action — each finding is standalone). Capture `severity`, `finding`, `location`, `recommendation`, and `suspected_tasks`.
@@ -140,6 +144,12 @@ sprint_code_review:
     important: {N}
     minor: {N}
 
+findings_reconciliation:  # stale-open findings to patch during finalize (D1 reconciliation)
+  - find_id: "FIND-SPRINT-NNN-N"
+    resolved_by_task: "TASK-NNN"        # from the done report's frontmatter id
+    source_done_report: "{path}"
+  # empty list if nothing to reconcile (findings file in sync with done reports)
+
 compound_drafts:  # one entry per draft found in active/compound/ (plus legacy single-slot if present)
   - source_path: "{path to active draft}"
     sprint_field: "{SPRINT-NNN or null}"        # populated when legacy scalar form is used
@@ -188,10 +198,17 @@ Decisions:
 
 2c. **Archive sprint-code-review file.** If `.soloflow/active/sprint-code-review.md` exists, move it to `.soloflow/archive/sprint-code-reviews/{sprint.id}-code-review.md` (create the folder if missing). If the destination already exists, leave the active file in place and record `skipped_reason: already_exists` in the output's `archived_sprint_code_review` field. If the file doesn't exist, record `archived_sprint_code_review.moved: false` and move on.
 
+2d. **Patch reconciled findings.** For each entry in `findings_reconciliation` from Phase 1, edit `.soloflow/active/findings/{sprint.id}-findings.md`:
+   - Change that finding's `- **status:** open` → `- **status:** resolved`.
+   - Set `- **resolved_by:** {resolved_by_task} (sprint-closer status-sync)`.
+   - Decrement the frontmatter `pending_count` by 1 per reconciled finding. Refresh `last_updated` once after all patches.
+
+   If the reconciliation list is empty, skip this step. The patched findings file will be staged in step 3's commit (see the added-path list there). Record each patched FIND ID in the output's `findings_reconciled` list.
+
 3. **Commit sprint close.**
    - `git add .soloflow/active/sprint.json`
    - Also add `.soloflow/human-review-queue.md` if it exists.
-   - Do NOT add the per-sprint findings file — it stays active for `/soloflow:compound` to archive later.
+   - If step 2d patched any findings (non-empty `findings_reconciliation`), `git add .soloflow/active/findings/{sprint.id}-findings.md` so the status-sync lands in this commit. The file still stays in `active/findings/` — you are staging content edits, not moving it. If step 2d was a no-op, do NOT stage the findings file (it remains active for `/soloflow:compound` to archive later).
    - Reset `.soloflow/checkpoint.md` to the null-state template (matching `scripts/init.sh`'s initial content — `active_sprint: null`, empty `tasks_in_flight`) so the next sprint's Step 0.5 check sees no active sprint. Skip if the file is missing. Then `git add .soloflow/checkpoint.md` so the reset lands in the close commit. The template body must be byte-identical to:
      ```
      ---
@@ -262,6 +279,10 @@ archived_sprint_code_review:
   moved: {true|false}
   destination: "{path or null}"
   skipped_reason: "{already_exists|null}"
+
+findings_reconciled:  # FIND IDs patched from open → resolved in step 2d
+  - "FIND-SPRINT-NNN-N"
+  # empty list when reconciliation was a no-op
 
 merge:
   outcome: "{merged|pr-opened|kept-open|deleted|none}"
