@@ -26,42 +26,27 @@ Phase: gather
 
 ### Steps
 
-1. **Sanity check.** Verify `.soloflow/active/sprint.json` exists. If not, report `ERROR` with reason "no active sprint." Stop.
+Run the deterministic close-gather script and emit its JSON as the `### Data` payload verbatim:
 
-2. **Read sprint state.** Read `.soloflow/active/sprint.json`. Extract `sprint.id`, `sprint.status`, `sprint.started`, the `run` object (if present), and the remaining `tasks` map. Note any tasks still in `in_progress`, `blocked`, or `human-needed` status.
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/close-gather.js"
+```
 
-3. **Tally task outcomes for this sprint.**
-   - **Completed:** glob `.soloflow/archive/done/**/TASK-*-done.md`. Read each report's frontmatter and keep entries where `sprint == sprint.id`. Capture `id`, `epic`, and a one-line summary (from a `summary:` frontmatter field if present, else the first non-empty body line).
-   - **Stuck:** glob `.soloflow/active/stuck/**/TASK-*-stuck.md`. Filter the same way. Capture `id`, `epic`, brief failure description, and what was tried.
-   - **Blocked / human-needed:** read directly from the remaining `tasks` map in `sprint.json`.
-   - **Total executor loops:** sum the `executor_loops` frontmatter field across all done + stuck reports for this sprint (treat missing as 0).
-   - **Total code review rounds:** sum the `code_review_rounds` frontmatter field across all done reports for this sprint (treat missing as 0).
-   - **Per-task visual coverage:** for each platform (`visual_mobile`, `visual_web`), tally how many done reports emit each of the five enum values: `pass`, `fail`, `not_applicable`, `skipped_user_preference`, `skipped_unable`. Treat a missing field as `not_applicable` (backward compatibility with reports written before this schema).
-   - **Sprint-level visual coverage:** read `.soloflow/active/sprint-verification.md` if it exists. Extract `visual_mobile`, `visual_web`, their note fields, and `regressions_count`. If the file is missing, treat both platforms as `not_applicable` with note `"sprint-verifier did not run"`.
-   - **Sprint-level code review:** read `.soloflow/active/sprint-code-review.md` if it exists. Extract `ran_simplify`, `ran_security_review`, and `findings_count` (`critical`, `important`, `minor`) from its frontmatter. If the file is missing, record `ran: false` with zero counts (the step was skipped or disabled).
+The script performs all the bookkeeping this phase used to encode in prose:
 
-3b. **Reconcile findings status from done reports.** For each done report collected in step 3, read its body and extract every FIND ID that appears on a `**Findings resolved:**` line (the executor's status report format from `agents/executor.md`). Read `.soloflow/active/findings/{sprint.id}-findings.md` and, for each extracted FIND ID, check its current `- **status:**` value. Build a `findings_reconciliation` list containing one entry per FIND ID that is still `status: open` in the findings file but was reported resolved in a done report. For each entry capture: the FIND ID, the `id` from the done report's frontmatter (the task that actually resolved it), and the done report path.
+- Reads `.soloflow/active/sprint.json` (or exits ERROR if missing).
+- Tallies completed / stuck / blocked / human_needed tasks by reading done-report + stuck-report frontmatter filtered to this sprint.
+- Sums `executor_loops` and `code_review_rounds` across the sprint's reports.
+- Rolls up per-task visual-coverage enums and sprint-level visual-coverage from `.soloflow/active/sprint-verification.md`.
+- Extracts sprint-code-reviewer counts from `.soloflow/active/sprint-code-review.md`.
+- Parses `.soloflow/human-review-queue.md`, groups `action_required` entries by action (max severity), and keeps `sprint_code_review` entries as standalone findings.
+- Detects compound-proposal drafts in `active/compound/` (plus legacy `COMPOUND-PROPOSAL.md`), normalizes `sprints:` membership, and computes archive paths by the span rule.
+- Reconciles findings by reading each done report's `**Findings resolved:**` line and flagging FIND IDs still `status: open` in the findings file.
+- Resolves `git.merge_strategy` via the config recipe (fallback `--no-ff`).
 
-   This catches cases the executor's `Resolves:` commit-trailer rule and the verifier's status-sync walk both missed — typically when the finding's `location` was outside the task's `files_owned` so the verifier never scanned it. If the findings file itself is missing, emit an empty reconciliation list and proceed.
+Parse the script's stdout as JSON, then format the `### Data` block as the YAML shape below. On non-zero exit from the script, report `ERROR` with the script's stderr as the reason and stop.
 
-4. **Parse human-review-queue.** Read `.soloflow/human-review-queue.md` (if it exists). Separate:
-   - **action_required:** entries with `type: action_required`. Group by `action` text. For each group, list the blocked checks, originating task IDs, and the **maximum severity** across the group (rank `high > medium > low`; treat a missing `severity` field as `medium` for backward compatibility with entries written before severity was tracked).
-   - **sprint_code_review:** entries with `type: sprint_code_review`. Keep each entry separately (do NOT group by action — each finding is standalone). Capture `severity`, `finding`, `location`, `recommendation`, and `suspected_tasks`.
-   - **other:** non-actionable entries (informational verifier notes, HUMAN_NEEDED escalations, already-overridden entries). Capture brief summaries and a count.
-
-5. **Detect stale compound proposal drafts.** Glob `.soloflow/active/compound/SPRINT-*-proposal.md` (single-sprint and span-named drafts) AND `.soloflow/active/COMPOUND-PROPOSAL.md` (pre-migration legacy single slot). For each match, read the YAML frontmatter and normalize the sprint membership:
-   - Prefer `sprints:` (array form used by merged-batch drafts).
-   - Fall back to `sprint:` (legacy scalar) and treat it as a single-element list.
-   - Record both fields in the output so consumers written against either shape keep working.
-
-   Derive the archive destination by the span rule: single-element list → `SPRINT-NNN-proposal.md`; multi-element → `SPRINT-{MIN}-{MAX}-proposal.md` (zero-pad to 3 digits; use the numeric min/max of the array, which is authoritative even if the filename span is wider because of a non-contiguous batch). Check whether that destination already exists. Emit one entry per draft so the orchestrator can see every pending proposal.
-
-   **Note:** sprint-closer does NOT archive the per-sprint findings file (`.soloflow/active/findings/{sprint.id}-findings.md`). It must stay in `active/findings/` until `/soloflow:compound` consumes it. Archival is a compound-phase responsibility.
-
-6. **Resolve merge config.** Check in order (first hit wins):
-   - `.soloflow/config.json` → `git.merge_strategy`
-   - `${CLAUDE_PLUGIN_ROOT}/config/defaults.yaml` (resolve `$CLAUDE_PLUGIN_ROOT` via `echo $CLAUDE_PLUGIN_ROOT` in Bash) → `git.merge_strategy`
-   - Fallback: `--no-ff`
+**Note:** sprint-closer does NOT archive the per-sprint findings file (`.soloflow/active/findings/{sprint.id}-findings.md`). It must stay in `active/findings/` until `/soloflow:compound` consumes it.
 
 ### Output
 
@@ -198,35 +183,42 @@ Decisions:
 
 2c. **Archive sprint-code-review file.** If `.soloflow/active/sprint-code-review.md` exists, move it to `.soloflow/archive/sprint-code-reviews/{sprint.id}-code-review.md` (create the folder if missing). If the destination already exists, leave the active file in place and record `skipped_reason: already_exists` in the output's `archived_sprint_code_review` field. If the file doesn't exist, record `archived_sprint_code_review.moved: false` and move on.
 
-2d. **Patch reconciled findings.** For each entry in `findings_reconciliation` from Phase 1, edit `.soloflow/active/findings/{sprint.id}-findings.md`:
-   - Change that finding's `- **status:** open` → `- **status:** resolved`.
-   - Set `- **resolved_by:** {resolved_by_task} (sprint-closer status-sync)`.
-   - Decrement the frontmatter `pending_count` by 1 per reconciled finding. Refresh `last_updated` once after all patches.
+2d. **Patch reconciled findings.** For each entry in `findings_reconciliation` from Phase 1:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/state/findings.js" reconcile \
+       --sprint {sprint.id} \
+       --from-done-report {source_done_report}
+   ```
+   The script flips matching `status: open` → `resolved`, sets `resolved_by: {task_id} (sprint-closer status-sync)`, recomputes `pending_count`, and refreshes `last_updated`. Skipped entries (already resolved, not found, etc.) are reported in its JSON output — record each genuinely patched FIND ID in the `findings_reconciled` output list.
 
-   If the reconciliation list is empty, skip this step. The patched findings file will be staged in step 3's commit (see the added-path list there). Record each patched FIND ID in the output's `findings_reconciled` list.
+   If the reconciliation list is empty, skip this step entirely. The patched findings file will be staged in step 3's commit.
 
-3. **Commit sprint close.**
-   - `git add .soloflow/active/sprint.json`
-   - Also add `.soloflow/human-review-queue.md` if it exists.
-   - If step 2d patched any findings (non-empty `findings_reconciliation`), `git add .soloflow/active/findings/{sprint.id}-findings.md` so the status-sync lands in this commit. The file still stays in `active/findings/` — you are staging content edits, not moving it. If step 2d was a no-op, do NOT stage the findings file (it remains active for `/soloflow:compound` to archive later).
-   - Reset `.soloflow/checkpoint.md` to the null-state template (matching `scripts/init.sh`'s initial content — `active_sprint: null`, empty `tasks_in_flight`) so the next sprint's Step 0.5 check sees no active sprint. Skip if the file is missing. Then `git add .soloflow/checkpoint.md` so the reset lands in the close commit. The template body must be byte-identical to:
-     ```
-     ---
-     last_updated: null
-     active_sprint: null
-     tasks_in_flight: []
-     ---
+3. **Commit sprint close.** First reset `.soloflow/checkpoint.md` to the null-state template (matching `scripts/init.sh`'s initial content — `active_sprint: null`, empty `tasks_in_flight`) if it exists. The template body must be byte-identical to:
+   ```
+   ---
+   last_updated: null
+   active_sprint: null
+   tasks_in_flight: []
+   ---
 
-     # Session Checkpoint
-     ```
-   - Also add every destination path that step 2 moved (one per archived draft) — single-sprint form `SPRINT-NNN-proposal.md` or span form `SPRINT-{MIN}-{MAX}-proposal.md` as derived per draft.
-   - Also add the corresponding source path for the deletion side of each archived draft (either the matching active `active/compound/*-proposal.md` or the legacy `.soloflow/active/COMPOUND-PROPOSAL.md`).
-   - Also add `.soloflow/archive/sprint-verifications/{sprint.id}-verification.md` if step 2b moved a file (and `.soloflow/active/sprint-verification.md` for the deletion).
-   - Also add `.soloflow/archive/sprint-code-reviews/{sprint.id}-code-review.md` if step 2c moved a file (and `.soloflow/active/sprint-code-review.md` for the deletion).
-   - If `git diff --cached --quiet` reports no staged changes, skip the commit.
-   - Otherwise: `git commit -m "chore({sprint_id}): close sprint"`.
-   - Stage only listed paths — never `git add .` / `git add -A`.
-   - Skip silently if not in a git repo or `.soloflow/` is gitignored.
+   # Session Checkpoint
+   ```
+   Then run:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/state/commit-atomic.js" \
+       --message "chore({sprint_id}): close sprint" \
+       --path .soloflow/active/sprint.json \
+       --path .soloflow/checkpoint.md \
+       [--path .soloflow/human-review-queue.md]          # if it exists
+       [--path .soloflow/active/findings/{sprint.id}-findings.md]  # only if 2d patched
+       [--path <archived draft destination>]              # per draft from step 2
+       [--path <source draft path>]                       # for the deletion side
+       [--path .soloflow/archive/sprint-verifications/{sprint.id}-verification.md]  # if 2b moved
+       [--path .soloflow/active/sprint-verification.md]   # deletion side for 2b
+       [--path .soloflow/archive/sprint-code-reviews/{sprint.id}-code-review.md]    # if 2c moved
+       [--path .soloflow/active/sprint-code-review.md]    # deletion side for 2c
+   ```
+   The script skips silently if not in a git repo, if nothing was staged, or if any listed path doesn't exist. Never `git add -A`.
 
 4. **Execute merge choice.** Skip entirely if `merge_choice` is `none` or `keep_open`.
 
