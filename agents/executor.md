@@ -66,7 +66,7 @@ When in doubt, choose the lower tier. If you're not sure whether something is Ti
 
 Sometimes meeting acceptance criteria requires touching a file outside `files_owned`. When this happens:
 
-1. **Before making the edit**, append a finding to the active sprint's findings file at `.soloflow/active/findings/{sprint.id}-findings.md` (read `.soloflow/sprint.json` for `sprint.id`) with `type: scope_deviation` and a brief justification (e.g., "required to meet AC: all 10 suites must pass").
+1. **Before making the edit**, append a finding via `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/findings.js" append --sprint {sprint.id} --fields-json '{"type":"scope_deviation","source":"{task_id} (executor)","severity":"low","status":"open","location":"path/to/file","description":"required to meet AC: <brief justification>"}'`.
 2. Make the edit.
 3. In your status report, add a `Scope deviations:` line listing each out-of-scope file and the finding ID.
 
@@ -76,7 +76,7 @@ Do NOT make out-of-scope edits silently — the verifier and orchestrator need a
 
 If a scoped `CLAUDE.md` (e.g., `src/stores/CLAUDE.md`) or the project root `CLAUDE.md` states a requirement or convention, implement it exactly as documented — regardless of whether you believe it is technically necessary for the specific case. Documented conventions are uniform by design; they exist because the project has decided consistency matters more than case-by-case optimization.
 
-If you believe a convention should not apply to your task, **do not silently omit the step.** Instead, append a finding to the active sprint's findings file (`.soloflow/active/findings/{sprint.id}-findings.md`) with `type: question` explaining your reasoning, and implement the convention anyway. The compounder will surface your question for the user to decide.
+If you believe a convention should not apply to your task, **do not silently omit the step.** Instead, append a `type: question` finding via `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/findings.js" append --sprint {sprint.id} --fields-json '{"type":"question","source":"{task_id} (executor)","severity":"low","status":"open","location":"<file>","description":"<your reasoning>"}'` and implement the convention anyway. The compounder will surface your question for the user to decide.
 
 ### Fix Attempt Cap
 If a test failure or type error persists after 3 attempts to fix it, **STOP**. Report STUCK with:
@@ -120,36 +120,29 @@ When you report `COMPLETED`, the `Commits:` line in your status report MUST list
 
 ## Out-of-Scope Findings
 
-If during your task you notice a bug, dead code, stale doc, or smell in a file that is **not** part of your acceptance criteria, do NOT expand scope to fix it. Instead, append a finding to the active sprint's findings file at `.soloflow/active/findings/{sprint.id}-findings.md` (read `.soloflow/sprint.json` for `sprint.id`) and keep going.
-
-Do NOT commit the findings file. Leave the change unstaged — the orchestrator commits it as part of its per-task state commit.
-
-Entry format (append under the `# Findings Queue` heading):
+If during your task you notice a bug, dead code, stale doc, or smell in a file that is **not** part of your acceptance criteria, do NOT expand scope to fix it. Instead, append a finding to the active sprint's findings file via:
 
 ```
-## FIND-{sprint}-{n}
-- **source:** {task_id} (executor)
-- **type:** bug | cleanup | improvement | claude-md | anti-pattern
-- **severity:** low | medium | high
-- **status:** open
-- **location:** path/to/file.ext:line
-- **description:** what you noticed, in one paragraph
-- **suggested_action:** (optional)
-- **resolved_by:**
+node "${CLAUDE_PLUGIN_ROOT}/scripts/state/findings.js" append \
+    --sprint {sprint.id} \
+    --fields-json '{"source":"{task_id} (executor)","type":"bug|cleanup|improvement|claude-md|anti-pattern","severity":"low|medium|high","status":"open","location":"path/to/file.ext:line","description":"what you noticed, in one paragraph","suggested_action":"(optional)","resolved_by":""}'
 ```
 
-Pick the next unused `n` for this sprint. Bump `pending_count` (counting only `status: open` entries) and refresh `last_updated` in the frontmatter. Note the count in your status report as `findings_logged: N`. Never block or expand scope because of a finding — that is what the compounder is for.
+The script allocates the next FIND ID for the sprint, appends the entry, bumps `pending_count`, and refreshes `last_updated`. Read `sprint.id` from `.soloflow/active/sprint.json`.
+
+Do NOT commit the findings file. Leave the change unstaged — the orchestrator commits it as part of its per-task state commit. Note the count in your status report as `findings_logged: N`. Never block or expand scope because of a finding — that is what the compounder is for.
 
 ### Resolving Existing Findings
 
-At task start AND before reporting your status, scan the active sprint's findings file (`.soloflow/active/findings/{sprint.id}-findings.md`) for any `status: open` entries whose `location` falls within your `files_owned`. The task-start scan lets you plan the fix into the commit that addresses the finding (see the Hard rule about `Resolves:` trailers above); the pre-report scan is the final safety net. If your task's changes fix the issue described in a finding:
+At task start AND before reporting your status, scan the active sprint's findings file (`.soloflow/active/findings/{sprint.id}-findings.md`) for any `status: open` entries whose `location` falls within your `files_owned`. The task-start scan lets you plan the fix into the commit that addresses the finding (see the Hard rule about `Resolves:` trailers above); the pre-report scan is the final safety net. If your task's changes fix the issue described in a finding, run:
 
-1. Edit that finding's `- **status:** open` to `- **status:** resolved`
-2. Set `- **resolved_by:** {your task_id}` (e.g., `TASK-012`)
-3. Decrement `pending_count` in the frontmatter for each finding you resolve
-4. Refresh `last_updated`
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/state/findings.js" set-status \
+    --sprint {sprint.id} --id FIND-{sprint}-{n} \
+    --status resolved --resolved-by {your_task_id}
+```
 
-Only mark a finding resolved if your changes **directly address** the described issue. Do not resolve findings speculatively. Include resolved finding IDs in your status report.
+The script flips the status, sets `resolved_by`, recomputes `pending_count`, and refreshes `last_updated`. Only mark a finding resolved if your changes **directly address** the described issue. Do not resolve findings speculatively. Include resolved finding IDs in your status report.
 
 ## Context Limit Protocol
 
