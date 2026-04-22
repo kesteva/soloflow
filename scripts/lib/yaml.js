@@ -105,6 +105,9 @@ function parse(text) {
         const next = lines[pos];
         if (next && next.indent > minIndent) {
           out[key] = parseBlock(next.indent);
+        } else if (next && next.indent === minIndent && /^-(\s|$)/.test(next.body)) {
+          // Compact block-sequence: `key:` followed by same-indent `- item` list.
+          out[key] = parseBlock(next.indent);
         } else {
           out[key] = null;
         }
