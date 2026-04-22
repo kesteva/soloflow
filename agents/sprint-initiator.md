@@ -32,12 +32,13 @@ Phase: gather
 
 3. **Find natural next epic.** For each ready task, read its plan file (glob `.soloflow/active/plans/**/TASK-{NNN}-plan.md`) and extract the `epic` frontmatter field. The natural next epic is the first epic (by lowest task ID) that has ready tasks.
 
-4. **Resolve `branch_per_run` config.** Check in order (first hit wins):
-   - `.soloflow/config.json` → `git.branch_per_run`
-   - `${CLAUDE_PLUGIN_ROOT}/config/defaults.yaml` (resolve `$CLAUDE_PLUGIN_ROOT` via `echo $CLAUDE_PLUGIN_ROOT` in Bash) → `git.branch_per_run`
-   - Fallback: `prompt`
-   
-   Also read `branch_name_format` from the same sources (fallback: `soloflow/run-{timestamp}-{sprint_id}`).
+4. **Resolve `branch_per_run` + `branch_name_format`.** Run:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/config/resolve.js" \
+       --key git.branch_per_run --key git.branch_name_format \
+       --fallback prompt --fallback "soloflow/run-{timestamp}-{sprint_id}"
+   ```
+   First line is `branch_per_run`, second is `branch_name_format`.
 
 5. **Read worktree status.**
    - Current branch: `git rev-parse --abbrev-ref HEAD`
@@ -47,14 +48,11 @@ Phase: gather
    - **Blocking:** `level: ground_truth` AND `type: action_required` (skip `type: overridden`). For each blocking entry, capture the entry's `severity` field (`low | medium | high`). Treat a missing `severity` as `medium` for backward compatibility with entries written before severity was tracked.
    - **Advisory:** `level` in {`visual`, `requirements`, `goal_backward`}
 
-7. **Compute next sprint ID.** Glob:
-   - `.soloflow/archive/compound/SPRINT-*-proposal.md`
-   - `.soloflow/archive/findings/SPRINT-*-findings.md`
-   - `.soloflow/active/findings/SPRINT-*-findings.md` (pending compound)
-   - `.soloflow/active/compound/SPRINT-*-proposal.md` (pending compound draft)
-   - Read `.soloflow/active/sprint.json` for `sprint.id` (if file exists and has a sprint object)
-   
-   Extract max numeric suffix + 1, zero-pad to 3 digits. Ignore non-numeric suffixes (e.g. `SPRINT-quick-<timestamp>` from the quick path).
+7. **Compute next sprint ID.** Run:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/state/next-ids.js" --kind sprint
+   ```
+   It globs archive/compound, archive/findings, active/findings, active/compound, and `sprint.json`, extracts the max numeric suffix (including span filenames like `SPRINT-001-004-proposal.md`), and returns the next zero-padded ID on stdout.
 
 8. **Determine smoke eligibility.** Glob `.soloflow/archive/done/**/TASK-*-done.md`. If any match, set `skip_smoke: true` (prior sprint established baseline). Otherwise `skip_smoke: false`.
 
@@ -128,7 +126,12 @@ Decisions:
 
 ### Steps
 
-1. **Apply deferred item overrides.** If `overrides` is non-empty, read `.soloflow/human-review-queue.md` and for each overridden entry: append `override: "{justification}"` and `override_at: {ISO timestamp}`, flip `type` from `action_required` to `overridden`. Write the file back.
+1. **Apply deferred item overrides.** For each entry in `overrides`:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" override \
+       --task {task_id} --justification "{justification}"
+   ```
+   The script flips every matching `type: action_required` entry for that task to `type: overridden`, appends `override` + `override_at`, and recomputes `pending_count`.
 
 2. **Remember branch choice.** If `remember_branch_choice` is true, read `.soloflow/config.json` (or create it). Merge `{"git":{"branch_per_run":"always"}}` into the existing content. Write the file.
 
@@ -181,15 +184,18 @@ Decisions:
      ```
    - Write `sprint.json` again with the run object.
 
-5. **Commit sprint start.**
-   - `git add .soloflow/active/sprint.json .soloflow/active/backlog.json`
-   - Also add `.soloflow/active/findings/{sprint_id}-findings.md` (whether freshly created or migrated from legacy).
-   - Also add `.soloflow/active/findings.md` (as a deletion) if step 3.5 migrated it away.
-   - Also add `.soloflow/human-review-queue.md` if modified by step 1.
-   - Also add `.soloflow/config.json` if modified by step 2.
-   - If `git diff --cached --quiet` → skip (no staged changes).
-   - Otherwise: `git commit -m "chore({sprint_id}): start sprint"`
-   - Stage only listed paths — never `git add .` / `git add -A`.
+5. **Commit sprint start.** Run:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/state/commit-atomic.js" \
+       --message "chore({sprint_id}): start sprint" \
+       --path .soloflow/active/sprint.json \
+       --path .soloflow/active/backlog.json \
+       --path .soloflow/active/findings/{sprint_id}-findings.md \
+       [--path .soloflow/active/findings.md]      # only if step 3.5 migrated it
+       [--path .soloflow/human-review-queue.md]   # only if step 1 modified it
+       [--path .soloflow/config.json]             # only if step 2 modified it
+   ```
+   The script skips explicit paths, skips silently if not in a git repo, skips if nothing staged, and never uses `git add -A`.
 
 6. **Pre-sprint regression smoke** (skip if `skip_smoke` is true).
    a. **Discover test infrastructure:**
@@ -202,38 +208,19 @@ Decisions:
    
    c. **Format results** into structured output (the orchestrator will present the prompt).
 
-6.5 **Task-level infra availability check.** Always run this, even if `skip_smoke` is true — it's diagnostic, not a gate.
+6.5 **Task-level infra availability check.** Always run this, even if `skip_smoke` is true — diagnostic, not a gate. Run:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/probe-infra.js" \
+       --plan .soloflow/active/plans/**/TASK-001-plan.md \
+       --plan .soloflow/active/plans/**/TASK-002-plan.md ...
+   ```
+   The script:
+   - Unions required infra categories (`maestro` / `playwright` / `docker`) per plan using keyword scans on files_owned + body + test_strategy.targets.
+   - Probes each required category via Bash (MCP registration + CLI presence + docker daemon).
+   - Runs each plan's `prerequisites[]` checks with a 5-second timeout, classifying `pass` / `fail` / `timeout`.
+   - Emits the full `infra_check` payload (see Output schema below) as JSON.
 
-   a. **Infer required infra** by scanning each selected task's plan file:
-      - Glob `.soloflow/active/plans/**/TASK-{NNN}-plan.md` for each id in `selected_task_ids`.
-      - For each plan, union these categories into a set:
-        - `maestro` — `test_strategy.targets[*].type: integration` AND any of `ios|android|mobile|maestro|simulator|react-native` appears (case-insensitive) in `files_owned`, acceptance criteria, objective, or implementation steps.
-        - `playwright` — `test_strategy.targets[*].type: integration` AND any of `browser|playwright|e2e|\bweb\b|page\.|screenshot` appears AND no mobile keywords matched.
-        - `docker` — any of `docker|container|compose|dockerfile` appears, OR (`postgres|redis|rabbitmq|mysql`) paired with (`start|spin up|local|test against|container`) in acceptance criteria or implementation steps.
-      - If the set is empty, emit `infra_check` with empty `required`/`available`/`missing` arrays and skip to step b2 (still run per-task prereq probes).
-
-   b. **Probe availability** via Bash. For each required category:
-      - `maestro`: `claude mcp list 2>/dev/null | grep -qi maestro && which maestro >/dev/null`
-      - `playwright`: `claude mcp list 2>/dev/null | grep -qi playwright && which npx >/dev/null`
-      - `docker`: `which docker >/dev/null && timeout 3 docker info >/dev/null 2>&1`
-
-      Record the failing check as `reason`:
-      - `claude mcp list` exits non-zero → `"claude mcp list unavailable"` for any MCP-backed category.
-      - MCP grep finds nothing → `"MCP server not registered"`.
-      - CLI (`maestro` / `npx`) not found → `"CLI not found"`.
-      - Docker binary missing → `"not installed"`.
-      - Docker binary present but `docker info` fails (or times out) → `"daemon not running"`.
-
-   b2. **Probe per-task `prerequisites[]`.** For each task in `selected_task_ids`, read the plan's `prerequisites` frontmatter list (absent = skip, treat as empty). For each entry:
-      - Run `check` via Bash with a 5-second timeout: `timeout 5 bash -c '<check>'`.
-      - Classify: `pass` (exit 0), `fail` (exit non-zero), or `timeout` (exit 124).
-      - Record `{task_id, description, status, blocking, fix}`.
-
-      A task with **any `blocking: true` entry** whose status is `fail` or `timeout` is a **gated task** — the orchestrator's Step 2.8 will offer to gate it out of the sprint. Non-blocking failures are surfaced as advisory only. Plans with no `prerequisites` field emit nothing in `task_prerequisites`.
-
-      This probe runs AFTER the commit in Step 5 — prereq failures do not block sprint setup itself, only the affected task's execution. The orchestrator resolves the gating decision at Step 2.8.
-
-   c. **Format `infra_check`** into structured output (see schema below). Diagnostic only — do NOT prompt the user; the orchestrator handles the prompt in Step 2.8. Note: the heuristic may produce false positives (e.g., a plan that mentions "postgres" in prose without needing Docker); the user can override by choosing Continue at the orchestrator prompt.
+   A task with any `blocking: true` prereq entry whose status is `fail` or `timeout` is a **gated task** — the orchestrator's Step 2.8 will offer to gate it out. Non-blocking failures are advisory. The probe runs AFTER Step 5's commit — prereq failures don't block sprint setup itself.
 
 6.6 **Optional plugin hint (advisory only, never blocking).** Surface a single-line hint when an Anthropic-published plugin would have helped the selected tasks but isn't installed. Skip silently when the plugin is present — this is an adoption nudge, not a health check.
 
