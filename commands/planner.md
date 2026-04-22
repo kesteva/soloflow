@@ -12,19 +12,16 @@ The target idea is: **$ARGUMENTS**
 
 ---
 
-## Model resolution (applies to every Agent spawn below)
+## Model + limits resolution
 
-Before invoking the Agent tool, resolve `models.<name>` per the three-tier
-recipe in [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md)
-and pass the resolved value as the Agent tool's `model` parameter.
+Run once:
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/config/resolve.js" \
+    --key models.task_refiner --key limits.context_limit_respawn_max \
+    --fallback opus --fallback 3
+```
 
-Mapping used in this command:
-- `task-refiner` → `models.task_refiner` (fallback: `opus`)
-
-## Limits resolution
-
-Resolve `limits.context_limit_respawn_max` (fallback: 3) at run start and use
-it wherever "Cap at 3 context-limit respawns" appears below.
+Line 1 is the task-refiner model; line 2 is the context-limit respawn cap.
 
 ## Step 0: Check initialization
 
@@ -35,7 +32,7 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
 1. Parse `$ARGUMENTS` as an idea ID (e.g., `IDEA-001`). If empty or malformed, list `.soloflow/active/ideas/` and use the **AskUserQuestion** tool to let the user pick which idea to refine — pass the discovered idea IDs as options rather than printing them as prose.
 2. Read `.soloflow/active/ideas/IDEA-{NNN}.md`. If missing, report the error and stop.
 3. Check for `.soloflow/active/research/IDEA-{NNN}-research.md` — if present, it will be passed to the refiner.
-4. Compute the starting task counter by globbing every TASK file location (`.soloflow/active/plans/**/TASK-*-plan.md`, `.soloflow/active/stuck/**/TASK-*-stuck.md`, `.soloflow/archive/done/**/TASK-*-done.md`), extracting numeric suffixes, and taking `max + 1`. See the "ID allocation" section in the project `CLAUDE.md` for the shared recipe.
+4. Compute the starting task counter via `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/next-ids.js" --kind task` — this globs every TASK file location and returns the next zero-padded ID.
 5. Discover existing epics: glob `.soloflow/active/plans/*/EPIC-*.md` and collect each epic slug (parent folder name) and `EPIC-{slug}.md` contents. Pass these to the refiner so it can reuse epics instead of duplicating them.
 
 ## Step 2: Refine

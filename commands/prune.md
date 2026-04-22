@@ -12,15 +12,16 @@ Scope: **$ARGUMENTS** (optional — limit analysis to a specific directory; defa
 
 ---
 
-## Model resolution (applies to every Agent spawn below)
+## Model resolution
 
-Before invoking the Agent tool, resolve `models.<name>` per the three-tier
-recipe in [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md)
-and pass the resolved value as the Agent tool's `model` parameter.
+Run once:
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/config/resolve.js" \
+    --key models.codebase_pruner --key models.claudemd_pruner \
+    --fallback opus --fallback opus
+```
 
-Mapping used in this command:
-- `codebase-pruner` → `models.codebase_pruner` (fallback: `opus`)
-- `claudemd-pruner` → `models.claudemd_pruner` (fallback: `opus`)
+Line 1 is the codebase-pruner model; line 2 is the claudemd-pruner model.
 
 ## Step 0: Check initialization
 

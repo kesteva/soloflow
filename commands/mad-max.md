@@ -14,35 +14,19 @@ Arguments: **$ARGUMENTS** (optional — specific task IDs to include, or an `IDE
 
 ---
 
-## Model resolution (applies to every Agent spawn below)
+## Model + limits resolution
 
-Before invoking the Agent tool, resolve `models.<name>` per the three-tier
-recipe in [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md)
-and pass the resolved value as the Agent tool's `model` parameter.
+Run once at the start, cache the result:
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/config/resolve.js" --all
+```
 
-Mad-max spawns the same agents as `/soloflow:sprint`:
-- `sprint-initiator` → `models.sprint_initiator` (fallback: `sonnet`)
-- `executor` → `models.executor` (fallback: `sonnet`)
-- `verifier` → `models.verifier` (fallback: `opus`)
-- `code-reviewer` → `models.code_reviewer` (fallback: `opus`)
-- `test-writer` → `models.test_writer` (fallback: `sonnet`)
-- `sprint-verifier` → `models.sprint_verifier` (fallback: `opus`)
-- `sprint-closer` → `models.sprint_closer` (fallback: `sonnet`)
+Mad-max spawns the same agents as `/soloflow:sprint`. Keys consumed:
+- `models.sprint_initiator` / `models.executor` / `models.test_writer` / `models.sprint_closer` (fallback: `sonnet`)
+- `models.verifier` / `models.code_reviewer` / `models.sprint_verifier` (fallback: `opus`)
+- `limits.executor_retry_max` / `limits.checkpoint_interval` / `limits.context_limit_respawn_max` (fallbacks: 3)
 
-Cache the resolved values at the start of the run and reuse them for respawns.
-
-## Limits resolution (applies throughout this command)
-
-Resolve these limits per the recipe in
-[docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md) at run
-start, then use them wherever the corresponding concept appears below:
-
-- `limits.executor_retry_max` (fallback: 3)
-- `limits.checkpoint_interval` (fallback: 3)
-- `limits.context_limit_respawn_max` (fallback: 3)
-
-Mad-max intentionally ignores `limits.max_sprint_tasks` — it drains every ready
-task, not a capped sprint.
+Mad-max intentionally ignores `limits.max_sprint_tasks` — it drains every ready task, not a capped sprint. Reuse the cached values across respawns.
 
 ## Step 0.5: Hard-stop guardrails
 

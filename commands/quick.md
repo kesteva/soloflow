@@ -10,29 +10,20 @@ You are running the SoloFlow quick bugfix workflow. The user has described a bug
 
 The bug description is: **$ARGUMENTS**
 
-## Model resolution (applies to every Agent spawn below)
+## Model + limits resolution
 
-Before invoking the Agent tool for any subagent, resolve `models.<name>` per the
-three-tier recipe in [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md)
-(`.soloflow/config.json` → `$CLAUDE_PLUGIN_ROOT/config/defaults.yaml` → inline
-fallback). Pass the resolved value as the Agent tool's `model` parameter.
+Run once at the start, cache the result:
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/config/resolve.js" --all
+```
 
-Mapping used in this command:
-- `executor` → `models.executor` (fallback: `sonnet`)
-- `verifier` → `models.verifier` (fallback: `opus`)
-- `test-writer` → `models.test_writer` (fallback: `sonnet`)
-
-Cache the resolved values at the start of the run and reuse them for respawns.
-
-## Limits resolution (applies throughout this command)
-
-Resolve these limits per the recipe in
-[docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md) at run
-start, then use the resolved values wherever the corresponding concept appears
-below:
-
+Keys consumed:
+- `models.executor` / `models.test_writer` (fallback: `sonnet`)
+- `models.verifier` (fallback: `opus`)
 - `limits.executor_retry_max` (fallback: 3) — cap on `NEEDS_CHANGES` retries in Step 7
 - `limits.context_limit_respawn_max` (fallback: 3) — cap on `CONTEXT_LIMIT` respawns
+
+Reuse the cached values across all agent spawns and respawns.
 
 ## Step 1: Check initialization
 
