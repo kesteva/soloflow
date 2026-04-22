@@ -41,16 +41,21 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
 
 ## Step 1: Identify sprint(s) and build the batch
 
-**Resolve `compound.pending_sprints.picker_threshold`** per the three-tier recipe (fallback: `2`). Name this `PICKER_THRESHOLD` below.
+Run the discovery script once:
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/compound/batch-select.js" detect-pending
+```
 
-### 1a. Discover pending sprints
+Returns `{ pending, pending_findings_paths, coverage_numeric, picker_threshold }`. Name the returned `pending` array `PENDING` and the returned `picker_threshold` value `PICKER_THRESHOLD` below.
 
-A sprint is *pending compound* when its `active/findings/SPRINT-NNN-findings.md` exists AND no archived proposal covers it.
+### 1a. (discovery done by the script above)
 
-Procedure:
-1. Glob `.soloflow/active/findings/SPRINT-*-findings.md` and extract each sprint's numeric suffix as `NNN`.
-2. Build a **coverage set** by scanning `.soloflow/archive/compound/*-proposal.md`. A sprint `NNN` is covered iff any archived basename (matched anchored on `-proposal.md$`) is either `SPRINT-NNN-proposal.md` (exact) or `SPRINT-AAA-BBB-proposal.md` with `min(AAA,BBB) <= NNN <= max(AAA,BBB)` (span range, inclusive). The frontmatter `sprints:` array is the canonical membership source of truth — when in doubt about a non-contiguous batch, read the frontmatter — but filename-range coverage is correct for every contiguous case and is cheap at discovery time.
-3. Drop covered sprints from the pending list. Sort remaining by numeric suffix ascending (oldest-first). Call this `PENDING`.
+The script implements this procedure:
+1. Globs `.soloflow/active/findings/SPRINT-*-findings.md`.
+2. Builds a coverage set from `.soloflow/archive/compound/*-proposal.md`: a sprint `NNN` is covered iff an archived basename is either `SPRINT-NNN-proposal.md` (exact) or `SPRINT-AAA-BBB-proposal.md` with `min(AAA,BBB) <= NNN <= max(AAA,BBB)` (span range, inclusive).
+3. Drops covered sprints and sorts the remainder by numeric suffix ascending.
+
+The frontmatter `sprints:` array is the canonical membership truth for non-contiguous batches — the script falls back to filename-range coverage (correct for every contiguous case). If you need the array form, read the proposal frontmatter directly.
 
 ### 1b. Interpret `$ARGUMENTS` and resolve `BATCH_SPRINTS`
 
@@ -70,46 +75,26 @@ Procedure:
      - Else if the user provided free-text via Other → parse IDs, validate each against `PENDING`. Unknown or already-compounded IDs → re-prompt once, noting the bad IDs in the question text. Empty or all-invalid selection → re-prompt.
      - If `BATCH_SPRINTS` resolves to a single element, the single-sprint path kicks in naturally (no span naming, no `[SPRINT-NNN]` row prefixes, commit scopes unchanged).
 
-### 1c. Derive `SPAN_LABEL` and `PROPOSAL_BASENAME`
+### 1c–1f. Resolve span + inputs + idempotency + stale-draft safety
 
-- When `|BATCH_SPRINTS| == 1`: `SPAN_LABEL = SPRINT-NNN`, `PROPOSAL_BASENAME = SPRINT-NNN-proposal.md`.
-- When `|BATCH_SPRINTS| >= 2`: let `MIN` and `MAX` be the numeric min and max of the batch (zero-padded to 3 digits). `SPAN_LABEL = SPRINT-{MIN}-{MAX}`, `PROPOSAL_BASENAME = SPRINT-{MIN}-{MAX}-proposal.md`.
-- **Non-contiguous batches are supported.** If the user picks SPRINT-001 and SPRINT-003 (skipping 002 because it was already compounded), the span label and filename span `001-003`; the frontmatter `sprints:` array holds exactly `[SPRINT-001, SPRINT-003]` and is the canonical membership truth.
-
-### 1d. Idempotency guard
-
-Apply the coverage check from 1a to every sprint in `BATCH_SPRINTS`. If ANY member is already covered by an archived proposal, report which members are already compounded and stop. (This can fire when `$ARGUMENTS == SPRINT-NNN` is re-run on a completed sprint, or when PENDING discovery is stale.)
-
-### 1e. Stale-draft safety
-
-Before spawning the compounder, glob `.soloflow/active/compound/*-proposal.md`. If any active draft's frontmatter (prefer `sprints:` array, fall back to `sprint:` scalar) contains ANY sprint in `BATCH_SPRINTS`, stop with:
-
-`"Stale compound draft at {path} covers SPRINT-NNN. Resolve it first (re-run /soloflow:compound against the draft, run sprint-closer to archive it, or delete it manually) before continuing."`
-
-Do NOT silently overwrite — the draft may represent in-progress work from a crashed prior run.
-
-### 1f. Collect inputs
-
-Build a per-sprint input list for the compounder:
-
+Once `BATCH_SPRINTS` is resolved from 1b, run:
 ```
-inputs: [
-  { sprint_id: SPRINT-NNN,
-    findings_path: ".soloflow/active/findings/SPRINT-NNN-findings.md",  # or legacy path (see below)
-    done_reports: ["... paths under .soloflow/archive/done/ whose frontmatter sprint: == SPRINT-NNN ..."],
-    stuck_reports: ["... paths under .soloflow/active/stuck/ whose frontmatter sprint: == SPRINT-NNN ..."]
-  },
-  ...
-]
+node "${CLAUDE_PLUGIN_ROOT}/scripts/compound/batch-select.js" build-inputs \
+    --sprints SPRINT-NNN,SPRINT-MMM
 ```
 
-- Done reports glob: `.soloflow/archive/done/**/TASK-*-done.md`. Route each report to the sprint whose ID matches its frontmatter `sprint:` field. Reports whose sprint is NOT in `BATCH_SPRINTS` are ignored for this run.
-- Stuck reports glob: `.soloflow/active/stuck/**/TASK-*-stuck.md`. Same routing rule.
-- `.soloflow/human-review-queue.md` is passed ONCE (shared across sprints, not per-sprint).
+The script returns:
+- `span_label` → `SPAN_LABEL` (e.g. `SPRINT-001` for single, `SPRINT-001-003` for non-contiguous)
+- `proposal_basename` → `PROPOSAL_BASENAME`
+- `active_draft_path` / `archive_destination` — target paths under `.soloflow/active/compound/` and `.soloflow/archive/compound/`
+- `inputs` — per-sprint `{ sprint_id, findings_path, done_reports, stuck_reports }` (routing by done/stuck-report frontmatter `sprint:` field; reports for sprints not in the batch are excluded)
+- `review_queue_path` — shared across sprints, passed ONCE to the compounder
+- `idempotency_violations` — sprint IDs already covered by an archived proposal. If non-empty, report them and stop.
+- `conflicts` — active drafts whose frontmatter already names any batch member. If non-empty, stop with: `"Stale compound draft at {path} covers SPRINT-NNN. Resolve it first (re-run /soloflow:compound against the draft, run sprint-closer to archive it, or delete it manually) before continuing."` Do NOT silently overwrite.
 
-**Legacy findings migration (one-shot per project).** If the per-sprint findings file does NOT exist for some sprint in `BATCH_SPRINTS` but the legacy `.soloflow/active/findings.md` is present, treat the legacy file as that sprint's findings (only fires for one batch member — typically the oldest). After Step 5 archives the proposal, delete the legacy file.
+**Legacy findings migration.** If a sprint's per-sprint findings file doesn't exist, the script falls back to `.soloflow/active/findings.md` if present — that's the one-shot legacy migration path. After Step 5 archives the proposal, delete the legacy file.
 
-If the batch is entirely empty (every sprint has empty done/stuck inputs AND an empty findings file), report "No completed tasks or findings to learn from." and stop.
+If every sprint's done/stuck inputs are empty AND its findings file has no entries, report "No completed tasks or findings to learn from." and stop.
 
 ## Step 2: Spawn the compounder
 
