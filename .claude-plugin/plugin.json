@@ -1,6 +1,6 @@
 {
   "name": "soloflow",
-  "version": "0.8.6",
+  "version": "0.8.7",
   "description": "Hooks-based workflow orchestration for solo product development with Claude Code",
   "author": {
     "name": "Krishna Esteva"

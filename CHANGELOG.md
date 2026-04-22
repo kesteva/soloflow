@@ -4,6 +4,20 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.8.7] - 2026-04-22
+
+### Added
+- **`/soloflow:sprint` gains `--quick`, `--no-code-review`, `--no-verification` flags.** Lets users opt out of review/verification layers per-run without editing config. `--quick` is shorthand for `--no-code-review --no-verification`. Flags override resolved `code_review.enabled` / `sprint_code_review.enabled` config in-memory, and a new Step 0.4 parses them ahead of config resolution. When verification is skipped, done reports record `visual_mobile: skipped_user_preference` / `visual_web: skipped_user_preference`; the sprint-closer already tolerates a missing `sprint-verification.md`.
+- **Task-refiner pre-flight grep for global-grep ACs.** `task-refiner` now runs a pre-flight grep pass before authoring plans, so acceptance criteria that reference repo-wide string matches surface before the plan lands.
+
+### Changed
+- **Compounder cross-checks done reports before triaging open findings.** `agents/compounder.md` pulls the sprint's done reports and reconciles them against the open-findings queue, preventing already-addressed findings from being re-surfaced for triage.
+- **Sprint-closer reconciles stale-open findings from done reports.** On sprint close, findings whose referenced tasks have since landed as done are flipped from open to resolved automatically.
+- **`/soloflow:config` switched to haiku + `Read` tool.** Previously shelled out via `cat`; now uses the `Read` tool on haiku for lower latency and cleaner transcripts.
+
+### Fixed
+- **Checkpoint reset at sprint close.** `sprint-closer` clears `.soloflow/checkpoint.md` on close so the next sprint's resume check doesn't flag the stale checkpoint and prompt an unnecessary resume/fresh decision.
+
 ## [0.8.6] - 2026-04-21
 
 ### Fixed
