@@ -43,19 +43,21 @@ Skip this step entirely if `$ARGUMENTS` contains `--skip-cruft`, `--actions-only
 
 ### 1a. Detect
 
-Run these probes read-only (no prompts yet) and collect results into per-scenario buckets. Use Glob/Grep/Read — do not modify anything.
+Run the deterministic cruft detector — read-only, no mutations:
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/state/cruft-detect.js"
+```
 
-**Scenario 1 — orphan plan.** For each `.soloflow/active/plans/**/TASK-*-plan.md`, check whether a matching `.soloflow/archive/done/**/TASK-{NNN}-done.md` exists. If yes → plan was never cleaned up after completion. Proposed resolution: delete the plan file.
+The script returns JSON with six per-scenario buckets. Each scenario's proposed resolution (applied in Step 1c):
 
-**Scenario 2 — ghost sprint entry.** Skip if `sprint.json` absent. For each TASK in `sprint.json.tasks` with `status` ∈ {`stuck`, `blocked`, `human_needed`}, check whether neither `.soloflow/active/stuck/**/TASK-{NNN}-stuck.md` nor `.soloflow/active/plans/**/TASK-{NNN}-plan.md` exists. If both missing → ghost. Proposed resolution: prompt per item (synthesize a stub stuck report, or run `settle-task.js TASK-{NNN} blocked` with a note).
+- **`orphan_plan`** — plan in `active/plans/` while a matching done report exists in `archive/done/`. Resolution: delete the plan file.
+- **`ghost_sprint_entry`** — sprint.json task in `stuck`/`blocked`/`human_needed` with no plan or stuck file on disk. Resolution: per-item prompt (synthesize a stub stuck report, or `settle-task.js blocked` with a note).
+- **`stale_stuck_file`** — stuck file whose task is not in `sprint.json`. If a done report exists, move stuck file to `.soloflow/archive/stuck/`; otherwise prompt (archive or delete).
+- **`mid_commit_settle`** — done report exists AND task still in `sprint.json.tasks`. Resolution: re-run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <path>` (finalizes the state transition + commits).
+- **`empty_epic`** — epic folder with no `TASK-*-plan.md` files AND no tasks in `sprint.json.tasks` matching the folder slug. Resolution: move `EPIC-<slug>.md` → `.soloflow/archive/done/<slug>/EPIC-<slug>.md` and flip its frontmatter `status` to `complete`.
+- **`malformed_queue`** — queue entries missing required fields (`task`, `type`). Resolution: surface at end of Step 1 for manual edit — do not auto-repair.
 
-**Scenario 3 — stale stuck file.** For each `.soloflow/active/stuck/**/TASK-*-stuck.md`, if TASK is not in `sprint.json` → stale. If a done report exists for that TASK, proposed resolution: move stuck file to `.soloflow/archive/stuck/` (create if needed). Otherwise: prompt (archive or delete).
-
-**Scenario 4 — mid-commit settle crash.** Skip if `sprint.json` absent. For each `.soloflow/archive/done/**/TASK-{NNN}-done.md`, if TASK is still listed in `sprint.json.tasks` → `settle-task.js` crashed between writing the done report and updating sprint.json. Proposed resolution: re-run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <path>` (finalizes the state transition + commits).
-
-**Scenario 5 — empty epic folder.** Glob `.soloflow/active/plans/*/` directories. For each epic dir with zero `TASK-*-plan.md` files AND (if sprint.json exists) no task whose `epic` matches the folder slug → candidate for archival. Proposed resolution: move `EPIC-<slug>.md` → `.soloflow/archive/done/<slug>/EPIC-<slug>.md` and flip its frontmatter `status` field to `complete`.
-
-**Scenario 6 — malformed queue entries.** Read `.soloflow/human-review-queue.md`. Parse each `- task:` body block; collect entries that fail YAML parse or are missing required fields (`task`, `type`). Resolution: surface at end of Step 1 for manual edit.
+If `total` is 0, skip Step 1b and continue to Step 2.
 
 ### 1b. Present + decide
 
@@ -80,20 +82,19 @@ For Scenario 6 (malformed entries), print the offending entries verbatim and ask
 
 ### 1c. Apply + commit
 
-Apply resolutions as they are approved:
+Apply resolutions as they are approved. All commits go through `commit-atomic.js` (explicit paths, skip-if-not-repo, never `-A`):
 
-- **Orphan plan delete (Scenario 1):** `rm <plan-path>`, then `git add <plan-path>` and commit `chore: review-queue — orphan plan: TASK-{NNN}` (one commit per item).
+- **Orphan plan delete (Scenario 1):** `rm <plan-path>`, then
+  `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/commit-atomic.js" --message "chore: review-queue — orphan plan: TASK-{NNN}" --path <plan-path>` (one per item).
 - **Ghost sprint entry (Scenario 2):**
-  - If user picks "synthesize stub": write `.soloflow/active/stuck/TASK-{NNN}-stuck.md` with a short frontmatter + body (status: unknown, source: review-queue cruft sweep), then `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report .soloflow/active/stuck/TASK-{NNN}-stuck.md`.
-  - If user picks "mark blocked": `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/update-task-status.js" TASK-{NNN} blocked --note "cruft sweep — no plan/stuck file found"`. (This leaves the task in sprint.json with status=blocked.)
-- **Stale stuck file (Scenario 3):** `mkdir -p .soloflow/archive/stuck && git mv .soloflow/active/stuck/TASK-{NNN}-stuck.md .soloflow/archive/stuck/` then commit `chore: review-queue — archive stale stuck: TASK-{NNN}`. If user chose delete instead: `rm` + commit.
-- **Mid-commit settle crash (Scenario 4):** `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <done-report-path>` — this self-commits.
-- **Empty epic (Scenario 5):** `mkdir -p .soloflow/archive/done/<slug>`, edit `EPIC-<slug>.md`'s frontmatter `status` → `complete`, `git mv .soloflow/active/plans/<slug>/EPIC-<slug>.md .soloflow/archive/done/<slug>/EPIC-<slug>.md`. If the epic folder is now empty, `rmdir` it. Commit `chore: review-queue — archive epic: <slug>`.
+  - "Synthesize stub": write `.soloflow/active/stuck/TASK-{NNN}-stuck.md` with a short frontmatter + body (status: unknown, source: review-queue cruft sweep), then `settle-task.js TASK-{NNN} stuck --stuck-report .soloflow/active/stuck/TASK-{NNN}-stuck.md`.
+  - "Mark blocked": `update-task-status.js TASK-{NNN} blocked --note "cruft sweep — no plan/stuck file found"`.
+- **Stale stuck file (Scenario 3):** `mkdir -p .soloflow/archive/stuck && git mv .soloflow/active/stuck/TASK-{NNN}-stuck.md .soloflow/archive/stuck/`, then `commit-atomic.js --message "chore: review-queue — archive stale stuck: TASK-{NNN}" --path .soloflow/active/stuck/TASK-{NNN}-stuck.md --path .soloflow/archive/stuck/TASK-{NNN}-stuck.md`. If user chose delete instead: `rm` + `commit-atomic.js ... --path <rm-path>`.
+- **Mid-commit settle crash (Scenario 4):** `settle-task.js TASK-{NNN} done --done-report <done-report-path>` — this self-commits.
+- **Empty epic (Scenario 5):** `mkdir -p .soloflow/archive/done/<slug>`, edit `EPIC-<slug>.md`'s frontmatter `status` → `complete`, `git mv .soloflow/active/plans/<slug>/EPIC-<slug>.md .soloflow/archive/done/<slug>/EPIC-<slug>.md`. `rmdir` the empty epic folder. Then `commit-atomic.js --message "chore: review-queue — archive epic: <slug>" --path <src> --path <dest>`.
 
 Commit rules for the whole step:
 - One commit per resolved item (per-item atomicity survives mid-run abort).
-- Stage only explicit paths — never `git add .` / `-A`.
-- Skip commits silently if the project is not a git repo or `.soloflow/` is gitignored.
 - Increment `cruft_resolved` per applied item.
 
 ---
@@ -104,7 +105,12 @@ Always runs (even with `--skip-cruft`). Skip the split's "action_items" consumpt
 
 ### 2a. Parse
 
-Read `.soloflow/human-review-queue.md`. Extract the frontmatter (`pending_count`, `items`) and parse the body.
+Run:
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" gather --group-by action
+```
+
+The script returns JSON `{ entries, action_required, action_required_visual, sprint_code_review, config_issue, overridden, other, malformed, pending_count, action_required_grouped }`. Use these arrays directly in Step 2b below.
 
 Entry formats present in the queue:
 
@@ -203,16 +209,20 @@ For HUMAN_NEEDED entries (free-form, no structured `blocked_checks`), omit the "
 
 ### 3c. Atomic queue update per decision
 
-After each per-item decision, atomically rewrite `.soloflow/human-review-queue.md`:
-1. Write the updated content (remaining items + remaining fields) to `.soloflow/human-review-queue.md.tmp`.
-2. `mv` onto `.soloflow/human-review-queue.md`.
-3. Recompute `pending_count` = count of remaining entries.
+After each per-item decision, run the corresponding `review-queue.js` subcommand:
+- **Mark resolved / Dismiss / Queue re-verify:** `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" remove --task TASK-NNN --type action_required`.
+- **Not yet — keep deferred:** no-op (leave in queue).
 
-This means mid-phase abort leaves on-disk state consistent.
+Every `review-queue.js` mutation atomically rewrites the file (temp + rename) and recomputes `pending_count`, so mid-phase abort leaves on-disk state consistent.
 
 ### 3d. Commit
 
-At end of Step 3: if any changes were made to the queue file, `git add .soloflow/human-review-queue.md` and commit `chore: review-queue — resolved {actions_completed} actions, dismissed {actions_dismissed}, queued {actions_queued_reverify} for re-verify`. Skip if not a git repo or `.soloflow/` gitignored.
+At end of Step 3, if any changes were made:
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/state/commit-atomic.js" \
+    --message "chore: review-queue — resolved {actions_completed} actions, dismissed {actions_dismissed}, queued {actions_queued_reverify} for re-verify" \
+    --path .soloflow/human-review-queue.md
+```
 
 ---
 
@@ -249,34 +259,30 @@ For each item the user accepted, determine the target findings file:
 - Target path: `.soloflow/active/findings/{sprint_id}-findings.md`.
 - **If the target file does not exist** (the originating sprint has already been compounded and archived), fall back to the currently active sprint's findings file (read `.soloflow/active/sprint.json` for `sprint.id`). If no active sprint exists either, fall back to the most recently started sprint whose findings file is still in `active/findings/` (glob + sort by mtime). Record which fallback fired so the step-3.5d commit message can mention it.
 
-Append an entry to the chosen findings file under the `# Findings Queue` heading:
-
+Append the finding via:
 ```
-## FIND-{sprint_id}-{n}
-- **source:** {task from the queue entry, e.g. SPRINT-003} (sprint-code-reviewer)
-- **type:** improvement
-- **severity:** low | medium | high    # copy from the queue entry
-- **status:** open
-- **location:** {location from the queue entry}
-- **description:** {finding} — {recommendation}
-- **suggested_action:** {recommendation}
-- **resolved_by:**
+node "${CLAUDE_PLUGIN_ROOT}/scripts/state/findings.js" append \
+    --sprint {sprint_id} --fields-json \
+    '{"source":"{task} (sprint-code-reviewer)","type":"improvement","severity":"{queue entry severity}","status":"open","location":"{location}","description":"{finding} — {recommendation}","suggested_action":"{recommendation}","resolved_by":""}'
 ```
 
-`{n}` = next free integer for that sprint in the findings file (glob existing `## FIND-{sprint_id}-*` headings, take max+1).
-
-After each append, bump the findings file's frontmatter `pending_count` (count `status: open` entries) and refresh `last_updated`. Increment in-memory `sprint_review_accepted`.
+The script picks the next FIND ID for the sprint, appends the entry, recomputes `pending_count`, and refreshes `last_updated`. Increment in-memory `sprint_review_accepted`.
 
 ### 3.5c. Atomic queue update per decision
 
-After each per-item decision (Accept / Defer / Dismiss), atomically rewrite `.soloflow/human-review-queue.md` using the temp-file + rename pattern from Step 3c:
-
-- **Accept** or **Dismiss** → remove the entry; decrement `pending_count`.
-- **Defer** → leave the entry untouched.
+After each per-item decision:
+- **Accept** or **Dismiss:** `review-queue.js remove --task SPRINT-NNN --type sprint_code_review`.
+- **Defer:** no-op.
 
 ### 3.5d. Commit
 
-At end of Step 3.5: if any changes were made to the per-sprint findings file(s) or `human-review-queue.md`, stage explicit paths and commit `chore: review-queue — sprint-code-review: accepted {sprint_review_accepted}, dismissed {sprint_review_dismissed}`. Stage each distinct findings file individually. Skip silently if not a git repo or `.soloflow/` gitignored.
+At end of Step 3.5, commit via `commit-atomic.js` with one `--path` per distinct findings file touched plus `--path .soloflow/human-review-queue.md`:
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/state/commit-atomic.js" \
+    --message "chore: review-queue — sprint-code-review: accepted {sprint_review_accepted}, dismissed {sprint_review_dismissed}" \
+    --path .soloflow/human-review-queue.md \
+    --path .soloflow/active/findings/<sprint_id>-findings.md ...
+```
 
 ---
 
@@ -498,7 +504,7 @@ After all re-verifies complete (or are all restored), commit `chore: review-queu
 
 Skip if `pending_refines` is empty.
 
-1. Compute the starting TASK ID using the shared bash recipe from the project `CLAUDE.md` (next_id over `.soloflow/active/plans/**/TASK-*-plan.md` ∪ `.soloflow/active/stuck/**/TASK-*-stuck.md` ∪ `.soloflow/archive/done/**/TASK-*-done.md`).
+1. Compute the starting TASK ID via `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/next-ids.js" --kind task`.
 2. Discover existing epics: glob `.soloflow/active/plans/*/EPIC-*.md` (matches `commands/compound.md` and `commands/planner.md`).
 3. Assemble a single refinement brief containing a section per `pending_refines` entry:
 
