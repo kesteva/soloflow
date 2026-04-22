@@ -120,6 +120,30 @@ for (const f of fs.readdirSync(path.join(src, 'hooks'))) {
 console.log('  [copy] soloflow-install/hooks/ (' +
   fs.readdirSync(path.join(runtimeDir, 'hooks')).filter(f => f.endsWith('.js')).length + ' scripts)');
 
+// --- State/config scripts into the private runtime dir (always overwritten) ---
+// Agents reference these via \${CLAUDE_PLUGIN_ROOT}/scripts/<subdir>/<file>.js,
+// so the layout under soloflow-install/ mirrors the repo.
+function copyScriptsTree(srcSubdir) {
+  const srcDir = path.join(src, 'scripts', srcSubdir);
+  if (!fs.existsSync(srcDir)) return 0;
+  const destDir = path.join(runtimeDir, 'scripts', srcSubdir);
+  fs.mkdirSync(destDir, { recursive: true });
+  let count = 0;
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    if (entry.isFile() && entry.name.endsWith('.js')) {
+      fs.copyFileSync(path.join(srcDir, entry.name), path.join(destDir, entry.name));
+      newOwned.push(path.join('.claude', 'soloflow-install', 'scripts', srcSubdir, entry.name));
+      count++;
+    }
+  }
+  return count;
+}
+let scriptCount = 0;
+for (const sub of ['lib', 'config', 'state', 'sprint', 'compound', 'refiner']) {
+  scriptCount += copyScriptsTree(sub);
+}
+console.log('  [copy] soloflow-install/scripts/ (' + scriptCount + ' scripts)');
+
 // --- Render hooks/hooks.json into settings.json ---
 const template = JSON.parse(fs.readFileSync(path.join(src, 'hooks', 'hooks.json'), 'utf8'));
 const settingsFile = path.join(claudeDir, 'settings.json');
