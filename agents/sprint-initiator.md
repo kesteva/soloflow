@@ -3,6 +3,7 @@ name: sprint-initiator
 description: Gathers sprint context and executes sprint setup (branch, sprint.json, smoke tests) for the executor orchestrator
 model: sonnet
 tools: [Read, Write, Edit, Glob, Grep, Bash]
+mcpServers: [maestro, playwright]
 ---
 
 # Sprint Initiator
@@ -212,16 +213,41 @@ Decisions:
    
    c. **Format results** into structured output (the orchestrator will present the prompt).
 
+6.5a **MCP tool-binding probe (only when visual verification is enabled).** `claude mcp list` reports main-session server registration, not tool-binding availability inside a spawned subagent — a maestro server shown as `✓ Connected` in the orchestrator session can still be unreachable to the verifier. Because this agent now declares `mcpServers: [maestro, playwright]` in its frontmatter, it has the same binding surface the verifier does, so its probe is a reliable predictor.
+
+   a. Resolve the visual toggles:
+      ```
+      node "${CLAUDE_PLUGIN_ROOT}/scripts/config/resolve.js" \
+          --key verification.visual_mobile --key verification.visual_web \
+          --fallback false --fallback false
+      ```
+      First line is `visual_mobile`, second is `visual_web`.
+
+   b. **If `visual_mobile=true`,** call `mcp__maestro__list_flows` with `{}` as a lightweight probe.
+      - Success → `maestro_status="ok"`.
+      - Tool call returns an error → `maestro_status="fail: <first line of error message>"`.
+      - `mcp__maestro__*` is not present in your available tools at all → `maestro_status="fail: mcp__maestro__* bindings not reachable in subagent session"`.
+      If `visual_mobile=false`, skip the probe entirely (do not pass `--mcp-status-maestro` in step 6.5).
+
+   c. **If `visual_web=true`,** call `mcp__playwright__browser_install` as a noop check (idempotent — reports install status without performing an install). Record `playwright_status` analogously. If `visual_web=false`, skip.
+
+   d. You will pass these `*_status` values to step 6.5's probe-infra.js invocation via `--mcp-status-maestro` / `--mcp-status-playwright`. probe-infra.js will use them verbatim and skip its own shell-based `claude mcp list` check, whose result does not reflect subagent binding.
+
 6.5 **Task-level infra availability check.** Always run this, even if `skip_smoke` is true — diagnostic, not a gate. Run:
    ```
    node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/probe-infra.js" \
        --plan .soloflow/active/plans/**/TASK-001-plan.md \
-       --plan .soloflow/active/plans/**/TASK-002-plan.md ...
+       --plan .soloflow/active/plans/**/TASK-002-plan.md ... \
+       [--mcp-status-maestro "ok" | --mcp-status-maestro "fail: <reason>"] \
+       [--mcp-status-playwright "ok" | --mcp-status-playwright "fail: <reason>"]
    ```
+   Include the `--mcp-status-*` flag only for each category step 6.5a actually probed (i.e., the matching visual toggle was `true`). Pass the status strings verbatim — the value `ok` marks the category available; any value beginning with `fail:` is treated as unavailable and the remainder of the string becomes the human-readable reason surfaced to the user.
+
    The script:
    - Unions required infra categories (`maestro` / `playwright` / `docker`) per plan using keyword scans on files_owned + body + test_strategy.targets.
-   - Additionally requires `maestro` when `verification.visual_mobile=true` and `playwright` when `verification.visual_web=true` — independent of plan content, since the verifier's Level 2 decision gate fires for any UI file or UI-visible AC. Config-driven demands produce a `missing` entry whose `reason` is suffixed with `(required by verification.visual_*=true)` so the orchestrator can surface the registration gap instead of letting every task degrade to `skipped_unable`.
-   - Probes each required category via Bash (MCP registration + CLI presence + docker daemon).
+   - Additionally requires `maestro` when `verification.visual_mobile=true` and `playwright` when `verification.visual_web=true` — independent of plan content, since the verifier's Level 2 decision gate fires for any UI file or UI-visible AC. Config-driven demands produce a `missing` entry whose `reason` is suffixed with `(required by verification.visual_*=true)` so the orchestrator can surface the binding gap instead of letting every task degrade to `skipped_unable`.
+   - Uses `--mcp-status-maestro` / `--mcp-status-playwright` when supplied (authoritative — reflects actual subagent bindings). Otherwise falls back to a shell-based `claude mcp list | grep` check plus CLI presence, which only reflects main-session registration.
+   - Probes `docker` via Bash (daemon + binary presence).
    - Runs each plan's `prerequisites[]` checks with a 5-second timeout, classifying `pass` / `fail` / `timeout`.
    - Emits the full `infra_check` payload (see Output schema below) as JSON.
 
