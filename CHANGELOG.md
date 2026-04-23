@@ -4,6 +4,14 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.8.9] - 2026-04-22
+
+### Changed
+- **`agents/code-reviewer.md` and `agents/sprint-code-reviewer.md` perform quality/reuse and security assessment inline** instead of invoking the `/simplify` and `/security-review` Skills. In practice the skill outputs were arriving too late to feed the reviewer's synthesis step, so the reviewer was redoing the same checks before emitting its verdict. Verdict enum and findings surface are unchanged; only the internal process is different.
+
+### Removed
+- **Four config keys** — `code_review.run_simplify`, `code_review.run_security_review`, `sprint_code_review.run_simplify`, `sprint_code_review.run_security_review`. Stripped from `config/defaults.yaml`, `docs/CUSTOMIZATION.md`, `docs/ARCHITECTURE.md`, and the `/soloflow:config` walk (`commands/config.md`). If a project's `.soloflow/config.json` still lists these keys they are silently ignored — `scripts/config/resolve.js` does no schema validation.
+
 ## [0.8.8] - 2026-04-22
 
 ### Added
