@@ -41,61 +41,9 @@ Mapping used in this command:
 
 Skip this step entirely if `$ARGUMENTS` contains `--skip-cruft`, `--actions-only`, or `--visual-only`.
 
-### 1a. Detect
+Read `docs/CRUFT-CLEANUP.md` via the Read tool and follow its procedure to completion. Use `review-queue` as the commit-message `<command>` label. The procedure updates the `cruft_resolved` counter initialized in Step 0.
 
-Run the deterministic cruft detector — read-only, no mutations:
-```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/state/cruft-detect.js"
-```
-
-The script returns JSON with six per-scenario buckets. Each scenario's proposed resolution (applied in Step 1c):
-
-- **`orphan_plan`** — plan in `active/plans/` while a matching done report exists in `archive/done/`. Resolution: delete the plan file.
-- **`ghost_sprint_entry`** — sprint.json task in `stuck`/`blocked`/`human_needed` with no plan or stuck file on disk. Resolution: per-item prompt (synthesize a stub stuck report, or `settle-task.js blocked` with a note).
-- **`stale_stuck_file`** — stuck file whose task is not in `sprint.json`. If a done report exists, move stuck file to `.soloflow/archive/stuck/`; otherwise prompt (archive or delete).
-- **`mid_commit_settle`** — done report exists AND task still in `sprint.json.tasks`. Resolution: re-run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <path>` (finalizes the state transition + commits).
-- **`empty_epic`** — epic folder with no `TASK-*-plan.md` files AND no tasks in `sprint.json.tasks` matching the folder slug. Resolution: move `EPIC-<slug>.md` → `.soloflow/archive/done/<slug>/EPIC-<slug>.md` and flip its frontmatter `status` to `complete`.
-- **`malformed_queue`** — queue entries missing required fields (`task`, `type`). Resolution: surface at end of Step 1 for manual edit — do not auto-repair.
-
-If `total` is 0, skip Step 1b and continue to Step 2.
-
-### 1b. Present + decide
-
-If all six buckets are empty, print `"No cruft detected."` and move on to Step 2.
-
-Otherwise, walk through each non-empty bucket sequentially. For each bucket use **one `AskUserQuestion`** with the full item list **embedded in the question text** (text printed before AskUserQuestion gets cut off by the question UI):
-
-```
-Cruft — {scenario name} ({N} items):
-  1. TASK-NNN — {short description of the cruft}
-  2. TASK-MMM — ...
-Resolve?
-```
-
-Options (all buckets):
-- **Resolve all** — apply the proposed action to every item.
-- **Resolve some** — follow-up free-form `AskUserQuestion` for a comma-separated item list (e.g., `1, 3`); unlisted items left alone.
-- **Skip bucket** — leave everything as-is.
-- **Review each** — loop with one `AskUserQuestion` per item (options: **Resolve** / **Skip**).
-
-For Scenario 6 (malformed entries), print the offending entries verbatim and ask **Edit manually now** / **Skip and continue** — do not try to auto-repair.
-
-### 1c. Apply + commit
-
-Apply resolutions as they are approved. All commits go through `commit-atomic.js` (explicit paths, skip-if-not-repo, never `-A`):
-
-- **Orphan plan delete (Scenario 1):** `rm <plan-path>`, then
-  `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/commit-atomic.js" --message "chore: review-queue — orphan plan: TASK-{NNN}" --path <plan-path>` (one per item).
-- **Ghost sprint entry (Scenario 2):**
-  - "Synthesize stub": write `.soloflow/active/stuck/TASK-{NNN}-stuck.md` with a short frontmatter + body (status: unknown, source: review-queue cruft sweep), then `settle-task.js TASK-{NNN} stuck --stuck-report .soloflow/active/stuck/TASK-{NNN}-stuck.md`.
-  - "Mark blocked": `update-task-status.js TASK-{NNN} blocked --note "cruft sweep — no plan/stuck file found"`.
-- **Stale stuck file (Scenario 3):** `mkdir -p .soloflow/archive/stuck && git mv .soloflow/active/stuck/TASK-{NNN}-stuck.md .soloflow/archive/stuck/`, then `commit-atomic.js --message "chore: review-queue — archive stale stuck: TASK-{NNN}" --path .soloflow/active/stuck/TASK-{NNN}-stuck.md --path .soloflow/archive/stuck/TASK-{NNN}-stuck.md`. If user chose delete instead: `rm` + `commit-atomic.js ... --path <rm-path>`.
-- **Mid-commit settle crash (Scenario 4):** `settle-task.js TASK-{NNN} done --done-report <done-report-path>` — this self-commits.
-- **Empty epic (Scenario 5):** `mkdir -p .soloflow/archive/done/<slug>`, edit `EPIC-<slug>.md`'s frontmatter `status` → `complete`, `git mv .soloflow/active/plans/<slug>/EPIC-<slug>.md .soloflow/archive/done/<slug>/EPIC-<slug>.md`. `rmdir` the empty epic folder. Then `commit-atomic.js --message "chore: review-queue — archive epic: <slug>" --path <src> --path <dest>`.
-
-Commit rules for the whole step:
-- One commit per resolved item (per-item atomicity survives mid-run abort).
-- Increment `cruft_resolved` per applied item.
+For the same cruft sweep without the rest of this command's triage, see `/soloflow:housekeeping`.
 
 ---
 
