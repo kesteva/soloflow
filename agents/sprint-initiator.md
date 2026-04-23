@@ -141,7 +141,7 @@ Decisions:
 
 3. **Write sprint state.**
    - Read `.soloflow/active/backlog.json`.
-   - Move the selected tasks from `backlog.json` into a new `sprint.json`:
+   - Move the selected tasks from `backlog.json` to a new `sprint.json`. Concretely: **delete each `selected_task_ids` entry from `backlog.json.tasks` and add it to `sprint.json.tasks` with `status: "pending"`**. A task must never be present in both files.
      ```json
      {
        "sprint": {
@@ -152,7 +152,7 @@ Decisions:
        "tasks": { /* selected tasks keyed by ID, each with status: "pending" */ }
      }
      ```
-   - Write both files.
+   - Write `backlog.json` (with the entries removed) and `sprint.json` (with the entries added). Both writes are required — Step 5's commit stages both paths.
 
 3.5. **Create per-sprint findings file.**
    - Ensure `.soloflow/active/findings/` exists (`mkdir -p`).

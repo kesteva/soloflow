@@ -27,6 +27,8 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 
 **Why two JSON files (backlog, sprint):** enables parallel worktree execution without merge conflicts. Completed tasks are removed from `sprint.json` and their reports move to `archive/done/`.
 
+**`backlog.json` invariant:** only contains tasks with `status: ready` or `status: deferred`. Completed tasks are removed by `settle-task.js` on the `done` verdict; any stale entry that slips past (crash between writes, hand-edit) is caught by `cruft-detect.js` Scenario 7 (`completed_in_backlog`).
+
 ## ID allocation
 
 `IDEA-NNN`, `TASK-NNN`, `SPRINT-NNN`, and `ROADMAP-NNN` are derived from the filesystem — there is no `counters.json`. To allocate the next ID, glob every location an ID of that kind could live, extract the numeric suffix, take `max + 1`, zero-pad to 3 digits.
