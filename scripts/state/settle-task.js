@@ -19,6 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const paths = require('../lib/paths');
 
 const VALID_VERDICTS = new Set(['done', 'stuck', 'blocked', 'human_needed']);
 
@@ -86,9 +87,27 @@ function main() {
   if (!state.tasks[taskId]) die(`${taskId} not found in active sprint`);
 
   const now = new Date().toISOString();
+  let backlogTouched = false;
+  const backlogPath = paths.backlogJsonPath(cwd);
   if (verdict === 'done') {
     if (!fs.existsSync(doneReport)) die(`done report not found at ${doneReport} (write it before calling settle-task)`);
     delete state.tasks[taskId];
+
+    // Invariant: backlog.json only contains incomplete tasks. Scrub the task if present.
+    // Parse errors / missing file are non-fatal — the sprint.json write is the primary contract.
+    if (fs.existsSync(backlogPath)) {
+      let backlog;
+      try {
+        backlog = JSON.parse(fs.readFileSync(backlogPath, 'utf8'));
+      } catch (e) {
+        process.stderr.write(`settle-task: warning — ${backlogPath} is not valid JSON; skipping backlog scrub (${e.message})\n`);
+      }
+      if (backlog && backlog.tasks && backlog.tasks[taskId]) {
+        delete backlog.tasks[taskId];
+        writeAtomic(backlogPath, JSON.stringify(backlog, null, 2) + '\n');
+        backlogTouched = true;
+      }
+    }
   } else {
     if (verdict === 'stuck' && !fs.existsSync(stuckReport)) die(`stuck report not found at ${stuckReport}`);
     const task = state.tasks[taskId];
@@ -112,6 +131,7 @@ function main() {
   const toStage = [sprintPath];
   if (verdict === 'done' && doneReport) toStage.push(doneReport);
   if (verdict === 'stuck' && stuckReport) toStage.push(stuckReport);
+  if (backlogTouched) toStage.push(backlogPath);
   for (const p of touched) {
     if (fs.existsSync(p)) toStage.push(p);
   }

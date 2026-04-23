@@ -12,17 +12,17 @@ function mktmp(prefix = 'soloflow-test-') {
 function run(scriptRelative, args, opts = {}) {
   const root = path.resolve(__dirname, '..', '..');
   const abs = path.join(root, 'scripts', scriptRelative);
-  try {
-    const out = execFileSync('node', [abs, ...args], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-      cwd: opts.cwd || process.cwd(),
-      env: { ...process.env, ...(opts.env || {}) },
-    });
-    return { ok: true, out: out.trim(), code: 0 };
-  } catch (e) {
-    return { ok: false, out: (e.stdout || '').toString().trim(), err: (e.stderr || '').toString().trim(), code: e.status };
-  }
+  const { spawnSync } = require('child_process');
+  const result = spawnSync('node', [abs, ...args], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: opts.cwd || process.cwd(),
+    env: { ...process.env, ...(opts.env || {}) },
+  });
+  const out = (result.stdout || '').toString().trim();
+  const err = (result.stderr || '').toString().trim();
+  const code = result.status == null ? -1 : result.status;
+  return { ok: code === 0, out, err, code };
 }
 
 function scaffold(root, { withSprint = false, sprintTasks = {} } = {}) {
