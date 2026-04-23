@@ -47,19 +47,19 @@ All settings below live in `config/defaults.yaml` and are runtime-overridable. `
 
 | Setting | Default | Consumer |
 |---|---|---|
-| `models.verifier` | `opus` | `agents/verifier.md` |
+| `models.verifier` | `opus` | `agents/shadow-verifier.md` |
 | `models.executor` | `sonnet` | `agents/executor.md` |
 | `models.idea_extractor` | `sonnet` | `agents/idea-extractor.md` |
 | `models.task_refiner` | `opus` | `agents/task-refiner.md` |
 | `models.compounder` | `sonnet` | `agents/compounder.md` |
-| `models.researcher` | `sonnet` | `agents/researcher.md` |
+| `models.researcher` | `sonnet` | `agents/shadow-researcher.md` |
 | `models.code_reviewer` | `opus` | `agents/code-reviewer.md` |
 | `models.sprint_code_reviewer` | `opus` | `agents/sprint-code-reviewer.md` |
-| `models.roadmap_researcher` | `sonnet` | `agents/roadmap-researcher.md` |
+| `models.roadmap_researcher` | `sonnet` | `agents/shadow-roadmap-researcher.md` |
 | `models.roadmap_generator` | `opus` | `agents/roadmap-generator.md` |
 | `models.sprint_initiator` | `sonnet` | `agents/sprint-initiator.md` |
 | `models.sprint_closer` | `sonnet` | `agents/sprint-closer.md` |
-| `models.sprint_verifier` | `opus` | `agents/sprint-verifier.md` |
+| `models.sprint_verifier` | `opus` | `agents/shadow-sprint-verifier.md` |
 | `models.test_writer` | `sonnet` | `agents/test-writer.md` |
 | `models.integration_tester` | `sonnet` | `agents/integration-tester.md` |
 | `models.codebase_pruner` | `opus` | `agents/codebase-pruner.md` |
