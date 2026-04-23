@@ -54,7 +54,17 @@ const STAMP_LINE_RE = /^\s*#\s*soloflow-shadow\s*:/;
 const STAMP_VERSION_RE = /^\s*#\s*soloflow-shadow\s*:\s*version=(\S+)(?:\s+synced=(\S+))?/m;
 
 function pluginRoot() {
-  return process.env.CLAUDE_PLUGIN_ROOT || null;
+  if (process.env.CLAUDE_PLUGIN_ROOT) return process.env.CLAUDE_PLUGIN_ROOT;
+  // Fallback: derive from this script's location. Lives at
+  // {root}/scripts/init/shadow-agents.js, so walk up looking for the
+  // plugin manifest. Claude Code interpolates ${CLAUDE_PLUGIN_ROOT} into
+  // slash-command text but does not export it to Bash subprocesses.
+  let dir = path.resolve(__dirname, '..', '..');
+  for (let i = 0; i < 3; i++) {
+    if (fs.existsSync(path.join(dir, '.claude-plugin', 'plugin.json'))) return dir;
+    dir = path.dirname(dir);
+  }
+  return null;
 }
 
 function pluginVersion() {
