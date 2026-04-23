@@ -4,6 +4,8 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-04-23
+
 ### Changed
 - **MCP-dependent agents renamed with `shadow-` prefix.** The four agents that require MCP tool bindings (`verifier`, `sprint-verifier`, `researcher`, `roadmap-researcher`) are now `shadow-verifier`, `shadow-sprint-verifier`, `shadow-researcher`, `shadow-roadmap-researcher`. The plugin ships them under their `shadow-*` names and orchestrators spawn them by those names exclusively — no reliance on Claude Code's project/plugin precedence rule, which did not hold reliably when names collided (spawns would resolve to the plugin version even when a properly-installed shadow existed, stripping the `mcpServers:` bindings that only project-local agents honor). `scripts/init/shadow-agents.js`, `scripts/sprint/probe-infra.js`, every spawn site in `commands/` and `agents/`, `commands/sync-agents.md`, `commands/init.md`, and the model-table row in `docs/CUSTOMIZATION.md` all point at the new filenames. `models.verifier` / `models.researcher` / `models.roadmap_researcher` / `models.sprint_verifier` config keys are unchanged — only the agent file paths they map to moved, so existing `.soloflow/config.json` overrides continue to apply. **Users upgrading:** run `/soloflow:init` (or `/soloflow:sync-agents`) to install the new `shadow-*.md` shadows; the previous `verifier.md` / `sprint-verifier.md` / `researcher.md` / `roadmap-researcher.md` shadows in `.claude/agents/` can be deleted by hand (they're inert after the rename).
 
