@@ -116,19 +116,3 @@ Check that the MCP server command works directly:
 maestro mcp          # Should start without errors
 npx @playwright/mcp@latest  # Should start without errors
 ```
-
-### Every task emits `skipped_unable` despite Maestro showing `✓ Connected`
-
-If `claude mcp list` shows `maestro: ✓ Connected` (main session has the server) but every verifier in your sprint marks `visual_mobile: skipped_unable`, the cause is almost certainly that the verifier subagent is running from the plugin scope, where Claude Code does NOT honor the `mcpServers:` frontmatter key. Plugin-scoped subagents silently lose their MCP tool bindings, even when the frontmatter declares them.
-
-**Fix:** re-run `/soloflow:init` (any version ≥ 0.8.11). Step 4.7 shadow-installs the MCP-dependent agents (`verifier`, `sprint-verifier`, `researcher`, `roadmap-researcher`) from the plugin into your project's `.claude/agents/`. Project-local agents DO honor `mcpServers:`, so the shadow copies receive the bindings the plugin versions could not.
-
-After the shadow-install, **restart Claude Code** (or run `/agents` to reload) — the subagent list is loaded at session start, so freshly-copied agents are not picked up until reload.
-
-Verify the shadow copies are in place:
-```bash
-ls .claude/agents/
-# Expected: verifier.md, sprint-verifier.md, researcher.md, roadmap-researcher.md
-```
-
-This is the canonical mechanism documented by Claude Code: project-local subagents take precedence over plugin-scoped ones, and only the former can declare `mcpServers:` (or `hooks`, or `permissionMode`).

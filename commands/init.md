@@ -358,30 +358,6 @@ Deliberately excluded (stay prompted each time): `rm`, `mv`, `cp`, `chmod`, `cho
    - If N > 0: print `✓ Allow list updated — added N safe commands` and set `allow_list_status = "added N safe commands"`.
    - If N == 0: print `✓ Allow list already up to date — all 25 safe commands present` and set `allow_list_status = "already up to date"`.
 
-## Step 4.7: Shadow-install MCP-dependent agents
-
-**Why this step exists.** Claude Code's plugin system does NOT honor the `mcpServers:` frontmatter key on plugin-scoped subagents. A plugin-scoped `soloflow:verifier` spawned via the Agent tool silently loses its Maestro/Playwright tool bindings, and every Level 2 visual check degrades to `skipped_unable` — even when the MCP server is `✓ Connected` in the main session. The fix is to copy the affected agent definitions from the plugin into the project's `.claude/agents/`; project-local agents DO honor `mcpServers:` and receive the bindings the frontmatter declares. This step re-syncs the shadow copies on every `/soloflow:init`, so plugin updates propagate.
-
-The script-install path (`scripts/install.sh`) already copies all agents into `.claude/agents/`, so it doesn't need this step. This step covers plugin-install users specifically.
-
-1. **Resolve the plugin root.** Run `echo "$CLAUDE_PLUGIN_ROOT"` via Bash.
-   - If empty (script-install context, or the variable isn't set for some reason), skip this step with a warning: `⚠ CLAUDE_PLUGIN_ROOT not set — skipping MCP agent shadow-install. Visual verification and research agents may lose MCP bindings. Re-run /soloflow:init after the plugin fully loads, or use scripts/install.sh which copies agents automatically.` Record `shadow_agents_status = "skipped_no_root"` for the Step 7 summary.
-
-2. **Ensure target dir.** Run `mkdir -p .claude/agents` via Bash.
-
-3. **Copy each MCP-dependent agent.** For every entry below, run `cp "$CLAUDE_PLUGIN_ROOT/agents/{name}.md" .claude/agents/{name}.md` via Bash. Overwrite unconditionally — this is the re-sync path on plugin updates. Track a counter `shadow_agents_synced`.
-
-   | Agent | Declared `mcpServers` | Used by |
-   |---|---|---|
-   | `verifier.md` | `[maestro, playwright]` | Per-task Level 2 visual verification |
-   | `sprint-verifier.md` | `[maestro, playwright]` | End-of-sprint visual check |
-   | `researcher.md` | `[context7]` | Idea research (falls back to WebFetch if context7 missing) |
-   | `roadmap-researcher.md` | `[context7]` | Roadmap generation (same fallback) |
-
-4. **Report.** Set `shadow_agents_status = "synced N agents"`. Print: `✓ Shadow-installed N MCP-dependent agents to .claude/agents/ (re-synced on every /soloflow:init).` If `N > 0` AND this is the first time a shadow has been written in this session, also print: `ℹ Restart Claude Code (or run /agents to reload) before running /soloflow:sprint — Claude Code loads subagents at session start, so freshly-written shadow agents aren't picked up until reload.`
-
-**For SoloFlow developers:** edit `agents/*.md` in the plugin source as the canonical copy. Shadow copies at `.claude/agents/` in consumer projects are regenerated on each init. If a user has customized their `.claude/agents/verifier.md`, this step overwrites their changes — v1 does not detect user edits. Suggest forking the plugin rather than editing shadow copies.
-
 ## Step 5: Commit to git (if applicable)
 
 Run `git rev-parse --is-inside-work-tree` via Bash. If the project is inside
@@ -422,7 +398,6 @@ Config: .soloflow/config.json {created|updated}
 
 Status line: {configured|already configured|skipped (user kept existing)|not configured}
 Allow list:  {added N safe commands|already up to date|skipped}
-MCP agents:  {synced N agents|skipped_no_root}  # shadow-installed to .claude/agents/ so mcpServers frontmatter binds correctly
 
 {if any orphaned files:}
 Orphaned files (safe to remove manually):

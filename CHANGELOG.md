@@ -4,9 +4,6 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
-### Fixed
-- **Plugin-scoped subagents don't actually honor `mcpServers:` frontmatter.** 0.8.6's fix for `skipped_unable` was incorrect — the declaration was silently ignored because Claude Code's plugin system restricts `mcpServers` (and `hooks`, `permissionMode`) to project-local or user-global agents only. Every `verifier` / `sprint-verifier` spawn after 0.8.6 still lost its Maestro/Playwright tool bindings, and every visual check degraded to `skipped_unable` despite the frontmatter claim. `/soloflow:init` now has a **Step 4.7** that shadow-installs the four MCP-dependent agents (`verifier.md`, `sprint-verifier.md`, `researcher.md`, `roadmap-researcher.md`) from `$CLAUDE_PLUGIN_ROOT/agents/` into `.claude/agents/`. Project-local agents honor `mcpServers:`, and Claude Code's documented scope-precedence order (project-local wins over plugin) means the shadow copies replace the plugin versions whenever the orchestrator spawns `verifier` etc. The step is idempotent — re-syncs on every init so plugin updates propagate. Users upgrading from 0.8.6–0.8.10 should re-run `/soloflow:init` and then restart Claude Code to pick up the shadow agents.
-
 ## [0.8.10] - 2026-04-23
 
 ### Fixed
