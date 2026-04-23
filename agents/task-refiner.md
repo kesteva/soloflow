@@ -115,6 +115,18 @@ You may also receive a list of **existing epic slugs** (with the contents of the
 
    This rule exists because global-grep ACs recurrently diverge from `files_owned` (SPRINT-008 through SPRINT-012). Passive "don't do X" rules did not eliminate the deviation class; running the grep pre-flight and letting its output drive the file lists does. Trigger conservatively — only when the verification literally names a recursive grep or one of the phrases above, not any AC that incidentally mentions grep.
 
+5h. **Validate `files_owned` paths exist.** Before emitting each plan, run:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/refiner/files-owned-exist.js" --plan <plan-path>
+   ```
+   The script returns a `missing` array — each entry is a `files_owned` path that doesn't exist on disk, plus up to 5 basename-matched suggestions. For each entry:
+
+   - **Typo / wrong path.** If a suggestion looks right (often a subtle route-group or casing difference — e.g. `app/recipe/[id].tsx` vs `app/(tabs)/recipes/[id].tsx`), replace the `files_owned` entry with the suggested path. Also scan your Implementation Steps and Acceptance Criteria for references to the wrong path and correct those too.
+   - **Legitimate new file.** If this task actually creates the file, the plan body MUST explicitly say so. Add or confirm language like "create this file" / "new file:" / "add new …" in the relevant Implementation Step, naming the exact path. The absence of explicit new-file language is how typos slip through as silent scope deviations at execution time.
+   - **Genuinely missing with no good suggestion.** Stop and reconsider: is the path a placeholder you forgot to resolve during codebase search? Fix before emitting the plan.
+
+   This check exists because prior sprints have repeatedly shipped plans with mis-typed paths that the executor silently corrected, masking a plan-quality issue. The script output is advisory — it will not block — but treat every `missing` entry as a required correction before emitting the plan.
+
 6. **Answer three critical questions per plan:**
    - Hardest decision and why this approach was chosen
    - Rejected alternatives and what would change your mind
