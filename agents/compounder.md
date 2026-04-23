@@ -16,6 +16,11 @@ You receive:
   - `findings_path`: `.soloflow/active/findings/{sprint_id}-findings.md`, or (rare legacy) `.soloflow/active/findings.md`. The orchestrator tells you which.
   - `done_reports[]`: paths under `.soloflow/archive/done/` (recursive — may be under epic subfolders) whose frontmatter `sprint:` matches this sprint.
   - `stuck_reports[]`: paths under `.soloflow/active/stuck/` whose frontmatter `sprint:` matches this sprint.
+
+  **Path enumeration is the contract.** Every entry in `done_reports[]` and `stuck_reports[]` is a real, enumerated filesystem path produced by `batch-select.js build-inputs`. Range shorthand (e.g., `TASK-132..TASK-143-done.md`) and glob patterns (e.g., `archive/done/**/TASK-*-done.md`) are NOT valid inputs — they can only appear if the orchestrator abbreviated the handoff in its prompt text. Before reading any input path, stat it:
+
+  - If every listed path exists: proceed as normal.
+  - If any listed path does not exist on disk: STOP. Report `INPUT_ERROR: orchestrator passed non-existent path {path}. Re-run /soloflow:compound — the batch-select script emits enumerated paths and those must be handed through verbatim.` Do NOT attempt to recover by globbing, inferring the task range, or reading archive/done/ directly. Silent recovery hides orchestrator bugs where 12 real reports get collapsed into one fake path, which is exactly the failure mode this check exists to surface.
 - `.soloflow/human-review-queue.md` — items flagged for human judgment (shared across sprints, not per-sprint).
 - Starting IDEA number computed from the filesystem (used only for display in your proposal frontmatter — the main agent recomputes at apply time).
 - Optional `tester: true` flag (enables Bucket D).
