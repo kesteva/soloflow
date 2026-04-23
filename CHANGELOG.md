@@ -4,9 +4,6 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
-### Fixed
-- **Sprint-initiator now probes Maestro/Playwright MCP tool bindings from its own subagent session** instead of relying on `claude mcp list`. The previous shell-based probe only reflected main-session server registration — a server shown as `✓ Connected` to the orchestrator could still be unreachable to the verifier, causing every task to silently degrade to `skipped_unable`. `agents/sprint-initiator.md` now declares `mcpServers: [maestro, playwright]` and performs real `list_flows` / `browser_install` probes in a new step 6.5a when the corresponding `verification.visual_*` toggle is enabled, passing the result to `scripts/sprint/probe-infra.js` via new `--mcp-status-maestro` / `--mcp-status-playwright` override flags. The probe now matches what the verifier actually sees, so binding gaps surface at preflight.
-
 ## [0.8.10] - 2026-04-23
 
 ### Fixed

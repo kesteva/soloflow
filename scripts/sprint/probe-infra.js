@@ -8,16 +8,7 @@
 // and probes per-task `prerequisites[]` blocks from plan frontmatter.
 //
 // Usage:
-//   node probe-infra.js --plan path/to/TASK-001-plan.md --plan path/to/TASK-002-plan.md \
-//       [--mcp-status-maestro ok|"fail: <reason>"] \
-//       [--mcp-status-playwright ok|"fail: <reason>"]
-//
-// The --mcp-status-* flags let the caller (typically sprint-initiator, which
-// declares mcpServers in its frontmatter) supply the result of an actual
-// MCP tool-binding probe — the authoritative signal for whether the verifier
-// subagent will be able to use the server. When supplied, it overrides the
-// shell-based `claude mcp list` check (which only reflects main-session
-// registration, not subagent binding availability).
+//   node probe-infra.js --plan path/to/TASK-001-plan.md --plan path/to/TASK-002-plan.md
 //
 // Output (JSON):
 //   {
@@ -75,18 +66,8 @@ function tryShell(cmd) {
   }
 }
 
-function parseMcpStatusFlag(raw) {
-  if (raw === undefined) return null;
-  const val = String(raw).trim();
-  if (val.toLowerCase() === 'ok') return { ok: true };
-  const m = val.match(/^fail\s*:\s*(.*)$/i);
-  const reason = (m && m[1].trim()) || val || 'MCP tool binding unavailable in subagent session';
-  return { ok: false, reason };
-}
-
-function probeCategory(cat, overrides = {}) {
+function probeCategory(cat) {
   if (cat === 'maestro') {
-    if (overrides.maestro) return overrides.maestro;
     const mcp = tryShell('claude mcp list 2>/dev/null | grep -qi maestro');
     if (!mcp.ok) return { ok: false, reason: mcp.code === 127 ? 'claude mcp list unavailable' : 'MCP server not registered' };
     const cli = tryShell('which maestro >/dev/null');
@@ -94,7 +75,6 @@ function probeCategory(cat, overrides = {}) {
     return { ok: true };
   }
   if (cat === 'playwright') {
-    if (overrides.playwright) return overrides.playwright;
     const mcp = tryShell('claude mcp list 2>/dev/null | grep -qi playwright');
     if (!mcp.ok) return { ok: false, reason: mcp.code === 127 ? 'claude mcp list unavailable' : 'MCP server not registered' };
     const cli = tryShell('which npx >/dev/null');
@@ -156,15 +136,10 @@ function main() {
     configDriven.add('playwright');
   }
 
-  const overrides = {
-    maestro: parseMcpStatusFlag(opts['mcp-status-maestro']),
-    playwright: parseMcpStatusFlag(opts['mcp-status-playwright']),
-  };
-
   const available = [];
   const missing = [];
   for (const cat of required) {
-    const r = probeCategory(cat, overrides);
+    const r = probeCategory(cat);
     if (r.ok) { available.push(cat); continue; }
     const impacts = perPlan
       .filter((p) => p.categories.includes(cat))
