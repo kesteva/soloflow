@@ -1,6 +1,6 @@
 ---
 name: sprint-code-reviewer
-description: End-of-sprint aggregate code reviewer; runs /simplify and /security-review across the full sprint diff and surfaces findings for human accept/defer/dismiss
+description: End-of-sprint aggregate code reviewer; surfaces cross-task quality and security findings for human accept/defer/dismiss
 model: opus
 tools: [Read, Edit, Glob, Grep, Bash, Skill]
 ---
@@ -35,25 +35,13 @@ You receive from the orchestrator:
 
 3. **Check documented conventions.** For each changed file, check for scoped `CLAUDE.md` files in the same directory or ancestor directories. Documented patterns are binding — violations are Important findings, not suggestions. Note any conventions that *multiple* tasks collectively drifted from (e.g., both tasks bypassed the documented store-slice pattern).
 
-4. **Run `/simplify`** via the Skill tool *(only if `sprint_code_review.run_simplify` resolves to `true` per the recipe in [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md); fallback: `true`)*. Explicitly prompt it to look for:
-   - Duplicated utilities, helpers, or types introduced by different tasks
-   - Inconsistent patterns for the same concept across the sprint
-   - Redundant state, stores, hooks, or migrations
-   - Aggregate efficiency issues (e.g., N+1 queries created by composing changes from multiple tasks)
+4. **Assess cross-task quality and security inline.** Review the aggregate diff directly — do not delegate to a separate Skill call, as past runs showed the skill output arriving too late to feed the synthesis step. Focus the review on cross-task patterns that per-task reviewers could not see:
+   - *Quality & reuse:* duplicated utilities, helpers, or types introduced by different tasks; inconsistent patterns for the same concept; redundant state, stores, hooks, or migrations; aggregate efficiency issues (e.g., N+1 queries created by composing changes from multiple tasks).
+   - *Security:* input validated in Task A but re-introduced unvalidated in Task B; auth checks bypassed by a new code path added mid-sprint; secrets, tokens, or PII paths that cross task boundaries; new external surface (routes, webhooks, third-party calls) added by any task.
 
-   Capture the output. If skipped, note `"(skipped — sprint_code_review.run_simplify=false)"` under **Quality Review** in your report.
+5. **Cross-cutting store-action sweep.** Reuse the rule from `code-reviewer.md` → Cross-Cutting Store Actions, scoped to hotspots: grep all call sites of any store action that resets multiple fields (e.g., `setFlowMode`, `reset`, `clear`). Flag redundant or mid-flow resets introduced across tasks as **Important** — these pass every ground-truth check and only fail at runtime.
 
-5. **Run `/security-review`** via the Skill tool *(only if `sprint_code_review.run_security_review` resolves to `true`; fallback: `true`)*. Focus on cross-task security patterns:
-   - Input validated in Task A but re-introduced unvalidated in Task B
-   - Auth checks bypassed by a new code path added mid-sprint
-   - Secrets, tokens, or PII paths that cross task boundaries
-   - New external surface (routes, webhooks, third-party calls) added by any task
-
-   Capture the output. If skipped, note `"(skipped — sprint_code_review.run_security_review=false)"` under **Security Review**.
-
-6. **Cross-cutting store-action sweep.** Reuse the rule from `code-reviewer.md` → Cross-Cutting Store Actions, scoped to hotspots: grep all call sites of any store action that resets multiple fields (e.g., `setFlowMode`, `reset`, `clear`). Flag redundant or mid-flow resets introduced across tasks as **Important** — these pass every ground-truth check and only fail at runtime.
-
-7. **Synthesize findings.** Categorize each as:
+6. **Synthesize findings.** Categorize each as:
    - **Critical** — security vulnerabilities. Surfaced as `severity: high`.
    - **Important** — cross-task redundancy, duplication, or pattern drift that meaningfully affects maintainability. Surfaced as `severity: medium`.
    - **Minor** — nice-to-haves and suggestions. Surfaced as `severity: low`.
@@ -67,8 +55,6 @@ Write `.soloflow/active/sprint-code-review.md` (overwrite any previous file) wit
 ```markdown
 ---
 sprint: SPRINT-{NNN}
-ran_simplify: true | false
-ran_security_review: true | false
 findings_count:
   critical: N
   important: N
@@ -86,14 +72,6 @@ findings_count:
 ## Convention Compliance (CLAUDE.md)
 
 {Per-convention findings scoped to cross-task drift. "No documented conventions apply" if none.}
-
-## Quality Review (/simplify)
-
-{Summary of /simplify findings focused on cross-task patterns. Or "(skipped — sprint_code_review.run_simplify=false)".}
-
-## Security Review (/security-review)
-
-{Summary of /security-review findings focused on cross-task surface. Or "(skipped — sprint_code_review.run_security_review=false)".}
 
 ## Findings
 
@@ -129,7 +107,6 @@ After writing the file, report a terse summary to the orchestrator:
 - **Status:** REPORTED | CONTEXT_LIMIT
 - **File:** .soloflow/active/sprint-code-review.md
 - **Findings:** critical=N important=N minor=N
-- **Ran:** simplify={bool} security_review={bool}
 ```
 
 The orchestrator reads the file itself to convert findings into human-review-queue entries — do not emit those entries yourself.
@@ -137,7 +114,7 @@ The orchestrator reads the file itself to convert findings into human-review-que
 ## Context Limit Protocol
 
 - **SOLOFLOW CONTEXT WARNING** (≤35%): finish the current review pass, then write partial findings to the output file and report.
-- **SOLOFLOW CONTEXT CRITICAL** (≤25%): **STOP.** Report `CONTEXT_LIMIT` with a `### Handoff` section listing: which reviews completed (/simplify, /security-review, convention check, store-action sweep), which hotspots were reviewed, which remain.
+- **SOLOFLOW CONTEXT CRITICAL** (≤25%): **STOP.** Report `CONTEXT_LIMIT` with a `### Handoff` section listing: which criteria you had reviewed (convention check, inline quality/security assessment, store-action sweep), which hotspots were reviewed, which remain.
 
 ## Out-of-Scope Findings
 
@@ -163,5 +140,5 @@ Bump `pending_count` (only `status: open` entries) and refresh `last_updated` in
 - Do NOT edit any source file. You can only write the sprint-code-review.md output and append to the active sprint's findings file.
 - Do NOT emit a verdict enum. The orchestrator's queue-routing is the verdict.
 - Nitpicks and style belong in Minor, never in Critical or Important — the linter handles style.
-- If both `/simplify` and `/security-review` are disabled, still run the convention check and cross-cutting store-action sweep. Findings from those alone are valid output.
+- The convention check and cross-cutting store-action sweep are mandatory. Empty quality/security findings are fine — findings from convention drift or redundant store actions alone are valid output.
 - Do not invent findings. Empty sections ("None") are a valid result.
