@@ -22,6 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const yaml = require('../lib/yaml');
+const config = require('../lib/config');
 const { parse, die } = require('../lib/args');
 
 const MOBILE_RE = /\b(ios|android|mobile|maestro|simulator|react-native)\b/i;
@@ -120,7 +121,20 @@ function main() {
   const perPlan = plans.map((p) => ({ plan: p, task_id: taskIdOf(p), ...categoriesForPlan(p) }));
 
   const required = new Set();
+  const configDriven = new Set();
   for (const p of perPlan) for (const c of p.categories) required.add(c);
+
+  // Config toggles demand the MCP regardless of plan content — the verifier's
+  // Level 2 decision gate fires for any UI file or UI-visible AC, not just
+  // integration tests.
+  if (config.resolve('verification.visual_mobile', false) === true) {
+    required.add('maestro');
+    configDriven.add('maestro');
+  }
+  if (config.resolve('verification.visual_web', false) === true) {
+    required.add('playwright');
+    configDriven.add('playwright');
+  }
 
   const available = [];
   const missing = [];
@@ -130,7 +144,10 @@ function main() {
     const impacts = perPlan
       .filter((p) => p.categories.includes(cat))
       .map((p) => ({ task_id: p.task_id, test_targets: p.test_targets }));
-    missing.push({ category: cat, reason: r.reason, impacts });
+    const reason = configDriven.has(cat)
+      ? `${r.reason} (required by verification.visual_${cat === 'maestro' ? 'mobile' : 'web'}=true)`
+      : r.reason;
+    missing.push({ category: cat, reason, impacts });
   }
 
   const task_prerequisites = probePrereqs(plans);

@@ -216,6 +216,7 @@ Decisions:
    ```
    The script:
    - Unions required infra categories (`maestro` / `playwright` / `docker`) per plan using keyword scans on files_owned + body + test_strategy.targets.
+   - Additionally requires `maestro` when `verification.visual_mobile=true` and `playwright` when `verification.visual_web=true` — independent of plan content, since the verifier's Level 2 decision gate fires for any UI file or UI-visible AC. Config-driven demands produce a `missing` entry whose `reason` is suffixed with `(required by verification.visual_*=true)` so the orchestrator can surface the registration gap instead of letting every task degrade to `skipped_unable`.
    - Probes each required category via Bash (MCP registration + CLI presence + docker daemon).
    - Runs each plan's `prerequisites[]` checks with a 5-second timeout, classifying `pass` / `fail` / `timeout`.
    - Emits the full `infra_check` payload (see Output schema below) as JSON.
