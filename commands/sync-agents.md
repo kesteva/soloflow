@@ -8,7 +8,7 @@ model: haiku
 
 Updates the four MCP-dependent agent shadows in `.claude/agents/` to match the current SoloFlow plugin version. Use this after a plugin update (or whenever `/soloflow:sprint`'s preflight warns about drift).
 
-**Why these shadows exist.** Plugin-scoped subagents silently ignore the `mcpServers:` frontmatter key, so `soloflow:verifier` and friends never receive Maestro/Playwright/context7 bindings. Project-local copies in `.claude/agents/` DO honor the declaration, and Claude Code's scope-precedence rule (project > plugin) routes spawns to the shadows. The sidecar at `.claude/agents/.soloflow-shadows.json` records which plugin version each shadow was copied from, so drift is detectable without re-reading every file.
+**Why these shadows exist.** Plugin-scoped subagents silently ignore the `mcpServers:` frontmatter key, so `soloflow:verifier` and friends never receive Maestro/Playwright/context7 bindings. Project-local copies in `.claude/agents/` DO honor the declaration, and Claude Code's scope-precedence rule (project > plugin) routes spawns to the shadows. Each shadow carries its own version stamp as a YAML comment at the top of the frontmatter (`# soloflow-shadow: version=X synced=Y`) — invisible to Claude Code's YAML parser and to the LLM, but readable by this utility's drift check.
 
 ## Managed agents
 

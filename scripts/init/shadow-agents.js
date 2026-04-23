@@ -5,10 +5,20 @@
 //
 // Maintains project-local copies of MCP-dependent SoloFlow agents at
 // .claude/agents/*.md so `mcpServers:` frontmatter actually binds MCP tools
-// (plugin-scoped subagents have this field silently ignored). Each shadow is
-// pinned to a specific plugin version via a sidecar at
-// .claude/agents/.soloflow-shadows.json so drift is detectable without
-// re-reading every agent file.
+// (plugin-scoped subagents have this field silently ignored). Each shadow
+// carries its own version stamp as a YAML comment at the top of its
+// frontmatter, e.g.:
+//
+//     ---
+//     # soloflow-shadow: version=0.8.10 synced=2026-04-23T19:48:32.011Z
+//     name: verifier
+//     ...
+//     ---
+//
+// YAML parsers strip comments, so Claude Code's frontmatter loader is
+// unaffected. The comment is invisible to the LLM (it's inside the
+// frontmatter block, not the body). The sync utility reads the comment via
+// regex to detect drift vs. the plugin's current version.
 //
 // Usage:
 //   node shadow-agents.js --mode check
@@ -16,9 +26,10 @@
 //
 // Modes:
 //   check - emits JSON { plugin_version, drifted, needs_update, shadows: [...] }
-//           Exit 0 even when drifted — drift is informational, not an error.
-//   sync  - copies selected agents from plugin, writes sidecar, emits
-//           JSON { plugin_version, synced, failed }. Exit 1 if any copy failed.
+//           Exit 0 even when drifted — drift is informational.
+//   sync  - copies selected agents from plugin, injects the version stamp into
+//           each shadow, emits JSON { plugin_version, synced, failed }.
+//           Exit 1 if any copy failed.
 //
 // --set aliases (unions with any --agent entries):
 //   visual   → verifier.md, sprint-verifier.md
@@ -35,7 +46,9 @@ const SHADOW_SETS = {
 };
 const ALL_SHADOWS = [...SHADOW_SETS.visual, ...SHADOW_SETS.research];
 
-const SIDECAR_PATH = path.join('.claude', 'agents', '.soloflow-shadows.json');
+const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/;
+const STAMP_LINE_RE = /^\s*#\s*soloflow-shadow\s*:/;
+const STAMP_VERSION_RE = /^\s*#\s*soloflow-shadow\s*:\s*version=(\S+)(?:\s+synced=(\S+))?/m;
 
 function pluginRoot() {
   return process.env.CLAUDE_PLUGIN_ROOT || null;
@@ -53,20 +66,6 @@ function pluginVersion() {
   }
 }
 
-function readSidecar() {
-  if (!fs.existsSync(SIDECAR_PATH)) return {};
-  try {
-    return JSON.parse(fs.readFileSync(SIDECAR_PATH, 'utf8'));
-  } catch {
-    return {};
-  }
-}
-
-function writeSidecar(data) {
-  fs.mkdirSync(path.dirname(SIDECAR_PATH), { recursive: true });
-  fs.writeFileSync(SIDECAR_PATH, JSON.stringify(data, null, 2) + '\n');
-}
-
 function shadowPath(name) {
   return path.join('.claude', 'agents', name);
 }
@@ -77,22 +76,44 @@ function sourcePath(name) {
   return path.join(root, 'agents', name);
 }
 
+// Read the `# soloflow-shadow: version=X synced=Y` comment from a shadow's
+// frontmatter. Returns { version, synced_at } or null if absent/malformed.
+function readStamp(filePath) {
+  if (!fs.existsSync(filePath)) return null;
+  const content = fs.readFileSync(filePath, 'utf8');
+  const fm = content.match(FRONTMATTER_RE);
+  if (!fm) return null;
+  const stamp = fm[1].match(STAMP_VERSION_RE);
+  if (!stamp) return null;
+  return { version: stamp[1], synced_at: stamp[2] || null };
+}
+
+// Inject (or replace) the soloflow-shadow comment at the top of the
+// frontmatter. Preserves all other frontmatter lines and the body verbatim.
+function injectStamp(source, version, syncedAt) {
+  const fm = source.match(FRONTMATTER_RE);
+  if (!fm) throw new Error('source has no frontmatter');
+  const fmBody = fm[1];
+  // Strip any existing soloflow-shadow comment (idempotent re-sync).
+  const stripped = fmBody.split(/\r?\n/).filter((line) => !STAMP_LINE_RE.test(line));
+  const stamp = `# soloflow-shadow: version=${version} synced=${syncedAt}`;
+  const newFmBody = [stamp, ...stripped].join('\n').replace(/\n+$/, '');
+  return source.replace(FRONTMATTER_RE, `---\n${newFmBody}\n---\n`);
+}
+
 function check() {
   const version = pluginVersion();
-  const sidecar = readSidecar();
   const shadows = ALL_SHADOWS.map((name) => {
     const present = fs.existsSync(shadowPath(name));
-    const recorded = sidecar[name] && sidecar[name].version;
+    const stamp = present ? readStamp(shadowPath(name)) : null;
+    const recorded = stamp ? stamp.version : null;
     let status;
     if (!present) status = 'not_installed';
     else if (!recorded) status = 'untracked';
     else if (version && recorded !== version) status = 'stale';
     else status = 'current';
-    return { name, present, recorded_version: recorded || null, status };
+    return { name, present, recorded_version: recorded, status };
   });
-  // needs_update covers installed-but-drifted shadows. Missing shadows are
-  // surfaced via status=not_installed; the caller decides whether to install
-  // them based on its own config (e.g., visual verification enabled).
   const needs_update = shadows
     .filter((s) => s.status === 'stale' || s.status === 'untracked')
     .map((s) => s.name);
@@ -113,7 +134,7 @@ function selectAgentNames(opts) {
   else if (setArg && SHADOW_SETS[setArg]) SHADOW_SETS[setArg].forEach((n) => names.add(n));
   else if (setArg) die('shadow-agents', `unknown --set value: ${setArg} (expected: all|visual|research)`);
   agentList.forEach((a) => names.add(a.endsWith('.md') ? a : `${a}.md`));
-  if (names.size === 0) ALL_SHADOWS.forEach((n) => names.add(n)); // default = all
+  if (names.size === 0) ALL_SHADOWS.forEach((n) => names.add(n));
   return Array.from(names);
 }
 
@@ -124,9 +145,7 @@ function sync(opts) {
   if (!version) die('shadow-agents', 'could not read plugin version from manifest');
 
   const names = selectAgentNames(opts);
-  const sidecar = readSidecar();
-  fs.mkdirSync(path.dirname(SIDECAR_PATH), { recursive: true });
-
+  const syncedAt = new Date().toISOString();
   const synced = [];
   const failed = [];
   for (const name of names) {
@@ -141,15 +160,15 @@ function sync(opts) {
       continue;
     }
     try {
+      const sourceText = fs.readFileSync(src, 'utf8');
+      const stamped = injectStamp(sourceText, version, syncedAt);
       fs.mkdirSync(path.dirname(dst), { recursive: true });
-      fs.copyFileSync(src, dst);
-      sidecar[name] = { version, synced_at: new Date().toISOString() };
+      fs.writeFileSync(dst, stamped);
       synced.push(name);
     } catch (e) {
       failed.push({ name, reason: e.message });
     }
   }
-  writeSidecar(sidecar);
   return { plugin_version: version, synced, failed };
 }
 
