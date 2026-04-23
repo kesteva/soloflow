@@ -152,8 +152,8 @@ Multi-layered verification, in order of authority:
 2. **Visual** — Maestro MCP (mobile), Playwright MCP (web), optional and gated on config. See [Visual Verification Setup](VISUAL-VERIFICATION-SETUP.md).
 3. **Requirements adherence** — each acceptance criterion checked with concrete evidence
 4. **Goal-backward** — "What must be TRUE for production?"
-5. **Per-task code review** — `/simplify` (quality/reuse) + `/security-review` (security audit). Can send the executor back with `IMPROVEMENTS_NEEDED`. Toggles: `code_review.enabled/.run_simplify/.run_security_review`.
-6. **Sprint-level code review** — aggregate `/simplify` + `/security-review` across `base_sha..HEAD` + cross-task redundancy sweep. **Advisory only** — findings go to human review (accept → active sprint's findings file / defer / dismiss), never back to execution. Toggles: `sprint_code_review.enabled/.run_simplify/.run_security_review` (resolve independently from `code_review.*`).
+5. **Per-task code review** — inline quality/reuse + security audit by the code-reviewer agent against the task's changed files. Can send the executor back with `IMPROVEMENTS_NEEDED`. Toggle: `code_review.enabled`; retry budget: `code_review.review_retry_max`.
+6. **Sprint-level code review** — inline quality/reuse + security assessment across `base_sha..HEAD` plus a cross-task redundancy sweep. **Advisory only** — findings go to human review (accept → active sprint's findings file / defer / dismiss), never back to execution. Toggle: `sprint_code_review.enabled` (resolves independently from `code_review.enabled`).
 
 **Visual verification runtime.** The verifier checks tool availability (`which maestro`, `which npx`) before attempting MCP interactions; if tools aren't installed or MCP servers aren't running, Level 2 is skipped gracefully.
 

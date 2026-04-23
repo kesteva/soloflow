@@ -92,23 +92,19 @@ Valid values: `opus`, `sonnet`, `haiku`. Callsites that spawn these agents via t
 | Setting | Default | Description |
 |---|---|---|
 | `code_review.enabled` | `true` | Spawn a code-reviewer subagent after executor+verifier pass |
-| `code_review.run_simplify` | `true` | Run the `/simplify` skill inside code review |
-| `code_review.run_security_review` | `true` | Run the `/security-review` skill inside code review |
 | `code_review.review_retry_max` | 1 | Separate retry budget for code-review fixes |
 
-These toggles control the **per-task** reviewer that runs inside the executor loop and can send the executor back with `IMPROVEMENTS_NEEDED`.
+These settings control the **per-task** reviewer that runs inside the executor loop and can send the executor back with `IMPROVEMENTS_NEEDED`. The reviewer performs quality/reuse and security assessment inline against the changed files — there are no separate sub-toggles for the two axes.
 
 ### Sprint code review
 
 | Setting | Default | Description |
 |---|---|---|
 | `sprint_code_review.enabled` | `true` | Spawn the end-of-sprint aggregate reviewer after sprint-verifier, before close |
-| `sprint_code_review.run_simplify` | `true` | Run `/simplify` across the whole sprint diff |
-| `sprint_code_review.run_security_review` | `true` | Run `/security-review` across the whole sprint diff |
 
 The sprint-level reviewer runs **once per sprint** against `base_sha..HEAD`, specifically hunting cross-task patterns (duplicated utilities, inconsistent patterns, redundant helpers). Findings **never trigger re-execution** — they land in `.soloflow/human-review-queue.md` as `type: sprint_code_review` entries and are triaged during end-of-sprint human review with Accept / Defer / Dismiss. Accepted findings append to the active sprint's findings file (`.soloflow/active/findings/{sprint.id}-findings.md`) for the compounder to pick up.
 
-These toggles resolve independently from `code_review.*` — you can disable the per-task loop and keep the sprint-level safety net, or vice versa.
+`sprint_code_review.enabled` resolves independently from `code_review.enabled` — you can disable the per-task loop and keep the sprint-level safety net, or vice versa.
 
 ### Compound
 
