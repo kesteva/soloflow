@@ -188,4 +188,6 @@ function main() {
   die('shadow-agents', 'required: --mode check|sync');
 }
 
-main();
+module.exports = { check, sync, SHADOW_SETS, ALL_SHADOWS };
+
+if (require.main === module) main();
