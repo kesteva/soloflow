@@ -4,6 +4,11 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.9.2] - 2026-04-23
+
+### Fixed
+- **`scripts/init/shadow-agents.js` resolves the plugin root without `CLAUDE_PLUGIN_ROOT`.** Claude Code interpolates `${CLAUDE_PLUGIN_ROOT}` into slash-command text but does not export it to Bash subprocesses, so `/soloflow:sync-agents` (and any direct `node shadow-agents.js` invocation) died with `CLAUDE_PLUGIN_ROOT not set — cannot resolve source agents`. `pluginRoot()` now mirrors the fallback pattern in `scripts/lib/config.js`: walk up from `__dirname` looking for `.claude-plugin/plugin.json`. Env var still takes precedence when set.
+
 ## [0.9.1] - 2026-04-23
 
 ### Changed
