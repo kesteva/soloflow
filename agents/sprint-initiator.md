@@ -28,7 +28,11 @@ Phase: gather
 
 1. **Sanity check.** Verify `.soloflow/` exists. If not, report `initialized: false` and stop.
 
-2. **Read backlog.** Read `.soloflow/active/backlog.json`. Collect all `status: "ready"` tasks. If the orchestrator passed argument filters (task IDs or `IDEA-NNN`), note them in the output but still return the full ready set — the orchestrator decides scope.
+2. **Read backlog.** Use the query helper instead of ad-hoc `node -e` — `backlog.json.tasks` is an **object keyed by task ID**, not an array, and hand-written `.filter` calls fail with `TypeError: b.tasks.filter is not a function`.
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/state/backlog-query.js" --status ready
+   ```
+   Add `--epic <slug>`, `--plan-contains <substr>`, `--id TASK-NNN` (repeatable), or `--fields id,status,title,epic,depends_on,plan_path` as needed; `--format ids|count|json` (default json). Returns `status: "ready"` tasks here. If the orchestrator passed argument filters (task IDs or `IDEA-NNN`), note them in the output but still return the full ready set — the orchestrator decides scope.
 
 3. **Find natural next epic.** For each ready task, read its plan file (glob `.soloflow/active/plans/**/TASK-{NNN}-plan.md`) and extract the `epic` frontmatter field. The natural next epic is the first epic (by lowest task ID) that has ready tasks.
 
