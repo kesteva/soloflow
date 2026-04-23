@@ -1,6 +1,7 @@
 ---
 description: Scaffold or repair the .soloflow/ state directory and run the setup wizard
 allowed-tools: [Read, Write, Bash, AskUserQuestion]
+model: sonnet
 ---
 
 # /soloflow:init
@@ -202,33 +203,51 @@ For each required MCP server (`maestro` if `visual_mobile`, `playwright` if `vis
 
 Never run `claude mcp add` without the explicit user choice above — registering servers silently is exactly the collision problem we're avoiding.
 
-### Optional plugin probes (advisory)
+### Optional plugin probes
 
-Two Anthropic-published plugins can improve SoloFlow agent output when installed. **Neither is required** — SoloFlow's runtime agents fall back silently when they're missing. Probe each and surface an advisory notice if absent; never block init.
+Two Anthropic-published plugins can improve SoloFlow agent output when installed. **Neither is required** — SoloFlow's runtime agents fall back silently when they're missing. Probe each; if present, surface a `✓` detected line. If absent, offer to install via `AskUserQuestion` (mirrors the MCP-server registration pattern in the previous section). Never install silently.
 
 **context7** (MCP plugin) — gives the researcher and roadmap-researcher version-accurate library docs via `resolve-library-id` + `query-docs`, reducing hallucinated APIs.
 
 1. Probe: `claude mcp list 2>/dev/null | grep -qi context7`
-2. If present: print `✓ context7 MCP detected — researcher will prefer it for library docs.`
-3. If absent: print:
-   ```
-   ℹ context7 MCP is not installed. Optional — the researcher will fall back to WebFetch.
-     To enable version-accurate library docs:
-       /plugin install context7@anthropics
-   ```
+2. **If present:** print `✓ context7 MCP detected — researcher will prefer it for library docs.` Continue.
+3. **If absent:** use `AskUserQuestion`:
+   - **Question:** `'The "context7" MCP plugin gives the researcher version-accurate library docs (falls back to WebFetch when missing). Install it now?'`
+   - **Header:** `Install context7`
+   - **Options:**
+     - `"Yes — user scope (all projects)"`
+     - `"Yes — project scope (this project only)"`
+     - `"Skip"`
+   - **On user scope:** run `claude plugin install context7 --scope user` via Bash.
+   - **On project scope:** run `claude plugin install context7 --scope project` via Bash.
+   - **On Skip:** print:
+     ```
+     ℹ context7 MCP not installed. Optional — the researcher will fall back to WebFetch.
+       Install later with: /plugin install context7@anthropics
+     ```
+4. After a successful install, re-run the probe at step 1. If it still fails, print `ℹ context7 installed — restart Claude Code to load it in this session.` Do NOT retry.
 
 **frontend-design** (plugin with skill) — gives the task-refiner and executor a distinctive UI design direction (aesthetic, typography, motion, spatial composition) for UI tasks.
 
 1. Probe: `claude plugin list 2>/dev/null | grep -qi frontend-design` first; if that command fails or returns empty, fall back to `ls ~/.claude/plugins 2>/dev/null | grep -qi frontend-design`.
-2. If either probe passes: print `✓ frontend-design plugin detected — task-refiner will establish Design Direction for UI slices.`
-3. If both probes fail: print:
-   ```
-   ℹ frontend-design plugin is not installed. Optional — UI tasks will ship with conventional defaults.
-     To enable distinctive UI direction:
-       /plugin install frontend-design@anthropics
-   ```
+2. **If either probe passes:** print `✓ frontend-design plugin detected — task-refiner will establish Design Direction for UI slices.` Continue.
+3. **If both probes fail:** use `AskUserQuestion`:
+   - **Question:** `'The "frontend-design" plugin gives the task-refiner a distinctive UI design direction for UI tasks (UI tasks ship with conventional defaults when missing). Install it now?'`
+   - **Header:** `Install frontend-design`
+   - **Options:**
+     - `"Yes — user scope (all projects)"`
+     - `"Yes — project scope (this project only)"`
+     - `"Skip"`
+   - **On user scope:** run `claude plugin install frontend-design --scope user` via Bash.
+   - **On project scope:** run `claude plugin install frontend-design --scope project` via Bash.
+   - **On Skip:** print:
+     ```
+     ℹ frontend-design plugin not installed. Optional — UI tasks will ship with conventional defaults.
+       Install later with: /plugin install frontend-design@anthropics
+     ```
+4. After a successful install, re-run the probe at step 1. If it still fails, print `ℹ frontend-design installed — restart Claude Code to load it in this session.` Do NOT retry.
 
-Both probes are informational only — do not prompt the user, do not install anything, do not write to config. A backend-only project has no need for frontend-design; a project that doesn't rely on third-party libraries has no need for context7.
+A backend-only project has no need for frontend-design; a project that doesn't rely on third-party libraries has no need for context7 — both are safe to skip. Never run `claude plugin install` without the explicit user choice above.
 
 ### Q3 — Branch strategy for `/soloflow:sprint`
 
