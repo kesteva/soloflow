@@ -60,6 +60,31 @@ Reuse the cached config across respawns on `CONTEXT_LIMIT` / `NEEDS_CHANGES` / `
 
 Sprint initiation uses the **sprint-initiator** sub-agent in two phases to keep orchestrator context lean. The agent handles file I/O, config resolution, git operations, and test runs; the orchestrator handles all user prompts between phases.
 
+## Step 0.45: Shadow agent drift check
+
+MCP-dependent subagents (`verifier`, `sprint-verifier`, `researcher`, `roadmap-researcher`) run from shadow copies at `.claude/agents/*.md`, pinned to the plugin version that was current when `/soloflow:init` last ran. If the plugin has updated since, the shadows may be missing fixes — including any changes to the verifier's Level 2 logic, the researcher's context7 probe, etc.
+
+Run:
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/init/shadow-agents.js" --mode check
+```
+
+Parse the JSON output. Three paths:
+
+1. **Script failed** (non-zero exit, `CLAUDE_PLUGIN_ROOT` unset, plugin manifest missing) → print a one-line warning (`⚠ Shadow drift check skipped: {error}. Re-run /soloflow:init after the plugin fully loads.`) and proceed to Step 0.5. Don't block — the sprint can still run on whatever shadows are present (or on the plugin versions if none are installed).
+
+2. **`drifted: false`** → print `✓ Shadow agents current (v{plugin_version})` and proceed silently.
+
+3. **`drifted: true`** → list the drift in the prompt body, then **AskUserQuestion**:
+   - **Question body:** `SoloFlow plugin v{plugin_version} is newer than the shadow agents installed in .claude/agents/:\n{for each needs_update entry: "  {name} — {status} (installed v" + recorded_version + " or untracked)"}\n\nThe shadows control how visual verification and research agents behave. Stale shadows may be missing fixes from the current plugin. Update now?`
+   - **Header:** `Shadow sync`
+   - **Options:**
+     - `Update now` — run `node "${CLAUDE_PLUGIN_ROOT}/scripts/init/shadow-agents.js" --mode sync --set all`, print the result summary (`✓ Synced: {list}` + any `⚠ Failed: {list}`), then print `ℹ Shadow updates take effect on the NEXT session — current session still uses the previously-loaded subagents.` and proceed to Step 0.5.
+     - `Skip — run with stale shadows` — print `⚠ Running with stale shadow agents. Run /soloflow:sync-agents before the next sprint to pick up plugin fixes.` and proceed to Step 0.5.
+     - `Abort` — stop execution and instruct the user to run `/soloflow:sync-agents` manually.
+
+This check is advisory, never blocking — a drift-detected sprint still runs if the user opts to skip. The check never touches `not_installed` shadows (those are surfaced as status but not prompted about; the user may have visual verification disabled, in which case `verifier.md`/`sprint-verifier.md` shadows are intentionally absent).
+
 ## Step 0.5: Checkpoint & branch resume
 
 These checks happen in the orchestrator before any agent spawn — they may skip initiation entirely.
