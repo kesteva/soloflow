@@ -123,7 +123,7 @@ If `claude mcp list` shows `maestro: ✓ Connected` (main session has the server
 
 **Fix:** re-run `/soloflow:init` (any version ≥ 0.8.11). When you re-answer the visual verification wizard with `visual_mobile` / `visual_web` enabled, init emits an explicit "Shadow-install visual verification agents" callout and copies `verifier.md` + `sprint-verifier.md` from the plugin into your project's `.claude/agents/`. Separately, the context7 section of the optional plugin probes shadow-installs `researcher.md` + `roadmap-researcher.md`. Project-local agents DO honor `mcpServers:`, so the shadow copies receive the bindings the plugin versions could not.
 
-After the shadow-install, **restart Claude Code** (or run `/agents` to reload) — the subagent list is loaded at session start, so freshly-copied agents are not picked up until reload.
+After the shadow-install, **restart Claude Code** — the subagent list is loaded at session start, so freshly-copied agents are not picked up until the next session.
 
 Verify the shadow copies are in place:
 ```bash

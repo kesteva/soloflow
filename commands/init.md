@@ -229,8 +229,8 @@ Never run `claude mcp add` without the explicit user choice above — registerin
    (`# soloflow-shadow: version=X synced=Y`). /soloflow:sprint's preflight will detect drift
    automatically after a plugin update and offer to re-sync via /soloflow:sync-agents.
 
-   ⚠ Restart Claude Code (or run /agents to reload) for the shadows to take effect — subagents are loaded
-     at session start, so freshly-written shadow agents aren't picked up until reload.
+   ⚠ Restart Claude Code for the shadows to take effect — subagents are loaded at session start,
+     so freshly-written shadow agents aren't picked up until the next session.
    ```
 
 ### Optional plugin probes

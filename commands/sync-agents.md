@@ -43,8 +43,8 @@ Updates the four MCP-dependent agent shadows in `.claude/agents/` to match the c
 
 6. **Restart reminder.** Print:
    ```
-   ⚠ Restart Claude Code (or run /agents to reload) for the shadow updates to take effect —
-     subagents load at session start, so freshly-written shadow agents aren't picked up until reload.
+   ⚠ Restart Claude Code for the shadow updates to take effect — subagents load at session
+     start, so freshly-written shadow agents aren't picked up until the next session.
    ```
 
 ## Scope
