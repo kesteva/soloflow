@@ -55,6 +55,26 @@ You receive:
 
    **Global numbering:** number items A1..An, B1..Bm, C1..Cp, D1..Dq across the entire batch (not per-sprint). Ordering within a bucket is your call — group related items or list by severity, whichever reads more usefully.
 
+6a. **Bucket C self-defect check.** Before finalizing each C-item, challenge it: *"is this actually a SoloFlow subagent, planner, orchestrator, hook, or workflow defect being papered over as a project-local convention?"* If yes, project CLAUDE.md / CODE-PATTERNS.md is the wrong target — the fix belongs in the SoloFlow plugin itself, not as workaround lore in the consumer project.
+
+   Red-flag signals that a C-item is really a SoloFlow defect:
+   - The proposed rule or note is about **how a SoloFlow agent behaves** (verifier, executor, task-refiner, planner, sprint-initiator, compounder, sprint-verifier, sprint-closer, code-reviewer, integration-tester, idea-extractor, roadmap-generator, researcher, claude-md-reviewer, compound-skeptic, test-writer).
+   - It describes **working around a missing SoloFlow capability** — e.g. "note that maestro MCP tools aren't visible to the verifier", "document that the planner skips path validation", "remind the orchestrator to enumerate done reports explicitly".
+   - It references **SoloFlow workflow terms** (sprint, findings queue, done report, review queue, compound, handoff, context-limit respawn) as the thing being explained rather than the thing being used.
+   - It would **evaporate if the user switched to a different Claude Code workflow** — the rule isn't about this project's code, it's about SoloFlow's behavior.
+
+   Green-flag signals a C-item is a legitimate project convention (keep in C):
+   - The rule is about **this codebase's code, schema, design system, or domain** — Supabase RLS patterns, a state-management convention, a CSS token system, a test fixture pattern.
+   - It would **still be true** if the user stopped using SoloFlow entirely.
+   - It encodes knowledge that **every agent touching this repo** (not just SoloFlow ones) benefits from.
+
+   Apply the decision:
+   - **C-item is actually a SoloFlow defect, `tester: true` is set:** reclassify to Bucket D. Carry over the Source-Sprint, the evidence, and phrase the D-item as a maintainer-facing recommendation ("SoloFlow {component} should {change} because {evidence}").
+   - **C-item is actually a SoloFlow defect, `tester: false`:** drop the item from Bucket C. List it instead under a new `## Suppressed — SoloFlow Defects` section at the end of the proposal (one line per item: `{short title} — {one-sentence reason}. Consider opening an issue or /soloflow:compound --tester against this sprint in a SoloFlow-tester setup to surface it as a maintainer recommendation.`). This keeps the audit trail without polluting project CLAUDE.md files with plugin-specific lore.
+   - **Genuine project convention:** keep in C, proceed to step 7.
+
+   This check is required for every C-candidate, even ones that look obviously project-specific — a surprising fraction of plugin-behavior notes slip through disguised as project conventions. When in doubt, prefer suppression over C-bucket pollution.
+
 7. **Write the proposal** to `.soloflow/active/compound/{span_label}-proposal.md` (the orchestrator ensures the `active/compound/` directory exists). Use the format below. Populate every bucket; if a bucket is empty, write `_No items._` — do not invent content.
 
 ## Output Format
