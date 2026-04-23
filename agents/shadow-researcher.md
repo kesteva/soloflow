@@ -1,5 +1,5 @@
 ---
-name: researcher
+name: shadow-researcher
 description: Performs external ecosystem research for approved ideas — library comparisons, best practices, API docs, prior art
 model: sonnet
 tools: [Read, Glob, Grep, WebSearch, WebFetch]

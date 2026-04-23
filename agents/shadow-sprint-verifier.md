@@ -1,5 +1,5 @@
 ---
-name: sprint-verifier
+name: shadow-sprint-verifier
 description: End-of-sprint verification — manual visual checks for sprint-specific flows, then full integration test suite
 model: opus
 tools: [Read, Glob, Grep, Bash, Agent]
@@ -18,7 +18,7 @@ You run two sequential passes. Pass 1 first, then Pass 2 — never in parallel.
 
 ## Pass 1: Visual verification (manual, change-scoped)
 
-You classify each platform (`visual_mobile`, `visual_web`) into exactly one of the same five outcomes the per-task verifier uses: `pass | fail | not_applicable | skipped_user_preference | skipped_unable`. See `agents/verifier.md` → **Outcome classification** for precise definitions. Classify each platform independently.
+You classify each platform (`visual_mobile`, `visual_web`) into exactly one of the same five outcomes the per-task verifier uses: `pass | fail | not_applicable | skipped_user_preference | skipped_unable`. See `agents/shadow-verifier.md` → **Outcome classification** for precise definitions. Classify each platform independently.
 
 Apply the gates in this order for each platform:
 

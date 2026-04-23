@@ -1,5 +1,5 @@
 ---
-name: roadmap-researcher
+name: shadow-roadmap-researcher
 description: Performs focused research on a single dimension for roadmap generation — ecosystem, user needs, architecture, or risks
 model: sonnet
 tools: [Read, Glob, Grep, WebSearch, WebFetch]
