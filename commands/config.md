@@ -167,22 +167,18 @@ On `"Enter custom flag"`: capture free-form; pass through as-is.
 
 ### 5f. Code review
 
-Four settings (per-task reviewer inside the executor loop):
+Two settings (per-task reviewer inside the executor loop):
 
 - `code_review.enabled` — boolean (Enable / Disable / Use default)
-- `code_review.run_simplify` — boolean
-- `code_review.run_security_review` — boolean
 - `code_review.review_retry_max` — integer (Keep / Reset / Custom)
 
 Use the same question patterns as 5b and 5d.
 
 ### 5f.5. Sprint code review
 
-Three settings (end-of-sprint aggregate reviewer; independent of 5f):
+One setting (end-of-sprint aggregate reviewer; independent of 5f):
 
 - `sprint_code_review.enabled` — boolean (Enable / Disable / Use default)
-- `sprint_code_review.run_simplify` — boolean
-- `sprint_code_review.run_security_review` — boolean
 
 Use the same boolean question pattern as 5b. Note in the question text that
 this reviewer runs once per sprint against the aggregate PR diff and that its
@@ -311,12 +307,8 @@ limits.checkpoint_interval
 limits.max_sprint_tasks
 limits.context_limit_respawn_max
 code_review.enabled
-code_review.run_simplify
-code_review.run_security_review
 code_review.review_retry_max
 sprint_code_review.enabled
-sprint_code_review.run_simplify
-sprint_code_review.run_security_review
 verification.run_tests
 verification.run_typecheck
 verification.run_linter

@@ -37,14 +37,10 @@ limits:
 
 code_review:
   enabled: true
-  run_simplify: true
-  run_security_review: true
   review_retry_max: 1  # separate retry budget for code review improvements
 
 sprint_code_review:
   enabled: true              # end-of-sprint aggregate reviewer; independent of per-task code_review.*
-  run_simplify: true
-  run_security_review: true
 
 # Compound pipeline customization
 #   skeptic            = run compound-skeptic agent against proposal before user review;
