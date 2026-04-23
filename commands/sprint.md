@@ -62,7 +62,7 @@ Sprint initiation uses the **sprint-initiator** sub-agent in two phases to keep 
 
 ## Step 0.45: Shadow agent drift check
 
-MCP-dependent subagents (`verifier`, `sprint-verifier`, `researcher`, `roadmap-researcher`) run from shadow copies at `.claude/agents/*.md`, pinned to the plugin version that was current when `/soloflow:init` last ran. If the plugin has updated since, the shadows may be missing fixes — including any changes to the verifier's Level 2 logic, the researcher's context7 probe, etc.
+MCP-dependent subagents (`shadow-verifier`, `shadow-sprint-verifier`, `shadow-researcher`, `shadow-roadmap-researcher`) live at `.claude/agents/shadow-*.md`, pinned to the plugin version that was current when `/soloflow:init` last ran. If the plugin has updated since, the shadows may be missing fixes — including any changes to the verifier's Level 2 logic, the researcher's context7 probe, etc.
 
 Run:
 ```
@@ -83,7 +83,7 @@ Parse the JSON output. Three paths:
      - `Skip — run with stale shadows` — print `⚠ Running with stale shadow agents. Run /soloflow:sync-agents before the next sprint to pick up plugin fixes.` and proceed to Step 0.5.
      - `Abort` — stop execution and instruct the user to run `/soloflow:sync-agents` manually.
 
-This check is advisory, never blocking — a drift-detected sprint still runs if the user opts to skip. The check never touches `not_installed` shadows (those are surfaced as status but not prompted about; the user may have visual verification disabled, in which case `verifier.md`/`sprint-verifier.md` shadows are intentionally absent).
+This check is advisory, never blocking — a drift-detected sprint still runs if the user opts to skip. The check never touches `not_installed` shadows (those are surfaced as status but not prompted about; the user may have visual verification disabled, in which case `shadow-verifier.md`/`shadow-sprint-verifier.md` shadows are intentionally absent).
 
 ## Step 0.5: Checkpoint & branch resume
 
@@ -254,14 +254,14 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
            - In both cases, include: *"Continue from where the previous executor left off."*
         3. Increment context-limit respawn counter (tracked separately from `executor_retry_max`). If respawn limit reached, escalate as STUCK.
 
-   d. **Verification.** If `per_task_verification_enabled` (Step 0.4) is `false`, skip the verifier spawn entirely. Synthesize a stub verdict: `{ verdict: "APPROVED", visual_mobile: "skipped_user_preference", visual_web: "skipped_user_preference" }` and proceed directly to step f. The NEEDS_CHANGES retry loop and APPROVED_WITH_DEFERRED branch cannot trigger without a verifier. Otherwise (default): spawn **verifier** with plan + executor report and wait for verdict.
+   d. **Verification.** If `per_task_verification_enabled` (Step 0.4) is `false`, skip the verifier spawn entirely. Synthesize a stub verdict: `{ verdict: "APPROVED", visual_mobile: "skipped_user_preference", visual_web: "skipped_user_preference" }` and proceed directly to step f. The NEEDS_CHANGES retry loop and APPROVED_WITH_DEFERRED branch cannot trigger without a verifier. Otherwise (default): spawn the **shadow-verifier** (`subagent_type: "shadow-verifier"`) with plan + executor report and wait for verdict.
 
    e. Handle verifier verdict (skipped when `per_task_verification_enabled` is `false` — use the stub verdict from step d):
       - **APPROVED** → proceed to code review (step f).
       - **APPROVED_WITH_DEFERRED** → proceed to code review (step f). The deferred checks are already queued in `.soloflow/human-review-queue.md` by the verifier — they will be re-verified in Step 4.
       - **NEEDS_CHANGES** → if `executor_loops < resolved limits.executor_retry_max`, increment `executor_loops` and re-spawn executor with verifier feedback. Otherwise write stuck report.
       - **HUMAN_NEEDED** → append an entry to `.soloflow/human-review-queue.md` using the canonical HUMAN_NEEDED task-entry schema in `commands/quick.md` under "If HUMAN_NEEDED" (fields: `task`, `type`, `plan_ref`, `verdict_notes`, `action`, `severity`). Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`.
-      - **CONTEXT_LIMIT** → read the `### Handoff` section. Spawn a **fresh verifier** with the original inputs + "Continue verification from previous verifier's handoff: {handoff section}". Same respawn budget as executor CONTEXT_LIMIT handling.
+      - **CONTEXT_LIMIT** → read the `### Handoff` section. Spawn a **fresh shadow-verifier** with the original inputs + "Continue verification from previous verifier's handoff: {handoff section}". Same respawn budget as executor CONTEXT_LIMIT handling.
 
    f. **Code review.** Use `per_task_code_review_enabled` from Step 0.4 (which
       folds the resolved `code_review.enabled` config — fallback `true` — with
@@ -306,9 +306,9 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
 
 ## Step 3.5: End-of-sprint verification
 
-If `sprint_verification_enabled` (Step 0.4) is `false`, skip this entire step — do not spawn the sprint-verifier and do not create `.soloflow/active/sprint-verification.md`. The sprint-closer handles the missing file (tallies sprint-level mobile/web as `not_applicable` with note "sprint-verifier did not run").
+If `sprint_verification_enabled` (Step 0.4) is `false`, skip this entire step — do not spawn the shadow-sprint-verifier and do not create `.soloflow/active/sprint-verification.md`. The sprint-closer handles the missing file (tallies sprint-level mobile/web as `not_applicable` with note "sprint-verifier did not run").
 
-Otherwise, spawn the **sprint-verifier** agent with the sprint ID, base SHA (from `sprint.json`'s `run.base_sha` or the commit before sprint start), the list of completed tasks with their plans and changed files, and the resolved visual verification config. Wait for its report.
+Otherwise, spawn the **shadow-sprint-verifier** agent (`subagent_type: "shadow-sprint-verifier"`) with the sprint ID, base SHA (from `sprint.json`'s `run.base_sha` or the commit before sprint start), the list of completed tasks with their plans and changed files, and the resolved visual verification config. Wait for its report.
 
 Handle the report:
 - If regressions were found (visual or integration), append each to `.soloflow/human-review-queue.md` via `review-queue.js append --entry-json '{...}'` with the failure details, evidence, and suspected responsible task.
@@ -395,7 +395,7 @@ Using the gathered payload, present a consolidated review:
 
 **Deferred verification.** If `review_queue.action_required` is non-empty, present entries grouped by action, sorted by severity (`high` first, then `medium`, then `low`). For each action, use **AskUserQuestion**: "[{SEVERITY}] Have you completed: {action}?" with options **Yes — re-verify now** / **Not yet — keep deferred** / **No longer needed — dismiss**. (`{SEVERITY}` comes from the gathered `review_queue.action_required[].severity` field.)
 
-- **Yes:** Re-spawn the **verifier** (or **sprint-verifier** for sprint-level flows) with the original plan + executor report, scoped to only the previously deferred checks. Handle the verdict normally — if it passes, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" remove --task TASK-NNN --type action_required` to drop the entry and recompute `pending_count`. If it fails, convert to `NEEDS_CHANGES` and present to the user.
+- **Yes:** Re-spawn the **shadow-verifier** (or **shadow-sprint-verifier** for sprint-level flows) with the original plan + executor report, scoped to only the previously deferred checks. Handle the verdict normally — if it passes, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" remove --task TASK-NNN --type action_required` to drop the entry and recompute `pending_count`. If it fails, convert to `NEEDS_CHANGES` and present to the user.
 - **Not yet:** Leave in the queue. The entry persists for the next session.
 - **Dismiss:** Run `review-queue.js remove --task TASK-NNN --type action_required` to drop the entry and recompute `pending_count`.
 
@@ -511,7 +511,7 @@ next_action: "{what to do next}"
 
 ## Notes
 
-- This command IS the orchestrator for Phase 3. It runs in the main session and spawns executor/verifier/code-reviewer as leaf-node subagents.
+- This command IS the orchestrator for Phase 3. It runs in the main session and spawns executor/shadow-verifier/code-reviewer as leaf-node subagents.
 - Config: `executor_retry_max`, `checkpoint_interval`, `max_sprint_tasks`, `context_limit_respawn_max` in `config/defaults.yaml`.
 - Branching config: `git.branch_per_run` (runtime-read) in `config/defaults.yaml`, overrideable per-project via `.soloflow/config.json`.
 

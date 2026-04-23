@@ -24,7 +24,7 @@ recipe in [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md)
 and pass the resolved value as the Agent tool's `model` parameter.
 
 Mapping used in this command:
-- `verifier` → `models.verifier` (fallback: `opus`)
+- `shadow-verifier` → `models.verifier` (fallback: `opus`)
 - `task-refiner` → `models.task_refiner` (fallback: `opus`)
 
 ## Step 0: Initialize
@@ -62,7 +62,7 @@ The script returns JSON `{ entries, action_required, action_required_visual, spr
 
 Entry formats present in the queue:
 
-Structured (from `agents/verifier.md`, `commands/executor.md`):
+Structured (from `agents/shadow-verifier.md`, `commands/executor.md`):
 ```yaml
 - task: TASK-NNN
   type: action_required
@@ -428,7 +428,7 @@ Iterate `pending_reverifies` sequentially (not in parallel — the verifier is O
 For each entry:
 
 1. Locate the plan: prefer `pending_reverifies[i].plan_path` if set; otherwise re-glob `.soloflow/active/plans/**/TASK-NNN-plan.md`. If still missing, use the done report as the grounding document (`pending_reverifies[i].done_report_path` or re-glob `.soloflow/archive/done/**/TASK-NNN-done.md`). If neither exists, skip and log a warning in the final report.
-2. Spawn the **verifier** agent via the Agent tool. Prompt:
+2. Spawn the **shadow-verifier** agent via the Agent tool (`subagent_type: "shadow-verifier"`). Prompt:
 
    > "Re-verify TASK-NNN. The deferred check below has been completed by the user; validate **only this check** — do not re-run the full Level 1–5 pipeline.
    >
@@ -443,7 +443,7 @@ For each entry:
    - **APPROVED** or **APPROVED_WITH_DEFERRED** — entry stays removed from queue (was removed tentatively in 3b); increment `actions_completed`.
    - **NEEDS_CHANGES** — restore `original_entry` to the queue with a new `last_reverify_notes:` field containing the verifier's changes-required list; increment `pending_count`; increment `actions_needs_changes`. In the final report, surface the changes-required list with a hint: *"Use /soloflow:quick to fix."*
    - **HUMAN_NEEDED** — restore `original_entry` to the queue with an updated reason; increment `pending_count`.
-   - **CONTEXT_LIMIT** — read the verifier's `### Handoff` section. Respawn a fresh verifier once (budget: 1 respawn per re-verify); if the respawn also returns CONTEXT_LIMIT, restore the entry and note in the final report.
+   - **CONTEXT_LIMIT** — read the verifier's `### Handoff` section. Respawn a fresh shadow-verifier once (budget: 1 respawn per re-verify); if the respawn also returns CONTEXT_LIMIT, restore the entry and note in the final report.
 4. Atomic rewrite of `human-review-queue.md` per verdict.
 
 After all re-verifies complete (or are all restored), commit `chore: review-queue — batch re-verify ({actions_completed} approved, {actions_needs_changes} needs-changes)`. Stage only `.soloflow/human-review-queue.md`.

@@ -65,14 +65,14 @@ it wherever "Cap at 3 respawns" appears below.
    - Else use `config/defaults.yaml`'s `roadmap.research_dimensions`.
    - Fallback: `[ecosystem, user-needs, architecture, risks]`.
 
-3. Spawn one **roadmap-researcher** agent per dimension, **all in parallel** via the Agent tool. Each agent receives:
+3. Spawn one **shadow-roadmap-researcher** agent per dimension (`subagent_type: "shadow-roadmap-researcher"`), **all in parallel** via the Agent tool. Each agent receives:
    - The roadmap brief
    - Its dimension assignment (e.g., "Your dimension is: ecosystem")
    - The roadmap ID (e.g., "ROADMAP-003")
    - Instruction: "Research this dimension for roadmap generation. Output the complete research report."
 
 4. Collect all research reports.
-   - If any researcher reports **CONTEXT_LIMIT**: read its `### Handoff` section. Spawn a **fresh roadmap-researcher** for the same dimension with: "Continue research from previous researcher's handoff: {handoff section}". Cap at resolved `limits.context_limit_respawn_max` per dimension.
+   - If any researcher reports **CONTEXT_LIMIT**: read its `### Handoff` section. Spawn a **fresh shadow-roadmap-researcher** for the same dimension with: "Continue research from previous researcher's handoff: {handoff section}". Cap at resolved `limits.context_limit_respawn_max` per dimension.
 
 5. Write each report to `.soloflow/active/research/ROADMAP-{NNN}-research-{dimension}.md`. Use the Write tool -- these files are new, not appending to existing files.
 

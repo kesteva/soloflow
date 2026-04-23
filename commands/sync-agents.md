@@ -8,16 +8,16 @@ model: haiku
 
 Updates the four MCP-dependent agent shadows in `.claude/agents/` to match the current SoloFlow plugin version. Use this after a plugin update (or whenever `/soloflow:sprint`'s preflight warns about drift).
 
-**Why these shadows exist.** Plugin-scoped subagents silently ignore the `mcpServers:` frontmatter key, so `soloflow:verifier` and friends never receive Maestro/Playwright/context7 bindings. Project-local copies in `.claude/agents/` DO honor the declaration, and Claude Code's scope-precedence rule (project > plugin) routes spawns to the shadows. Each shadow carries its own version stamp as a YAML comment at the top of the frontmatter (`# soloflow-shadow: version=X synced=Y`) — invisible to Claude Code's YAML parser and to the LLM, but readable by this utility's drift check.
+**Why these shadows exist.** Plugin-scoped subagents silently ignore the `mcpServers:` frontmatter key, so a plugin-scoped verifier would never receive Maestro/Playwright/context7 bindings. Project-local copies in `.claude/agents/` DO honor the declaration. The four MCP-dependent agents therefore ship under the `shadow-` prefix and are spawned by their `shadow-*` names exclusively — orchestrators call `shadow-verifier`, not `verifier`. No reliance on Claude Code's project/plugin precedence rule, which empirically did not hold when names collided. Each shadow carries its own version stamp as a YAML comment at the top of the frontmatter (`# soloflow-shadow: version=X synced=Y`) — invisible to Claude Code's YAML parser and to the LLM, but readable by this utility's drift check.
 
 ## Managed agents
 
 | Agent | Declares | Used by |
 |---|---|---|
-| `verifier.md` | `mcpServers: [maestro, playwright]` | per-task Level 2 visual verification |
-| `sprint-verifier.md` | `mcpServers: [maestro, playwright]` | end-of-sprint visual check |
-| `researcher.md` | `mcpServers: [context7]` | idea research |
-| `roadmap-researcher.md` | `mcpServers: [context7]` | roadmap research |
+| `shadow-verifier.md` | `mcpServers: [maestro, playwright]` | per-task Level 2 visual verification |
+| `shadow-sprint-verifier.md` | `mcpServers: [maestro, playwright]` | end-of-sprint visual check |
+| `shadow-researcher.md` | `mcpServers: [context7]` | idea research |
+| `shadow-roadmap-researcher.md` | `mcpServers: [context7]` | roadmap research |
 
 ## Steps
 

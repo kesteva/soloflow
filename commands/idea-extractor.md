@@ -107,7 +107,7 @@ The tool call blocks until the user responds to every question — do not procee
 
 If the user chose "Approve + Research":
 
-1. Spawn the **researcher** agent via the Agent tool with:
+1. Spawn the **shadow-researcher** agent via the Agent tool (`subagent_type: "shadow-researcher"`) with:
    - The approved idea file content
    - Instruction: "Research this idea. For each slice, search for existing libraries, best practices, API docs, and prior art. For each open question, attempt to find an external answer. For each low/medium-confidence assumption, search for evidence. Output a structured research report."
 2. Capture the researcher's output.

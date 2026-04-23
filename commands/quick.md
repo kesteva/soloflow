@@ -119,10 +119,10 @@ Read the executor's status report:
 
 ## Step 6: Spawn Verifier
 
-Use the Agent tool to spawn the **verifier** agent:
+Use the Agent tool to spawn the **shadow-verifier** agent:
 - Pass BOTH the plan file content AND the executor's status report
 - Prefix with: "Verify this completed task. The plan and executor report are below. Run all checks independently."
-- Set `subagent_type` to use the verifier agent
+- Set `subagent_type: "shadow-verifier"`
 
 Wait for the verifier's verdict.
 

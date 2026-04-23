@@ -205,25 +205,25 @@ Never run `claude mcp add` without the explicit user choice above — registerin
 
 ### Shadow-install visual verification agents (only if `visual_mobile` or `visual_web` is true)
 
-**Why this step exists — surface it clearly to the user.** Visual verification requires `verifier` and `sprint-verifier` to call `mcp__maestro__*` / `mcp__playwright__*` tools. Plugin-scoped subagents **cannot receive MCP tool bindings** in Claude Code, even when the agent frontmatter declares `mcpServers:` — the declaration is silently ignored for plugin agents. Without this shadow-install, every visual check would degrade to `skipped_unable`. This step is **mandatory** when visual verification is enabled; skip it only when the plugin root can't be resolved.
+**Why this step exists — surface it clearly to the user.** Visual verification requires `shadow-verifier` and `shadow-sprint-verifier` to call `mcp__maestro__*` / `mcp__playwright__*` tools. Plugin-scoped subagents **cannot receive MCP tool bindings** in Claude Code, even when the agent frontmatter declares `mcpServers:` — the declaration is silently ignored for plugin agents. The plugin therefore does not ship a plugin-resolvable `verifier` / `sprint-verifier`; these agents exist only under the `shadow-` prefix and are installed project-local at init. Without this shadow-install, no verifier is available at all and every visual check would degrade to `skipped_unable`. This step is **mandatory** when visual verification is enabled; skip it only when the plugin root can't be resolved.
 
 1. Invoke the shadow sync utility with the `visual` set:
    ```
    node "${CLAUDE_PLUGIN_ROOT}/scripts/init/shadow-agents.js" --mode sync --set visual
    ```
-   The script resolves the plugin root, copies `verifier.md` and `sprint-verifier.md` into `.claude/agents/`, and injects a version stamp into each shadow's frontmatter as a YAML comment (`# soloflow-shadow: version=X synced=Y`) at the top. The comment is invisible to Claude Code's YAML parser and to the LLM, but makes drift detectable later (by `/soloflow:sync-agents` or by `/soloflow:sprint`'s preflight).
+   The script resolves the plugin root, copies `shadow-verifier.md` and `shadow-sprint-verifier.md` into `.claude/agents/`, and injects a version stamp into each shadow's frontmatter as a YAML comment (`# soloflow-shadow: version=X synced=Y`) at the top. The comment is invisible to Claude Code's YAML parser and to the LLM, but makes drift detectable later (by `/soloflow:sync-agents` or by `/soloflow:sprint`'s preflight).
 
 2. Parse the JSON output. On success (empty `failed` array), set `visual_agents_status = "shadowed 2 agents"`. On failure (script exits non-zero or `CLAUDE_PLUGIN_ROOT` missing), set `visual_agents_status = "skipped_no_root"` and print: `⚠ Could not shadow-install visual verification agents. Every visual check will degrade to \`skipped_unable\` until this is resolved. Run /soloflow:sync-agents manually, or re-run /soloflow:init in a context where CLAUDE_PLUGIN_ROOT resolves.` Then continue to the next wizard section.
 
 3. Print an explicit callout — visual verification users need to understand what happened and why:
    ```
    ✓ Shadow-installed visual verification agents to .claude/agents/ (plugin v{plugin_version}):
-       verifier.md         — per-task Level 2 visual check (mcpServers: [maestro, playwright])
-       sprint-verifier.md  — end-of-sprint visual check    (mcpServers: [maestro, playwright])
+       shadow-verifier.md         — per-task Level 2 visual check (mcpServers: [maestro, playwright])
+       shadow-sprint-verifier.md  — end-of-sprint visual check    (mcpServers: [maestro, playwright])
 
    Why: plugin-scoped subagents cannot receive MCP tool bindings in Claude Code. Project-local ones do.
-   The shadows override the plugin versions whenever /soloflow:sprint spawns `verifier` or `sprint-verifier`,
-   which is how Maestro / Playwright tools actually reach the verification subagent session.
+   /soloflow:sprint spawns these by their shadow-* names, so the MCP tool bindings from .claude/agents/
+   reach the verification subagent session.
 
    The synced version is stamped into each shadow's frontmatter as a YAML comment at the top
    (`# soloflow-shadow: version=X synced=Y`). /soloflow:sprint's preflight will detect drift
@@ -257,9 +257,9 @@ Two Anthropic-published plugins can improve SoloFlow agent output when installed
      ```
 4. After a successful install, re-run the probe at step 1. If it still fails, print `ℹ context7 installed — restart Claude Code to load it in this session.` Do NOT retry.
 
-5. **Shadow-install research agents** — regardless of whether context7 is currently installed. Same plugin-binding limitation as the visual verification shadow: `researcher` and `roadmap-researcher` declare `mcpServers: [context7]`, which is ignored while they live in the plugin scope. Shadowing them now means if the user installs context7 later, the bindings will reach the subagent sessions without another init.
+5. **Shadow-install research agents** — regardless of whether context7 is currently installed. Same plugin-binding limitation as the visual verification shadow: the research agents declare `mcpServers: [context7]`, which is ignored while they live in the plugin scope. They therefore exist only as `shadow-researcher` / `shadow-roadmap-researcher` in the plugin and must be installed project-local. Shadowing them now means if the user installs context7 later, the bindings will reach the subagent sessions without another init.
    - Run: `node "${CLAUDE_PLUGIN_ROOT}/scripts/init/shadow-agents.js" --mode sync --set research`
-   - Parse the JSON output. On success: set `research_agents_status = "shadowed 2 agents"` and print `✓ Shadow-installed 2 research agents to .claude/agents/ (researcher, roadmap-researcher) — required for context7 tool bindings to reach these subagents. Version v{plugin_version} stamped into each shadow's frontmatter.`
+   - Parse the JSON output. On success: set `research_agents_status = "shadowed 2 agents"` and print `✓ Shadow-installed 2 research agents to .claude/agents/ (shadow-researcher, shadow-roadmap-researcher) — required for context7 tool bindings to reach these subagents. Version v{plugin_version} stamped into each shadow's frontmatter.`
    - On failure (script exits non-zero or `CLAUDE_PLUGIN_ROOT` missing): set `research_agents_status = "skipped_no_root"` and continue.
 
 **frontend-design** (plugin with skill) — gives the task-refiner and executor a distinctive UI design direction (aesthetic, typography, motion, spatial composition) for UI tasks.
@@ -434,7 +434,7 @@ Config: .soloflow/config.json {created|updated}
 Status line: {configured|already configured|skipped (user kept existing)|not configured}
 Allow list:  {added N safe commands|already up to date|skipped}
 Visual verification agents: {shadowed 2 agents (verifier, sprint-verifier)|not shadowed — visual verification disabled|skipped_no_root}
-Research agents:            {shadowed 2 agents (researcher, roadmap-researcher)|skipped_no_root}
+Research agents:            {shadowed 2 agents (shadow-researcher, shadow-roadmap-researcher)|skipped_no_root}
 
 {if any orphaned files:}
 Orphaned files (safe to remove manually):

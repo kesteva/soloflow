@@ -143,7 +143,7 @@ c. Handle executor result:
   - **STUCK** → write stuck report to `.soloflow/active/stuck/{epic}/TASK-{NNN}-stuck.md` (or flat if no epic), then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report <that path> --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`, continue.
   - **CONTEXT_LIMIT** → pass handoff to a fresh executor (up to resolved `limits.context_limit_respawn_max`). If exhausted, treat as STUCK. Same protocol as `commands/executor.md:135-141`.
 
-d. Spawn **verifier** with plan + executor report. Wait for verdict.
+d. Spawn the **shadow-verifier** (`subagent_type: "shadow-verifier"`) with plan + executor report. Wait for verdict.
 
 e. Handle verifier verdict:
   - **APPROVED** / **APPROVED_WITH_DEFERRED** → proceed to code review (step f). Deferred checks already queued in `human-review-queue.md` by the verifier.
@@ -179,7 +179,7 @@ h. **State commit happens inside `settle-task.js`** (invoked by each terminal ve
 
 ## Step 3.5: End-of-sprint verification
 
-Spawn the **sprint-verifier** agent with: sprint ID, base SHA (from `sprint.json`'s `run.base_sha`), the list of completed tasks with their plans and changed files, and the resolved visual verification config. Wait for its report.
+Spawn the **shadow-sprint-verifier** agent (`subagent_type: "shadow-sprint-verifier"`) with: sprint ID, base SHA (from `sprint.json`'s `run.base_sha`), the list of completed tasks with their plans and changed files, and the resolved visual verification config. Wait for its report.
 
 Handle the report:
 - Append any regressions (visual or integration) to `.soloflow/human-review-queue.md` with the failure details, evidence, and suspected responsible task.
