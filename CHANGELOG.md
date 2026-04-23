@@ -4,6 +4,11 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.8.10] - 2026-04-23
+
+### Fixed
+- **Sprint-initiator now surfaces unregistered Maestro/Playwright MCPs at preflight** instead of letting every verifier call silently degrade to `skipped_unable`. `scripts/sprint/probe-infra.js` previously inferred `maestro`/`playwright` requirements from plan keywords + integration-test targets only, which is narrower than the verifier's Level 2 decision gate (any UI file or UI-visible AC). When `verification.visual_mobile=true` or `visual_web=true`, the probe now adds the corresponding MCP to the required set regardless of plan content; missing entries carry a `(required by verification.visual_*=true)` reason suffix so the orchestrator can surface the registration gap before the sprint starts.
+
 ## [0.8.9] - 2026-04-22
 
 ### Changed
