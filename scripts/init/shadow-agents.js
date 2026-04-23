@@ -4,14 +4,17 @@
 // Shadow agent drift check and sync utility.
 //
 // Maintains project-local copies of MCP-dependent SoloFlow agents at
-// .claude/agents/*.md so `mcpServers:` frontmatter actually binds MCP tools
-// (plugin-scoped subagents have this field silently ignored). Each shadow
-// carries its own version stamp as a YAML comment at the top of its
-// frontmatter, e.g.:
+// .claude/agents/shadow-*.md so `mcpServers:` frontmatter actually binds
+// MCP tools (plugin-scoped subagents have this field silently ignored).
+// The shadow-* prefix is baked into the plugin file names and the agents'
+// `name:` frontmatter, so callers spawn `shadow-verifier` etc. explicitly —
+// no reliance on Claude Code's project/plugin precedence rule, which
+// empirically did not hold when names collided. Each shadow carries its
+// own version stamp as a YAML comment at the top of its frontmatter, e.g.:
 //
 //     ---
 //     # soloflow-shadow: version=0.8.10 synced=2026-04-23T19:48:32.011Z
-//     name: verifier
+//     name: shadow-verifier
 //     ...
 //     ---
 //
@@ -32,8 +35,8 @@
 //           Exit 1 if any copy failed.
 //
 // --set aliases (unions with any --agent entries):
-//   visual   → verifier.md, sprint-verifier.md
-//   research → researcher.md, roadmap-researcher.md
+//   visual   → shadow-verifier.md, shadow-sprint-verifier.md
+//   research → shadow-researcher.md, shadow-roadmap-researcher.md
 //   all      → all four (default when neither --set nor --agent is given)
 
 const fs = require('fs');
@@ -41,8 +44,8 @@ const path = require('path');
 const { parse, die } = require('../lib/args');
 
 const SHADOW_SETS = {
-  visual: ['verifier.md', 'sprint-verifier.md'],
-  research: ['researcher.md', 'roadmap-researcher.md'],
+  visual: ['shadow-verifier.md', 'shadow-sprint-verifier.md'],
+  research: ['shadow-researcher.md', 'shadow-roadmap-researcher.md'],
 };
 const ALL_SHADOWS = [...SHADOW_SETS.visual, ...SHADOW_SETS.research];
 

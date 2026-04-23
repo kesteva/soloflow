@@ -155,24 +155,25 @@ function main() {
   //
   // `claude mcp list` + `which` only confirm the MCP server is registered and
   // the CLI exists — they don't guarantee that `mcp__{server}__*` tool
-  // bindings reach the verifier subagent session. That propagation depends on
-  // the shadow agents at .claude/agents/verifier.md and sprint-verifier.md.
-  // Without current shadows, visual_mobile/visual_web=true silently degrades
-  // to `skipped_unable` on every task. Cross-check shadow state here so the
-  // sprint-initiator surfaces the gap up-front instead of letting it
-  // accumulate across a whole sprint.
+  // bindings reach the shadow-verifier subagent session. That propagation
+  // depends on the shadow agents at .claude/agents/shadow-verifier.md and
+  // shadow-sprint-verifier.md. Without current shadows,
+  // visual_mobile/visual_web=true silently degrades to `skipped_unable` on
+  // every task. Cross-check shadow state here so the sprint-initiator
+  // surfaces the gap up-front instead of letting it accumulate across a
+  // whole sprint.
   if (configDriven.has('maestro') || configDriven.has('playwright')) {
     let shadowState = null;
     try { shadowState = shadowAgents.check(); } catch { /* shadow module unavailable */ }
     if (shadowState) {
-      const visualSet = shadowState.shadows.filter((s) => s.name === 'verifier.md' || s.name === 'sprint-verifier.md');
+      const visualSet = shadowState.shadows.filter((s) => s.name === 'shadow-verifier.md' || s.name === 'shadow-sprint-verifier.md');
       const broken = visualSet.filter((s) => s.status !== 'current');
       if (broken.length > 0) {
         const brokenDesc = broken.map((s) => `${s.name}=${s.status}`).join(', ');
         for (const cat of ['maestro', 'playwright']) {
           if (!configDriven.has(cat)) continue;
           const configKey = cat === 'maestro' ? 'visual_mobile' : 'visual_web';
-          const shadowReason = `shadow agents not current (${brokenDesc}) — mcp__${cat}__* bindings will not reach verifier subagent session. Run /soloflow:sync-agents to install/update shadows. (required by verification.${configKey}=true)`;
+          const shadowReason = `shadow agents not current (${brokenDesc}) — mcp__${cat}__* bindings will not reach shadow-verifier subagent session. Run /soloflow:sync-agents to install/update shadows. (required by verification.${configKey}=true)`;
           const availIdx = available.indexOf(cat);
           if (availIdx >= 0) {
             available.splice(availIdx, 1);
