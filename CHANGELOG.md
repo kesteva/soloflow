@@ -4,6 +4,21 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.9.6] - 2026-04-24
+
+### Added
+- **`/soloflow:bugfix` mode** — new slash command for bug triage that routes through a read-only `bug-investigator` agent for root-cause analysis before handing off to the executor. `idea-extractor` now routes BUGFIX-typed ideas to `/bugfix` as the primary path. New `models.bug_investigator` config key (default: `opus`).
+- **Serial vs parallel execution prompt at sprint start.** `/soloflow:sprint` asks the user up front whether to run the batch serially or in parallel; the choice is persisted as `execution_mode` on `sprint.json` and honored throughout the run. `/soloflow:mad-max` derives its `execution_mode` from `limits.max_parallel_tasks` (1 → serial, >1 → parallel) so mad-max runs reflect the user's configured concurrency without an extra prompt.
+- **`VISUAL_VERIFY: skip` directive** in task plans is now honored by `shadow-verifier`, letting tasks opt out of visual verification when it doesn't apply (e.g., non-UI refactors, infra-only changes).
+
+### Changed
+- **`sprint-code-reviewer` writes findings directly to the sprint findings file.** The separate sprint-code-review accept/defer/dismiss triage step is gone — reviewer output lands in `SPRINT-NNN-findings.md` alongside executor/verifier findings and flows through the normal `/soloflow:review-queue` triage with everything else. Removes the `sprint_code_review` field from `close-gather` output and the dedicated triage prompts from `commands/sprint.md` and `commands/review-queue.md`.
+- **`compound-skeptic` verdict criteria** now include an **impact bar** alongside confidence, making it explicit whether a proposal is worth implementing even if it's correct (e.g., high-confidence but low-impact items get downgraded).
+- **Shadow agent templates moved out of `agents/`** into their own location so Claude Code doesn't surface them as first-class agents in the registry. Source-of-truth for `shadow-*.md` shadows is now separate from the regular agent definitions.
+
+### Fixed
+- **MCP tool access in shadow agent `tools:` allowlists.** `shadow-verifier` / `shadow-sprint-verifier` / `shadow-researcher` / `shadow-roadmap-researcher` now explicitly allowlist their MCP tool names in the `tools:` frontmatter field. Without the allowlist, Claude Code silently dropped the MCP bindings even when `mcpServers:` was declared, so shadow agents spawned without access to Playwright/Maestro MCP tools. `docs/ARCHITECTURE.md` now documents the `tools:` + `mcpServers:` dual requirement.
+
 ## [0.9.5] - 2026-04-24
 
 ### Added
