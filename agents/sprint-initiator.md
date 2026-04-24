@@ -126,6 +126,7 @@ Decisions:
     # empty list if no overrides
   remember_branch_choice: {true|false}
   skip_smoke: {true|false}
+  execution_mode: "serial" | "parallel"  # "parallel" tells downstream steps that per-task visual verification will be skipped
 ```
 
 ### Steps
@@ -147,11 +148,13 @@ Decisions:
        "sprint": {
          "id": "SPRINT-NNN",
          "status": "active",
-         "started": "{ISO timestamp}"
+         "started": "{ISO timestamp}",
+         "execution_mode": "serial" | "parallel"
        },
        "tasks": { /* selected tasks keyed by ID, each with status: "pending" */ }
      }
      ```
+     `execution_mode` is persisted so that checkpoint-resume paths (commands/sprint.md Step 0.5) recover the same mode without re-prompting. Downstream steps read it from `sprint.sprint.execution_mode`.
    - Write `backlog.json` (with the entries removed) and `sprint.json` (with the entries added). Both writes are required — Step 5's commit stages both paths.
 
 3.5. **Create per-sprint findings file.**
