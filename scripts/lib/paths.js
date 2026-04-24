@@ -15,8 +15,12 @@ function findingsFilePath(sprintId, cwd = process.cwd()) {
   return path.join(activeDir(cwd), 'findings', `${sprintId}-findings.md`);
 }
 
+function worktreesDir(cwd = process.cwd()) { return path.join(stateRoot(cwd), 'worktrees'); }
+function taskWorktreePath(cwd, taskId) { return path.join(worktreesDir(cwd), taskId); }
+
 module.exports = {
   stateRoot, activeDir, archiveDir,
   sprintJsonPath, backlogJsonPath, checkpointPath, reviewQueuePath,
   findingsFilePath,
+  worktreesDir, taskWorktreePath,
 };
