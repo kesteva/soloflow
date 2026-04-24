@@ -232,11 +232,9 @@ Decisions:
 
    a. **Probe plugin presence** via Bash (same pattern as `/soloflow:init` Step 4c):
       - `context7`: `claude mcp list 2>/dev/null | grep -qi context7`
-      - `frontend-design`: `claude plugin list 2>/dev/null | grep -qi frontend-design` (fallback: `ls ~/.claude/plugins 2>/dev/null | grep -qi frontend-design`)
 
    b. **Detect relevance in selected plans.** For each plan in `selected_task_ids`:
       - **context7 would help** if the plan's companion research report (`.soloflow/active/research/{IDEA-NNN}-research.md` if it exists) contains a `## Library Comparison` or `## API Documentation` section with any non-empty content. Check the `idea` frontmatter field to locate the report.
-      - **frontend-design would help** if the plan file contains a `## Design Direction` section with content (emitted by refiner for UI slices), OR the plan's `files_owned` includes paths matching `*.tsx`, `*.jsx`, `*.vue`, `*.svelte`, `*.css`, `*.scss`, or directories named `components/`, `screens/`, or `pages/`.
 
    c. **Emit hints** in the output's new `plugin_hints` field (see schema) only when both (absent AND would-help) are true. Omit when the plugin is present, or when no plan would benefit. Hints are advisory — the orchestrator surfaces them to the user but does NOT prompt, gate, or install anything.
 
@@ -294,7 +292,7 @@ infra_check:  # ALWAYS present (never null). Empty arrays if nothing required.
       fix: "{suggested install/fix command, never auto-run}"
 
 plugin_hints:   # see Step 6.6. Empty list when no plugin is both absent AND relevant. Advisory only.
-  - plugin: "context7"                              # "context7" | "frontend-design"
+  - plugin: "context7"                              # "context7"
     reason: "{one line — e.g., 'research reports cite library APIs but context7 is not installed'}"
     install: "/plugin install context7@anthropics"
 `` `
