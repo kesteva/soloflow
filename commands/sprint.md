@@ -416,12 +416,15 @@ completed_tasks:
   - ...
 ```
 
-Wait for its status report. The agent writes its findings to
-`.soloflow/active/sprint-code-review.md` — read that file directly; the
-returned status is just a summary of counts.
+Wait for its status report. The agent appends every finding directly to
+`.soloflow/active/findings/{sprint_id}-findings.md` (using `findings.js
+append`) and writes a counts-only summary to
+`.soloflow/active/sprint-code-review.md`. The user is **not** prompted to
+triage findings at sprint close — they are queued for the next
+`/soloflow:compound` run.
 
 Handle outcomes:
-- **REPORTED** → proceed to finding-to-queue conversion below.
+- **REPORTED** → proceed to commit below.
 - **CONTEXT_LIMIT** → read the `### Handoff` section. Spawn a **fresh
   sprint-code-reviewer** with the original inputs + "Continue review from
   previous reviewer's handoff: {handoff section}". Same respawn budget as
@@ -429,25 +432,17 @@ Handle outcomes:
 - Agent errors or times out → surface a warning and continue. Sprint-level
   code review is advisory — do NOT block sprint close.
 
-**Convert findings to human-review-queue entries.** Parse the Findings sections
-of `.soloflow/active/sprint-code-review.md`. For each finding, append via
-(map Critical→high, Important→medium, Minor→low):
-
-```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" append --entry-json \
-  '{"task":"SPRINT-NNN","type":"sprint_code_review","severity":"high|medium|low","finding":"{title}","location":"{file:line}","evidence":"{excerpt}","recommendation":"{action}","suspected_tasks":["TASK-NNN"],"status":"pending"}'
-```
-
-The script recomputes `pending_count` on each append.
-
 **Commit.** Run:
 ```
 node "${CLAUDE_PLUGIN_ROOT}/scripts/state/commit-atomic.js" \
     --message "chore(SPRINT-{NNN}): end-of-sprint code review" \
     --path .soloflow/active/sprint-code-review.md \
-    --path .soloflow/human-review-queue.md \
-    [--path .soloflow/active/findings/{sprint_id}-findings.md]  # only if the reviewer appended out-of-scope findings
+    --path .soloflow/active/findings/{sprint_id}-findings.md
 ```
+
+Both files are always written by the reviewer (the summary file even when
+zero findings are queued). `commit-atomic.js` skips silently if a path
+doesn't exist or nothing was staged.
 
 ## Step 3.7: Gather sprint close context
 
@@ -468,6 +463,7 @@ Using the gathered payload, present a consolidated review:
 - **Tasks needing human judgment** with notes (from `human_needed_tasks` and `review_queue.other_summaries`)
 - **Stuck tasks** with failure details and what was tried (from `stuck_tasks`)
 - **Sprint statistics:** `stats.completed_count`, `stats.stuck_count`, `stats.human_needed_count`, `stats.total_executor_loops`, `stats.total_code_review_rounds`
+- **Code review findings queued.** If `sprint_code_review.ran` is true, print one line: "Code review: {N} findings queued for next `/soloflow:compound`" where `N = sprint_code_review.findings_count.critical + .important + .minor`. If `N == 0`, print "Code review: clean (no findings)." If `sprint_code_review.ran` is false, omit the line.
 
 **Deferred verification.** If `review_queue.action_required` is non-empty, present entries grouped by action, sorted by severity (`high` first, then `medium`, then `low`). For each action, use **AskUserQuestion**: "[{SEVERITY}] Have you completed: {action}?" with options **Yes — re-verify now** / **Not yet — keep deferred** / **No longer needed — dismiss**. (`{SEVERITY}` comes from the gathered `review_queue.action_required[].severity` field.)
 
@@ -475,27 +471,10 @@ Using the gathered payload, present a consolidated review:
 - **Not yet:** Leave in the queue. The entry persists for the next session.
 - **Dismiss:** Run `review-queue.js remove --task TASK-NNN --type action_required` to drop the entry and recompute `pending_count`.
 
-**Sprint-level code review findings.** If `review_queue.sprint_code_review` is
-non-empty, present findings sorted by severity (`high` first, then `medium`,
-then `low`). For each finding, use **AskUserQuestion**: "[{SEVERITY}]
-{finding} — {recommendation}" with options **Accept — queue as finding** /
-**Defer — keep in queue** / **Dismiss — drop**.
-
-- **Accept:** Append the finding via:
-  ```
-  node "${CLAUDE_PLUGIN_ROOT}/scripts/state/findings.js" append \
-      --sprint {sprint_id} --fields-json '{"source":"SPRINT-NNN (sprint-code-reviewer)","type":"improvement","severity":"{queue entry severity}","status":"open","location":"{location}","description":"{finding} — {recommendation}","suggested_action":"{recommendation}","resolved_by":""}'
-  ```
-  Then drop the queue entry:
-  ```
-  node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" remove --task SPRINT-NNN --type sprint_code_review
-  ```
-  The compounder picks these up on the next `/soloflow:compound` run.
-
-- **Defer:** Leave the entry in `human-review-queue.md`. It persists for the
-  next session and can also be triaged via `/soloflow:review-queue`.
-
-- **Dismiss:** Run `review-queue.js remove --task SPRINT-NNN --type sprint_code_review`. No log is written — the finding is dropped.
+Sprint-level code-review findings are **not** triaged here — the
+sprint-code-reviewer wrote them straight to the active sprint's findings
+file and the next `/soloflow:compound` run will bucket them with full
+multi-sprint context (compound-skeptic provides a second pass).
 
 **PAUSE HERE.** The user's job is taste-level review — everything functional has already been verified.
 
