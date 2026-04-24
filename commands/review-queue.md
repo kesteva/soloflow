@@ -1,7 +1,7 @@
 ---
 description: Triage pending human-review items — resolve state cruft, complete deferred actions, run visual verification, and refine found issues into backlog tasks
 argument-hint: "[--skip-cruft | --actions-only | --visual-only]"
-allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
+allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion, mcp__maestro__*, mcp__playwright__*]
 ---
 
 # /soloflow:review-queue
@@ -207,10 +207,10 @@ If no items are accepted, skip to Step 5.
 1. Resolve visual-verification config:
    - Read `.soloflow/config.json` for `verification.visual_mobile` / `verification.visual_web`.
    - Fall back to `${CLAUDE_PLUGIN_ROOT}/config/defaults.yaml` if not set.
-2. For each enabled surface, probe:
-   - **Mobile:** `which maestro` via Bash. If found, probe for a booted device with `xcrun simctl list devices booted | grep -c Booted` and `adb devices | awk '$2=="device"' | wc -l`. If at least one device is booted, run `maestro hierarchy > /dev/null` as a live probe.
+2. For each enabled surface, probe and record the path (per `skills/visual-verify/SKILL.md` Path Selection — one decision per review run, never mix MCP and CLI):
+   - **Mobile:** try `mcp__maestro__list_devices` first. On success, record `mobile_path: "mcp"`. On failure, run `which maestro` via Bash; if found AND a device is booted (`xcrun simctl list devices booted | grep -c Booted` or `adb devices | awk '$2=="device"' | wc -l` returns ≥ 1), record `mobile_path: "cli"` and run `maestro hierarchy > /dev/null` as a live probe. Otherwise `mobile_path: null`.
    - **Web:** `which npx` via Bash. If found, attempt a light Playwright MCP navigation probe.
-3. Record `{mobile_available: bool, web_available: bool}`.
+3. Record `{mobile_available: bool, mobile_path: "mcp"|"cli"|null, web_available: bool}`.
 4. If both are unavailable, **do not abort**. Announce: "Visual verification tooling unavailable — stages will fall back to manual confirmation."
 
 ### 4c. Build the testing plan
@@ -257,7 +257,10 @@ For each stage in order:
      - {check 1}
    ```
 2. Run verification depending on surface + availability:
-   - **Mobile + Maestro available:** if `maestro_flow` is set, run `maestro test <path>` via Bash and parse exit status; else use the ephemeral-flow ad-hoc pattern from `skills/visual-verify/SKILL.md`. Prefer `maestro hierarchy` (~200–600 tokens plain text) over screenshot capture (`xcrun simctl io` / `adb exec-out` + `sips -Z 1400`, ~1600 tokens). Cap screenshots at 3 per stage. Serialize Maestro CLI calls — never run two in parallel against the same device.
+   - **Mobile + Maestro available:** stay on the `mobile_path` recorded in Step 4b.
+     - **MCP path (`mobile_path == "mcp"`):** if `maestro_flow` is set, call `mcp__maestro__run_flow_files(device_id, flow_files=[<path>])`; else compose inline YAML and call `mcp__maestro__run_flow(device_id, flow_yaml=<body>)`. Use `mcp__maestro__inspect_view_hierarchy` (CSV, ~50 tokens) for layout; `mcp__maestro__take_screenshot` only for visual appearance (cap 3 per stage).
+     - **CLI path (`mobile_path == "cli"`):** if `maestro_flow` is set, run `maestro test <path>` via Bash and parse exit status; else use the ephemeral-flow ad-hoc pattern from `skills/visual-verify/SKILL.md`. Prefer `maestro hierarchy` (~200–600 tokens plain text) over screenshot capture (`xcrun simctl io` / `adb exec-out` + `sips -Z 1400`, ~1600 tokens). Cap screenshots at 3 per stage.
+     - Never mix paths across stages — the mobile_path decision in 4b applies to every stage in this review run.
    - **Web + Playwright available:** navigate to the relevant URL; check element presence/content; one screenshot only if appearance is under review.
    - **Manual fallback:** skip programmatic verification. Note in the user prompt: "tooling unavailable — verify manually before choosing verdict."
 3. Prompt for verdict via `AskUserQuestion`:
@@ -487,7 +490,7 @@ Next steps:
 - **Never `git add .` or `-A`.** Every commit stages only explicit paths. Matches global atomic-commits policy.
 - **Skip commits silently** if the project is not a git repo or `.soloflow/` is gitignored.
 - **Atomic queue writes:** every modification to `.soloflow/human-review-queue.md` uses temp-file + rename so abort never leaves half-written content.
-- **Serialize Maestro CLI calls:** `maestro test` and `maestro hierarchy` hold a device lock; do not run two Maestro commands in parallel against the same device.
+- **Never mix Maestro MCP and CLI within one review run:** both bind port 7001. Pick one path at Step 4b and use it for every stage. Within the chosen path, also serialize against the same device — don't run two Maestro operations in parallel.
 - **Re-verify budget:** one respawn per re-verify on CONTEXT_LIMIT; one respawn total for the task-refiner.
 - **HUMAN_NEEDED entries** have no structured `blocked_checks`; the "Queue re-verify" option is omitted for them in Step 3b.
 - **Pagination:** bulk-classification prompts (Step 3a, 4a) paginate at 15 items / chunks of 12 to stay within AskUserQuestion's text budget.
