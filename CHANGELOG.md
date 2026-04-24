@@ -4,6 +4,11 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.9.4] - 2026-04-24
+
+### Changed
+- **Removed `frontend-design` skill references from SoloFlow agents and commands.** The skill is an external plugin and not part of the SoloFlow surface area. `task-refiner`, `executor`, `sprint-initiator`, and `/soloflow:init` no longer probe for or hint at it; consumers who want frontend-design should install and invoke it independently.
+
 ## [0.9.3] - 2026-04-23
 
 ### Changed
