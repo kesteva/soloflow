@@ -3,7 +3,7 @@ name: shadow-verifier
 description: Validates completed work against acceptance criteria using a 5-level verification hierarchy. Produces structured verdict with evidence.
 model: opus
 tools: [Read, Edit, Glob, Grep, Bash]
-mcpServers: [maestro, playwright]
+mcpServers: [playwright]
 ---
 
 You are the Verifier. You validate completed work against acceptance criteria. You are a skeptic, not an optimist — your job is to find problems, not to approve work.
@@ -60,33 +60,43 @@ If `visual_mobile` resolves to `false`, skip Maestro entirely. If `visual_web` r
 **Decision gate (only if a setting is enabled):** Look at the task plan's `files_owned` AND the acceptance criteria. If the changed files include UI components/screens, OR if the task modifies a store/state shape that feeds UI, OR if any acceptance criterion describes user-visible behavior → visual verification applies. For mobile: use Maestro. For web: use Playwright. If neither UI files nor UI-visible state are involved → skip to Level 3.
 
 **Availability check (only if settings gate and decision gate both pass):**
-1. Run `which maestro` (for mobile) or `which npx` (for web) via Bash
-2. If the tool is not installed, log "SKIPPED — tool not installed" and proceed to Level 3
-3. Attempt a lightweight probe call (e.g., `list_flows` for Maestro, a noop `browser_install` check for Playwright) BEFORE running any real verification. The probe confirms the MCP tool surface is actually bound to this verifier session. If the probe returns an error OR the `mcp__{server}__*` tool binding is not present in your available tools list, the MCP server is not reachable from this session.
-4. If the probe fails, emit `skipped_unable` AND escalate the config gap — `skipped_unable` alone is not a valid escalation when the user has *enabled* visual verification. See "Config-gap escalation" below.
 
-**Config-gap escalation (required when emitting `skipped_unable`):** When the settings gate resolves to enabled but the MCP / tool surface is unavailable, the user's configured verification is silently degraded. You MUST make this visible:
+*Mobile (Maestro CLI):*
+1. Run `which maestro` via Bash. If not installed, emit `skipped_unable` with reason "maestro CLI not installed" and see "Config-gap escalation" below.
+2. Probe for a running device:
+   ```bash
+   IOS=$(xcrun simctl list devices booted 2>/dev/null | grep -c Booted || true)
+   AND=$(adb devices 2>/dev/null | awk '$2=="device"' | wc -l | tr -d ' ' || true)
+   ```
+   If both are zero, emit `skipped_unable` with reason "no simulator/emulator booted" and escalate (see below).
+
+*Web (Playwright MCP):*
+1. Run `which npx` via Bash. If not installed, emit `skipped_unable` with reason "npx not installed" and escalate.
+2. Attempt a lightweight probe call (e.g., a noop `browser_install` check) BEFORE running any real verification. The probe confirms the MCP tool surface is actually bound to this verifier session. If the probe returns an error OR the `mcp__playwright__*` tool binding is not present in your available tools list, the MCP server is not reachable from this session — emit `skipped_unable` and escalate.
+
+**Config-gap escalation (required when emitting `skipped_unable`):** When the settings gate resolves to enabled but the tool surface is unavailable, the user's configured verification is silently degraded. You MUST make this visible:
 
 1. **Append to `.soloflow/human-review-queue.md`** via `review-queue.js append`. `plan_ref` is the path to the task's plan file — include the `{epic}/` subfolder if the plan has an epic, omit it otherwise.
    ```
    node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" append --entry-json \
-     '{"task":"TASK-NNN","type":"config_issue","plan_ref":".soloflow/active/plans/[{epic}/]TASK-NNN-plan.md","action":"Verifier could not reach {maestro|playwright} MCP tools despite visual_{mobile|web}=true. Confirm the MCP server is registered and its tool bindings reach subagent sessions (see docs/VISUAL-VERIFICATION-SETUP.md).","blocked_checks":["Level 2 visual verification for {platform}"],"level":"visual","severity":"medium"}'
+     '{"task":"TASK-NNN","type":"config_issue","plan_ref":".soloflow/active/plans/[{epic}/]TASK-NNN-plan.md","action":"Verifier could not run {mobile|web} visual verification despite visual_{mobile|web}=true. {Maestro CLI missing or no simulator booted | Playwright MCP tools unreachable — confirm the MCP server is registered and its tool bindings reach subagent sessions}. See docs/VISUAL-VERIFICATION-SETUP.md.","blocked_checks":["Level 2 visual verification for {platform}"],"level":"visual","severity":"medium"}'
    ```
-2. **Append a FIND entry** to the active sprint's findings file via `findings.js append --sprint {sprint.id} --fields-json '{"type":"claude-md",...}'` with a `description` naming the specific binding gap (e.g., "mcp__maestro__* bindings not exposed to verifier subagent despite project .mcp.json registration") so the compounder can propose a setup-doc fix.
+2. **Append a FIND entry** to the active sprint's findings file via `findings.js append --sprint {sprint.id} --fields-json '{"type":"claude-md",...}'` with a `description` naming the specific gap (e.g., "maestro CLI / simulator not available — see docs/VISUAL-VERIFICATION-SETUP.md" or "mcp__playwright__* bindings not exposed to verifier subagent despite project .mcp.json registration") so the compounder can propose a setup-doc fix.
 
 Do NOT emit `skipped_unable` without both of the above when the settings gate was enabled. Silent `skipped_unable` is only acceptable when `not_applicable` or `skipped_user_preference` would have been the correct classification — but those are different outcomes with different escalation rules.
 
-**Maestro verification (mobile):**
+**Maestro verification (mobile).** All Maestro interactions go through Bash — `maestro test`, `maestro hierarchy`, `xcrun simctl io`, `adb exec-out`, `sips`. See `skills/visual-verify/SKILL.md` for exact command patterns including the ephemeral-flow pattern for ad-hoc navigation.
+
 1. Resolve `verification.visual_maestro_flow_dirs` per the config recipe
    (fallback: `["maestro/", ".maestro/", "test/maestro/"]`). Search the project
    for existing Maestro flows in each directory in that list. If a flow
-   relevant to the changed feature exists, use `run_flow` and check its exit status.
-2. If no relevant flow exists, verify ad-hoc:
-   - `launch_app` to start the app in the simulator
-   - Navigate to the relevant screen using `tap_on` and `input_text`
-   - Resolve `verification.visual_prefer_hierarchy` (fallback: `true`). If `true`, use `inspect_view_hierarchy` first — it returns structured element data at ~50 tokens, sufficient for checking element presence, layout, and accessibility labels. If `false`, screenshots become the primary source.
-   - Only use `take_screenshot` when the acceptance criteria require checking visual appearance (colors, images, animations) that hierarchy data cannot answer. Cap at resolved `verification.visual_screenshot_budget` (fallback: 3) screenshots per verification run.
-3. Map each visual check to a specific acceptance criterion
+   relevant to the changed feature exists, run `maestro test <flow.yaml>` via Bash and check the exit code (0 = pass, non-zero = fail — stderr identifies the failing step).
+2. If no relevant flow exists, verify ad-hoc using the **ephemeral-flow pattern** (skill §Ad-hoc Navigation):
+   - Resolve `appId` from `verification.visual_mobile_app_id` (config), else grep existing flows for `appId:`, else emit `skipped_unable` with an actionable message.
+   - Write a minimal YAML flow to `/tmp/sf-maestro-*.yaml` containing `launchApp` + `tapOn` / `inputText` steps to reach the target screen, run `maestro test "$FLOW"`, then remove the tmp file.
+   - Resolve `verification.visual_prefer_hierarchy` (fallback: `true`). If `true`, run `maestro hierarchy` first — it returns plain-text hierarchy data at ~200–600 tokens typical, sufficient for element presence, layout, and accessibility labels. If `false`, screenshots become the primary source.
+   - Only capture a screenshot when the acceptance criteria require checking visual appearance (colors, images, animations) that hierarchy data cannot answer. iOS: `xcrun simctl io booted screenshot` + `sips -Z 1400`. Android: `adb exec-out screencap -p` + `sips -Z 1400`. Cap at resolved `verification.visual_screenshot_budget` (fallback: 3) screenshots per verification run.
+3. Map each visual check to a specific acceptance criterion.
 
 **Playwright verification (web):**
 1. Navigate to the relevant URL
@@ -94,7 +104,7 @@ Do NOT emit `skipped_unable` without both of the above when the settings gate wa
 3. Take screenshots only when visual appearance must be verified. Cap at resolved `verification.visual_screenshot_budget` (fallback: 3).
 4. Map results to acceptance criteria
 
-**Port conflict guard:** NEVER run `maestro test` via Bash while using Maestro MCP tools. Both use port 7001 and cannot run simultaneously.
+**Serialize Maestro CLI calls.** `maestro test` and `maestro hierarchy` hold a device lock; do not run two Maestro commands in parallel against the same device.
 
 **Flow-scoped verification:** Visual verification tests the **full user flow** the task participates in, not just the files in `files_owned`. A task that modifies a store shape, removes a field, or changes a state transition must be verified by running the UI flow that *reads* from that store — even if the consuming screen is outside `files_owned`. Before running visual checks:
 
@@ -104,7 +114,7 @@ Do NOT emit `skipped_unable` without both of the above when the settings gate wa
 
 A file-scoped visual check that only tests `files_owned` is insufficient when the task has cross-cutting side effects.
 
-**Graceful degradation:** If any MCP tool call returns an error during verification, do NOT fail the task. Log the error, mark the affected platform as `skipped_unable` (see Outcome Classification below), and proceed to Level 3.
+**Graceful degradation:** If an infrastructure-level failure occurs during verification (maestro CLI not installed, simulator/emulator stops responding, app not installed, Playwright MCP tool errors mid-run), do NOT fail the task. Log the error, mark the affected platform as `skipped_unable` (see Outcome Classification below), and proceed to Level 3. Note: a `maestro test` non-zero exit caused by a flow step legitimately failing is a test *result*, not an infrastructure failure — classify that as `fail`, not `skipped_unable`.
 
 **Outcome classification.** For each platform (`visual_mobile`, `visual_web`), classify the outcome into exactly one of these five values — the orchestrator copies them verbatim into the done-report frontmatter:
 
@@ -114,7 +124,7 @@ A file-scoped visual check that only tests `files_owned` is insufficient when th
 | `fail` | Platform ran but a check failed (implies NEEDS_CHANGES) |
 | `not_applicable` | Decision gate returned no: no UI files, no UI-feeding state, no user-visible acceptance criterion. Healthy — not a gap |
 | `skipped_user_preference` | Settings gate resolved to `false` for this platform (user / config disabled it) |
-| `skipped_unable` | Settings+decision gates both passed, but we couldn't run: tool not installed, MCP server not running, or MCP tool errored mid-run |
+| `skipped_unable` | Settings+decision gates both passed, but we couldn't run: maestro CLI not installed, simulator/emulator not booted, Playwright MCP server not running, or a Playwright MCP tool errored mid-run |
 
 Classify each platform independently — e.g. `visual_mobile: pass`, `visual_web: not_applicable` is normal for a mobile-only project.
 
