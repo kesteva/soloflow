@@ -104,7 +104,7 @@ These settings control the **per-task** reviewer that runs inside the executor l
 |---|---|---|
 | `sprint_code_review.enabled` | `true` | Spawn the end-of-sprint aggregate reviewer after sprint-verifier, before close |
 
-The sprint-level reviewer runs **once per sprint** against `base_sha..HEAD`, specifically hunting cross-task patterns (duplicated utilities, inconsistent patterns, redundant helpers). Findings **never trigger re-execution** — they land in `.soloflow/human-review-queue.md` as `type: sprint_code_review` entries and are triaged during end-of-sprint human review with Accept / Defer / Dismiss. Accepted findings append to the active sprint's findings file (`.soloflow/active/findings/{sprint.id}-findings.md`) for the compounder to pick up.
+The sprint-level reviewer runs **once per sprint** against `base_sha..HEAD`, specifically hunting cross-task patterns (duplicated utilities, inconsistent patterns, redundant helpers). Findings **never trigger re-execution** — they are appended directly to the active sprint's findings file (`.soloflow/active/findings/{sprint.id}-findings.md`) and consumed by the next `/soloflow:compound` run (which buckets them into clean-ups, backlog tasks, or CLAUDE.md improvements with compound-skeptic as a second pass). Sprint close prints a single status line ("Code review: N findings queued for next /soloflow:compound") rather than prompting the user to triage each finding inline.
 
 `sprint_code_review.enabled` resolves independently from `code_review.enabled` — you can disable the per-task loop and keep the sprint-level safety net, or vice versa.
 

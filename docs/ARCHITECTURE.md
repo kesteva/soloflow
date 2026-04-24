@@ -166,7 +166,7 @@ Multi-layered verification, in order of authority:
 3. **Requirements adherence** — each acceptance criterion checked with concrete evidence
 4. **Goal-backward** — "What must be TRUE for production?"
 5. **Per-task code review** — inline quality/reuse + security audit by the code-reviewer agent against the task's changed files. Can send the executor back with `IMPROVEMENTS_NEEDED`. Toggle: `code_review.enabled`; retry budget: `code_review.review_retry_max`.
-6. **Sprint-level code review** — inline quality/reuse + security assessment across `base_sha..HEAD` plus a cross-task redundancy sweep. **Advisory only** — findings go to human review (accept → active sprint's findings file / defer / dismiss), never back to execution. Toggle: `sprint_code_review.enabled` (resolves independently from `code_review.enabled`).
+6. **Sprint-level code review** — inline quality/reuse + security assessment across `base_sha..HEAD` plus a cross-task redundancy sweep. **Advisory only** — findings are appended directly to the active sprint's findings file and consumed by the next `/soloflow:compound` run (the user is not prompted to triage them at sprint close). Never feeds back into execution. Toggle: `sprint_code_review.enabled` (resolves independently from `code_review.enabled`).
 
 **Visual verification runtime.** The verifier checks tool availability (`which maestro` + booted-device probe for mobile, `which npx` + Playwright MCP probe for web) before attempting verification; if tools aren't installed, no device is booted, or the Playwright MCP server isn't running, Level 2 is skipped gracefully.
 

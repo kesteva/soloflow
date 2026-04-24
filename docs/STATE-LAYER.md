@@ -69,11 +69,11 @@ next_id() {
 
 ## Findings queue (per-sprint)
 
-Executor / verifier / code-reviewer agents append entries to the active sprint's findings file (`.soloflow/active/findings/{sprint.id}-findings.md`, resolved from `sprint.json`) whenever they notice something out of scope for their current task (a bug elsewhere, stale docs, a CLAUDE.md gap). They never expand scope to fix it.
+Executor / verifier / code-reviewer / **sprint-code-reviewer** agents append entries to the active sprint's findings file (`.soloflow/active/findings/{sprint.id}-findings.md`, resolved from `sprint.json`) whenever they notice something out of scope for their current task (a bug elsewhere, stale docs, a CLAUDE.md gap). They never expand scope to fix it. Sprint-code-reviewer findings (cross-task duplication, redundancy, security drift) flow here as well — they are not routed through `human-review-queue.md` and the user is not prompted to triage them at sprint close.
 
 The compounder consumes the sprint's findings file at learning time and uses it as the primary seed for clean-up, backlog, and CLAUDE.md proposals; the file is archived to `archive/findings/` only after that sprint is compounded. Findings files are always per-sprint — merging across sprints happens only at compounder invocation when `/soloflow:compound` batches multiple pending sprints, and each findings file still archives individually to `archive/findings/SPRINT-NNN-findings.md`.
 
-**Legacy:** projects that predate the per-sprint layout may still have a single `active/findings.md`; it is migrated automatically by sprint-initiator (or concatenated into the next compound run by `/soloflow:compound`).
+**Legacy:** projects that predate the per-sprint layout may still have a single `active/findings.md`; it is migrated automatically by sprint-initiator (or concatenated into the next compound run by `/soloflow:compound`). Projects that predate the direct-to-findings sprint-code-reviewer may also have leftover `type: sprint_code_review` entries in `human-review-queue.md`; those are deprecated and surfaced by `/soloflow:review-queue` Step 7 with a one-shot cleanup command.
 
 ## Epics
 

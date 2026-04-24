@@ -39,7 +39,7 @@ The script performs all the bookkeeping this phase used to encode in prose:
 - Sums `executor_loops` and `code_review_rounds` across the sprint's reports.
 - Rolls up per-task visual-coverage enums and sprint-level visual-coverage from `.soloflow/active/sprint-verification.md`.
 - Extracts sprint-code-reviewer counts from `.soloflow/active/sprint-code-review.md`.
-- Parses `.soloflow/human-review-queue.md`, groups `action_required` entries by action (max severity), and keeps `sprint_code_review` entries as standalone findings.
+- Parses `.soloflow/human-review-queue.md` and groups `action_required` entries by action (max severity). Sprint-code-reviewer findings are no longer routed through the queue — they live directly in the active sprint's findings file for the compounder, and the gather payload exposes only counts via the top-level `sprint_code_review` block.
 - Detects compound-proposal drafts in `active/compound/` (plus legacy `COMPOUND-PROPOSAL.md`), normalizes `sprints:` membership, and computes archive paths by the span rule.
 - Reconciles findings by reading each done report's `**Findings resolved:**` line and flagging FIND IDs still `status: open` in the findings file.
 - Resolves `git.merge_strategy` via the config recipe (fallback `--no-ff`).
@@ -109,14 +109,6 @@ review_queue:
       blocked_checks: ["{check1}", ...]
       task_ids: [TASK-NNN, ...]
     # empty list if none
-  sprint_code_review:
-    - task: "SPRINT-NNN"
-      severity: "{low|medium|high}"
-      finding: "{title}"
-      location: "{file:line}"
-      recommendation: "{action}"
-      suspected_tasks: [TASK-NNN, ...]
-    # empty list if none
   other_count: {N}
   other_summaries: ["{brief1}", ...]
 
@@ -124,7 +116,7 @@ sprint_code_review:
   ran: {true|false}           # false if .soloflow/active/sprint-code-review.md was missing
   ran_simplify: {true|false}
   ran_security_review: {true|false}
-  findings_count:
+  findings_count:                 # findings are queued in the active sprint's findings file for the compounder
     critical: {N}
     important: {N}
     minor: {N}
