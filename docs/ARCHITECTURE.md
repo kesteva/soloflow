@@ -74,6 +74,7 @@ SoloFlow is a set of Claude Code hooks, agent definitions, slash commands, and s
 - **Input:** Approved plan files
 - **Output:** Code changes (committed), done reports in `.soloflow/archive/done/`
 - **Loop:** Executor implements → verifier checks → retry up to 3 times if NEEDS_CHANGES → stuck report if still failing
+- **Parallel batches:** Step 3 picks up to `limits.max_parallel_tasks` (default 3) ready tasks whose `files_owned` are disjoint and runs each phase in parallel across them. Each parallel task gets its own git worktree under `.soloflow/worktrees/TASK-NNN/`; the orchestrator fast-forward-merges the task branch back to the run branch after its pipeline completes. Set `limits.max_parallel_tasks: 1` to disable (strict serial). See [`CUSTOMIZATION.md`](./CUSTOMIZATION.md#parallel-task-execution).
 - **Human touchpoint:** Items marked HUMAN_NEEDED are queued for review
 
 ### Phase 4: Human Review

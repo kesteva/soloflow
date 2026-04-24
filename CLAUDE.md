@@ -14,6 +14,8 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the phase workflow, hook 
 
 **Subagents cannot spawn subagents.** Orchestration runs in the main session (`/soloflow:sprint`, `/soloflow:compound`, etc.); executors, verifiers, reviewers, and all other agent definitions are leaf nodes only.
 
+**Parallel task loops share a per-task worktree.** When `/soloflow:sprint` or `/soloflow:mad-max` runs multiple non-conflicting tasks concurrently (governed by `limits.max_parallel_tasks`), the orchestrator creates a short-lived git worktree per task at `.soloflow/worktrees/TASK-NNN/` and injects `WORKTREE_ROOT: <abs path>` into every subagent prompt for that task. Subagents must honor the directive (see each agent's "Working directory" section). Merge-back + `settle-task.js` run sequentially from the main worktree.
+
 **Context-limit handoffs.** `hooks/statusline.js` writes context metrics to a bridge file; `hooks/context-monitor.js` (PostToolUse) reads it and injects WARNING (≤35% remaining) / CRITICAL (≤25%) into the agent conversation.
 
 - **Subagents** respond to CRITICAL by committing in-progress work and reporting `CONTEXT_LIMIT` status with an inline `### Handoff` section. The orchestrator spawns a fresh agent with the handoff context (up to `context_limit_respawn_max`, default 3).

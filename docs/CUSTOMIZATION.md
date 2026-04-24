@@ -86,6 +86,7 @@ Valid values: `opus`, `sonnet`, `haiku`. Callsites that spawn these agents via t
 | `limits.checkpoint_interval` | 3 | Tasks between progress checkpoints |
 | `limits.max_sprint_tasks` | 10 | Maximum tasks in a single execution sprint |
 | `limits.context_limit_respawn_max` | 3 | Max context-limit respawns per agent per task |
+| `limits.max_parallel_tasks` | 3 | Max task pipelines executed concurrently per batch when `files_owned` doesn't overlap. `1` disables parallel mode (strict serial). See "Parallel task execution" below. |
 
 ### Code review
 
@@ -167,6 +168,21 @@ When `git.branch_per_run` is `prompt`, `/soloflow:sprint` asks at the start of e
 ### Paths (informational — not user-editable)
 
 `paths.*` keys in `defaults.yaml` are referenced as hardcoded literals throughout the codebase. They exist for documentation and are **not** overridable via `.soloflow/config.json` — `/soloflow:config` does not surface them.
+
+## Parallel task execution
+
+When `/soloflow:sprint` and `/soloflow:mad-max` run, Step 3 picks a **batch** of up to `limits.max_parallel_tasks` ready tasks whose `files_owned` sets do not overlap and runs each phase of the per-task loop (executor → verifier → code-reviewer → test-writer) as one parallel Agent call across every task in the batch.
+
+Each task gets a dedicated short-lived git worktree at `.soloflow/worktrees/TASK-NNN/` on branch `{run-branch}-TASK-NNN`. The executor and downstream agents operate inside that worktree (instructed via a `WORKTREE_ROOT:` prompt prefix), so each task commits only to its own branch — no git-index races between siblings.
+
+When a task's full pipeline finishes, the orchestrator fast-forward-merges its branch into the run branch from the main worktree and then removes the worktree. If the run branch has advanced (because a sibling merged first), a non-ff merge is used instead — safe because the `files_owned` gate guarantees disjoint file sets. A merge conflict (which would indicate a `files_owned` mis-declaration) preserves the worktree on disk for human inspection and marks the task as `human_needed`.
+
+**Kill switch.** Set `limits.max_parallel_tasks: 1` in `.soloflow/config.json` to disable parallel mode — every batch becomes a single-task pipeline executed directly on the run branch with no worktree overhead. This reproduces the pre-parallel serial behavior exactly.
+
+Scope:
+- Applies to `/soloflow:sprint` and `/soloflow:mad-max`.
+- Does **not** apply to `/soloflow:quick` (single-task path by construction).
+- Tasks with empty `files_owned` always run solo (cannot be proven safe to pair).
 
 ## Adding Maestro flows
 
