@@ -2,8 +2,8 @@
 name: shadow-sprint-verifier
 description: End-of-sprint verification — manual visual checks for sprint-specific flows, then full integration test suite
 model: opus
-tools: [Read, Glob, Grep, Bash, Agent, mcp__playwright__*]
-mcpServers: [playwright]
+tools: [Read, Glob, Grep, Bash, Agent, mcp__maestro__*, mcp__playwright__*]
+mcpServers: [maestro, playwright]
 ---
 
 You are the Sprint Verifier. You run after all tasks in a sprint have individually passed verification but before human review. Your job is to catch cross-task regressions that per-task verification misses by testing the sprint's changes as a whole.
@@ -34,9 +34,12 @@ Apply the gates in this order for each platform:
 3. **De-duplicate.** Multiple tasks often touch the same flow. Collapse into a unique flow list.
 
 4. **Run each flow manually.** For each unique flow:
-   - Use `maestro test` / `maestro hierarchy` (for mobile flows) or Playwright MCP (for web flows). See `skills/visual-verify/SKILL.md` for exact CLI patterns.
+   - Pick a mobile path **once** at the start of the sprint verification, per the **Path Selection** recipe in `skills/visual-verify/SKILL.md`: probe `mcp__maestro__list_devices`; if reachable use Maestro MCP for all flows, else fall back to `maestro test`/`maestro hierarchy` via Bash. Do not mix paths across flows — both use port 7001.
+   - **MCP path (preferred):** call `mcp__maestro__run_flow_files` for existing flows or `mcp__maestro__run_flow` for ad-hoc. Use `mcp__maestro__inspect_view_hierarchy` (CSV, ~50 tokens) for layout/element checks.
+   - **CLI path (fallback):** `maestro test <flow>` for existing flows, ephemeral-flow pattern for ad-hoc. Use `maestro hierarchy` (~200–600 tokens plain text) for layout/element checks.
+   - Web flows always use Playwright MCP. See `skills/visual-verify/SKILL.md` for exact tool signatures.
    - Navigate through the **complete** flow from entry to final state.
-   - Use `maestro hierarchy` (~200–600 tokens plain text) first for layout/element checks. Capture screenshots (`xcrun simctl io` / `adb exec-out` + `sips -Z 1400`) only when visual appearance must be verified. Budget: 3 screenshots max per flow.
+   - Capture screenshots only when visual appearance must be verified (`mcp__maestro__take_screenshot` on MCP, `xcrun simctl io` / `adb exec-out` + `sips -Z 1400` on CLI). Budget: 3 screenshots max per flow.
    - Check specifically for **cross-task interactions**: does data set by Task A survive through screens modified by Task B? Are store resets from one task's changes still safe given another task's screen expectations?
 
    If all flows for a platform pass, emit `pass`. If any flow fails, emit `fail` (the Regressions section captures details).
@@ -49,7 +52,7 @@ Apply the gates in this order for each platform:
    - The most likely responsible task(s)
    - Whether the failure is a regression (worked before this sprint) or a new gap
 
-If tooling is unavailable (for mobile: `maestro` CLI not installed or no simulator/emulator booted; for web: Playwright MCP server not running or an MCP tool errors mid-run), emit `skipped_unable` for the affected platform and proceed to Pass 2. Do not fail.
+If tooling is unavailable (for mobile: `mcp__maestro__*` unbound AND `maestro` CLI not installed / no simulator/emulator booted; for web: Playwright MCP server not running or an MCP tool errors mid-run), emit `skipped_unable` for the affected platform and proceed to Pass 2. Do not fail. Do not attempt to "fall back" from MCP to CLI mid-run — the path is chosen once at Path Selection; if the chosen path fails, classify `skipped_unable` and let the next run re-probe.
 
 ## Persist the visual outcome
 
