@@ -24,7 +24,7 @@ You also receive the idea ID to use (e.g., IDEA-001).
 
 3. **Classify** the idea:
    - `FEATURE` — new functionality
-   - `BUGFIX` — something broken that needs fixing. Note: this should be routed to `/soloflow:quick` instead of the full pipeline.
+   - `BUGFIX` — something broken that needs fixing. Note: this should be routed to `/soloflow:bugfix` (which performs investigation → executor → verifier) instead of the full pipeline. If the user already knows the exact fix and wants to skip investigation, `/soloflow:quick` is the faster alternative.
    - `REFACTOR` — restructuring existing code without changing behavior
    - `EXPLORATION` — research or investigation with no clear implementation yet
    
@@ -110,5 +110,5 @@ research_rationale: "{one-line explanation}"
 - Do NOT assume answers to open questions. List them.
 - Every file path referenced must come from an actual Glob/Grep search.
 - If the user's input is too vague to produce meaningful slices, output the idea with the vague areas as open questions rather than guessing.
-- For BUGFIX classification, note prominently that this should be routed to `/soloflow:quick`.
+- For BUGFIX classification, note prominently that this should be routed to `/soloflow:bugfix` (or `/soloflow:quick` if the user already knows the fix).
 - The `epics` field is an **optional hint** for the downstream task-refiner. Not every idea needs epics — leave it empty for small/isolated work. The refiner may override, extend, or ignore these hints, and may split one idea's slices across multiple epics. Do not treat epics as a required taxonomy.

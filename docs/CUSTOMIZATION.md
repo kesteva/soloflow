@@ -51,6 +51,7 @@ All settings below live in `config/defaults.yaml` and are runtime-overridable. `
 | `models.executor` | `sonnet` | `agents/executor.md` |
 | `models.idea_extractor` | `sonnet` | `agents/idea-extractor.md` |
 | `models.task_refiner` | `opus` | `agents/task-refiner.md` |
+| `models.bug_investigator` | `opus` | `agents/bug-investigator.md` |
 | `models.compounder` | `sonnet` | `agents/compounder.md` |
 | `models.researcher` | `sonnet` | `agents/shadow-researcher.md` |
 | `models.code_reviewer` | `opus` | `agents/code-reviewer.md` |
