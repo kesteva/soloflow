@@ -25,6 +25,7 @@ Mad-max spawns the same agents as `/soloflow:sprint`. Keys consumed:
 - `models.sprint_initiator` / `models.executor` / `models.test_writer` / `models.sprint_closer` (fallback: `sonnet`)
 - `models.verifier` / `models.code_reviewer` / `models.sprint_verifier` (fallback: `opus`)
 - `limits.executor_retry_max` / `limits.checkpoint_interval` / `limits.context_limit_respawn_max` (fallbacks: 3)
+- `limits.max_parallel_tasks` (fallback: 3) — controls how many task pipelines run concurrently per batch. `1` disables parallel mode.
 
 Mad-max intentionally ignores `limits.max_sprint_tasks` — it drains every ready task, not a capped sprint. Reuse the cached values across respawns.
 
@@ -122,56 +123,15 @@ Rationale: mad-max is unattended, so missing infra = silently skipped tests = ex
 
 ## Step 3: Execute the per-task loop
 
-Mirror `commands/executor.md` Step 3 exactly. The **only** behavioral delta for mad-max:
+Mirror `commands/sprint.md` Step 3 exactly — including the batching wrapper (build-batch.js + worktree setup/merge) and the Per-Task Pipeline. The **only** behavioral deltas for mad-max:
 
-- **No new early stops.** All terminal statuses (`STUCK`, `HUMAN_NEEDED`, `BLOCKED`) write their report / queue entry / `sprint.json` update and continue to the next ready task.
-- **No interactive checkpoint surfacing.** Checkpoints still get written every `checkpoint_interval` completed tasks (Step 3.g) for crash recovery, but mad-max never prompts about them during the run.
+- **No new early stops.** All terminal statuses (`STUCK`, `HUMAN_NEEDED`, `BLOCKED`, `merge-conflict`) write their report / queue entry / `sprint.json` update and continue to the next ready task.
+- **No interactive checkpoint surfacing.** Checkpoints still get written every `checkpoint_interval` completed tasks (pipeline step g) for crash recovery, but mad-max never prompts about them during the run.
+- **Always use the cached `limits.max_parallel_tasks` resolved above.** Mad-max does not override it — users who want strictly-serial runs set `limits.max_parallel_tasks: 1` in `.soloflow/config.json`.
 
-Concretely, for each ready task (dependencies satisfied):
+Refer to `commands/sprint.md` Step 3 for the full procedure: Parallelism cap → build dependency graph → pick batch → SERIAL MODE (single task, no worktree) or PARALLEL MODE (N ≥ 2 tasks, one worktree per task, batched parallel Agent calls per phase, sequential merge-back + settle from the main worktree) → Per-Task Pipeline definition (lettered steps a, a2, b, c, d, e, f, f2, f3, g, h).
 
-Initialize per-task counters in working memory: `executor_loops = 0` (incremented in step e on `NEEDS_CHANGES` retry) and `code_review_rounds = 0` (incremented in step f on `IMPROVEMENTS_NEEDED` retry). Both are written into the done-report frontmatter at step f3. CONTEXT_LIMIT respawns and `IMPROVEMENTS_NEEDED` re-verifies do not count toward `executor_loops`.
-
-a. Set task status to in_progress: `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/update-task-status.js" TASK-{NNN} in_progress`.
-
-a2. **Locate the plan file** via `.soloflow/active/plans/**/TASK-{NNN}-plan.md` (matches nested epic folders and flat orphan paths; excludes `EPIC-*.md`). Read the plan's `epic` frontmatter field — this determines where downstream reports go.
-
-b. Spawn **executor** agent with the plan content. Wait for result.
-
-c. Handle executor result:
-  - **COMPLETED** → proceed to verification.
-  - **BLOCKED** → run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} blocked --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`, continue to next task.
-  - **STUCK** → write stuck report to `.soloflow/active/stuck/{epic}/TASK-{NNN}-stuck.md` (or flat if no epic), then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report <that path> --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`, continue.
-  - **CONTEXT_LIMIT** → pass handoff to a fresh executor (up to resolved `limits.context_limit_respawn_max`). If exhausted, treat as STUCK. Same protocol as `commands/executor.md:135-141`.
-
-d. Spawn the **shadow-verifier** (`subagent_type: "shadow-verifier"`) with plan + executor report. Wait for verdict.
-
-e. Handle verifier verdict:
-  - **APPROVED** / **APPROVED_WITH_DEFERRED** → proceed to code review (step f). Deferred checks already queued in `human-review-queue.md` by the verifier.
-  - **NEEDS_CHANGES** → if `executor_loops < resolved limits.executor_retry_max`, increment `executor_loops` and re-spawn executor with verifier feedback. Otherwise write stuck report (same path rule as step c's STUCK) and run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} stuck --stuck-report <that path> --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`, continue to next task.
-  - **HUMAN_NEEDED** → append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`, continue.
-  - **CONTEXT_LIMIT** → respawn with handoff (same budget).
-
-f. **Code review.** Resolve `code_review.enabled` per the recipe in
-   [docs/CUSTOMIZATION.md#config-resolution](../docs/CUSTOMIZATION.md)
-   (fallback: `true`). If `false`, skip this entire step — treat the task as
-   CLEAN and go to f2. Otherwise:
-
-   Spawn **code-reviewer** with the plan + executor's changed files list. Wait for verdict.
-  - **CLEAN** → proceed to step f2.
-  - **IMPROVEMENTS_NEEDED** → increment `code_review_rounds`, re-spawn executor with review feedback, then re-verify. Does not consume executor retry budget. Loop up to resolved `code_review.review_retry_max` (fallback: 1) rounds, then accept remaining findings as minor and proceed.
-  - **SECURITY_ISSUE** → append entry to `.soloflow/human-review-queue.md`, then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`, continue.
-  - **CONTEXT_LIMIT** → respawn with handoff.
-
-f2. **Test writing.** Spawn the **test-writer** agent with the plan, executor's changed files, and code-reviewer's report. Wait for result.
-  - **TESTS_WRITTEN** → run the project's test suite via Bash. If the new tests pass, proceed. If they fail, re-spawn test-writer with failure output (one retry). If still failing, log a finding to `.soloflow/active/findings/{sprint_id}-findings.md` and proceed.
-  - **NO_TESTS_NEEDED** / **NO_TEST_INFRA** → proceed.
-  - **CONTEXT_LIMIT** → respawn with handoff.
-
-f3. Write done report to `.soloflow/archive/done/{epic}/TASK-{NNN}-done.md` (or flat) using the frontmatter spec defined in `commands/executor.md` step f3 — populate `executor_loops` and `code_review_rounds` from the per-task counters tracked above, and copy `visual_mobile` / `visual_web` verbatim from the most recent verifier's Visual Verification report block. Then run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} done --done-report <that path> --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md` — this removes the task from `sprint.json` and commits `chore(TASK-{NNN}): done`. Run the epic archival check: if the plan had an epic and no TASK-*.md files remain under `.soloflow/active/plans/{epic}/` and no sprint tasks from that epic remain, **log to `.soloflow/active/findings/{sprint_id}-findings.md`** — `epic {epic} has no remaining tasks; candidate for archival` — and do NOT prompt. Archival waits for human review.
-
-g. Every resolved `limits.checkpoint_interval` completed tasks, write checkpoint to `.soloflow/checkpoint.md`.
-
-h. **State commit happens inside `settle-task.js`** (invoked by each terminal verdict above). The orchestrator does not run `git add` / `git commit` itself for per-task state.
+The same `WORKTREE_ROOT:` prefix injection, `worktree-setup.js` / `worktree-merge.js` calls, and conflict-handling rules apply unchanged.
 
 **End of loop.** Sprint status remains `"active"` until the closer's finalize phase flips it.
 
