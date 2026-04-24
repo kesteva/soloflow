@@ -49,10 +49,11 @@ Model mapping (fallback matches the agent's frontmatter `model:`):
 - `models.verifier` / `models.code_reviewer` / `models.sprint_verifier` / `models.sprint_code_reviewer` → `opus`
 
 Limits (fallbacks):
-- `limits.executor_retry_max` → 3 (max `NEEDS_CHANGES` re-spawns in step 2.e)
-- `limits.checkpoint_interval` → 3 (tasks between checkpoint writes in step 2.g)
+- `limits.executor_retry_max` → 3 (max `NEEDS_CHANGES` re-spawns in pipeline step e)
+- `limits.checkpoint_interval` → 3 (tasks between checkpoint writes in pipeline step g)
 - `limits.max_sprint_tasks` → 10 (cap on `$ARGUMENTS`-less sprint scope)
 - `limits.context_limit_respawn_max` → 3 (max `CONTEXT_LIMIT` respawns per agent per task)
+- `limits.max_parallel_tasks` → 3 (max task pipelines executed concurrently in a batch; `1` = strictly serial)
 
 Reuse the cached config across respawns on `CONTEXT_LIMIT` / `NEEDS_CHANGES` / `IMPROVEMENTS_NEEDED`.
 
@@ -226,15 +227,71 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
 
 ## Step 3: Execute the Loop
 
+**Parallelism cap.** Resolved `limits.max_parallel_tasks` (fallback `3`) controls how many task pipelines run concurrently per batch. Resolve it once here and cache it as `MAX_PARALLEL`. Cache `RUN_BRANCH` from `sprint.json`'s `run.branch` (if `run` is null, use the result of `git symbolic-ref --short HEAD`). When `MAX_PARALLEL == 1`, all batches degrade to single-task pipelines with no worktree overhead — this is the strict-serial kill switch.
+
 1. **Build dependency graph** from tasks' `depends_on` fields. Run:
    ```
    node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/ready-tasks.js" [--completed TASK-AAA,TASK-BBB]
    ```
-   The script returns `{ ready, in_progress, blocked, cycles }`. Tasks in `ready` are immediately available; pop from that list after each completion and re-run with the updated `--completed` list.
+   The script returns `{ ready, in_progress, blocked, cycles }`. Tasks in `ready` are immediately available.
 
-2. For each ready task (dependencies all completed):
+2. **Pick the next batch.**
+   - If `MAX_PARALLEL == 1`, set `batch = [ready[0]]`. Skip to step 3 (SERIAL MODE).
+   - Else run `node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/build-batch.js" --ready {comma-joined ready IDs} --max {MAX_PARALLEL}`. Parse `{ batch, deferred, reasons }`.
+     - If `batch.length <= 1`, proceed in SERIAL MODE with that one task.
+     - If `batch.length >= 2`, proceed in PARALLEL MODE. Remember the batch for step 4.
 
-   Initialize two per-task counters in your working memory: `executor_loops = 0` (incremented every time you re-spawn the executor in step 2.e on `NEEDS_CHANGES`) and `code_review_rounds = 0` (incremented every time you re-spawn the executor in step 2.f on `IMPROVEMENTS_NEEDED`). Both are written into the done-report frontmatter at step 2.f3. CONTEXT_LIMIT respawns and `IMPROVEMENTS_NEEDED` re-verifies do not count toward `executor_loops`.
+3. **SERIAL MODE — single-task pipeline.** Run the Per-Task Pipeline (section below) for the single batch task with **no `WORKTREE_ROOT` prefix**. The executor commits directly on `RUN_BRANCH`; the merge step (step 4.c) is a no-op in this mode. After the pipeline completes, loop back to step 1.
+
+4. **PARALLEL MODE — batch of N ≥ 2 pipelines.**
+
+   **4.a — Set up per-task worktrees** (sequential; git serializes these anyway). For each task `T` in `batch`:
+   1. `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/update-task-status.js" T in_progress`
+   2. `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/worktree-setup.js" T --base-branch "$RUN_BRANCH"` — capture the JSON output. Remember `WT_T = .worktree`, `TB_T = .branch` per task.
+   3. Locate T's plan file via `.soloflow/active/plans/**/TASK-NNN-plan.md` (same glob as pipeline step a2). Read the plan content into `PLAN_T`. Read the plan's `epic` frontmatter field into `EPIC_T`.
+
+   **4.b — Run each phase as a batched parallel Agent call.** For every phase below, issue one message containing one `Agent` tool call per still-alive task. Prefix each prompt with:
+   ```
+   WORKTREE_ROOT: {WT_T}
+
+   {phase-specific prompt payload}
+   ```
+   Wait for all calls in the phase to return before advancing.
+
+   Phases (skip the same way SERIAL does for disabled per-task verification / code-review):
+
+   1. **Executor.** Payload = `PLAN_T`. On return, classify per pipeline step c. For `COMPLETED`, keep T alive for phase 2. For `BLOCKED` or `STUCK`: write the stuck report (if STUCK) using the same epic-aware path rule, then run `worktree-merge.js T <blocked|stuck>` followed by `settle-task.js T <blocked|stuck> ...` as in pipeline step c, and drop T from the batch. For `CONTEXT_LIMIT`, respawn a fresh executor **for that T alone** with the handoff protocol from pipeline step c; keep T alive.
+   2. **Verifier.** Skip entirely (stub verdict per pipeline step d) when `per_task_verification_enabled` is `false`. Otherwise spawn `shadow-verifier` per T with payload = plan + T's executor report. On return, classify per pipeline step e:
+      - `APPROVED` / `APPROVED_WITH_DEFERRED` → keep for phase 3.
+      - `NEEDS_CHANGES` → **per-task retry loop** for that T alone: if `executor_loops[T] < executor_retry_max`, increment `executor_loops[T]`, spawn a single executor for T with verifier feedback, then a single verifier for T, and loop. Sibling tasks in the batch do not wait — they have already returned. Use retries as in pipeline step e. On retry-budget exhaustion, write stuck report, run `worktree-merge.js T stuck` + `settle-task.js T stuck ...`, drop from batch.
+      - `HUMAN_NEEDED` → append queue entry per pipeline step e, then `worktree-merge.js T abandon` + `settle-task.js T human_needed ...`, drop.
+      - `CONTEXT_LIMIT` → respawn verifier for T alone with handoff.
+   3. **Code-reviewer.** Skip when `per_task_code_review_enabled` is `false`. Otherwise spawn `code-reviewer` per T. On return, classify per pipeline step f:
+      - `CLEAN` → keep for phase 4.
+      - `IMPROVEMENTS_NEEDED` → per-task retry for T alone: executor → verifier → code-reviewer, up to `code_review.review_retry_max` rounds. Does not consume `executor_loops`.
+      - `SECURITY_ISSUE` → queue entry + `worktree-merge.js T abandon` + `settle-task.js T human_needed ...`, drop.
+      - `CONTEXT_LIMIT` → respawn reviewer for T alone with handoff.
+   4. **Test-writer.** Spawn `test-writer` per surviving T. Handle per pipeline step f2. Tests run inside each T's worktree (the agent `cd`s to `WORKTREE_ROOT`).
+
+   **4.c — Merge-back + settle** (sequential, from the main worktree). For each T that reached phase 4 alive:
+   1. Write T's done report to `.soloflow/archive/done/{EPIC_T}/TASK-NNN-done.md` (or flat if no epic), using the frontmatter schema in pipeline step f3. Write it from the main worktree — done reports live outside the task's code scope.
+   2. `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/worktree-merge.js" T done --base-branch "$RUN_BRANCH"`. Parse the output:
+      - `merge: "ff"` or `"non-ff"` → proceed.
+      - `merge: "conflict"` → this indicates a `files_owned` mis-declaration (disjoint declarations should never produce a merge conflict). Append a `type: "merge-conflict"` entry to `.soloflow/human-review-queue.md` referencing the preserved worktree path in the script's `error` field, then run `settle-task.js T human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`. Skip the rest of this task's merge-back; the worktree stays on disk for the human to inspect. Continue with the next T.
+   3. On successful merge: `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" T done --done-report <path> --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`.
+   4. Epic archival check per pipeline step f3.
+
+   **4.d — Checkpoint** if the running completed-tasks counter crosses `limits.checkpoint_interval`.
+
+   After step 4, loop back to step 1.
+
+### Per-Task Pipeline (shared by SERIAL and PARALLEL modes)
+
+The following procedure is the per-task quality loop. SERIAL mode (step 3) runs it once for the single batch task, with no `WORKTREE_ROOT` prefix. PARALLEL mode (step 4) runs each lettered phase in one batched Agent call across all alive tasks in the batch, prefixing every prompt with `WORKTREE_ROOT: {WT_T}`. References like "pipeline step c" in PARALLEL MODE point at the lettered substeps below; do not renumber.
+
+For the task (or tasks, in PARALLEL mode):
+
+   Initialize two per-task counters in your working memory: `executor_loops = 0` (incremented every time you re-spawn the executor in step e on `NEEDS_CHANGES`) and `code_review_rounds = 0` (incremented every time you re-spawn the executor in step f on `IMPROVEMENTS_NEEDED`). Both are written into the done-report frontmatter at step f3. CONTEXT_LIMIT respawns and `IMPROVEMENTS_NEEDED` re-verifies do not count toward `executor_loops`.
 
    a. Set task status to in_progress: `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/update-task-status.js" TASK-{NNN} in_progress`.
 
@@ -302,7 +359,7 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
 
    h. **State commit happens inside `settle-task.js`** (invoked by each terminal verdict above). The orchestrator does not run `git add` / `git commit` itself for per-task state.
 
-3. **End of execute loop.** Sprint status remains `"active"` until the closer's finalize phase flips it. The orchestrator does not write to `sprint.json` here.
+**End of execute loop.** When step 1's `ready` list is empty, exit Step 3. Sprint status remains `"active"` until the closer's finalize phase flips it. The orchestrator does not write to `sprint.json` here.
 
 ## Step 3.5: End-of-sprint verification
 
