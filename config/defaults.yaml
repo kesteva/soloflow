@@ -63,14 +63,15 @@ verification:
   run_tests: true
   run_typecheck: true
   run_linter: true
-  visual_mobile: false    # enable when Maestro MCP is configured
+  visual_mobile: false    # enable when maestro CLI is installed and a simulator/emulator is running
   visual_web: false       # enable when Playwright MCP is configured
+  visual_mobile_app_id: null    # bundle ID for ad-hoc Maestro flows; auto-detected from existing flows when null
   visual_maestro_flow_dirs:     # directories to search for project Maestro flows
     - maestro/
     - .maestro/
     - test/maestro/
   visual_screenshot_budget: 3   # max screenshots per verification run
-  visual_prefer_hierarchy: true # use inspect_view_hierarchy before screenshots
+  visual_prefer_hierarchy: true # use maestro hierarchy (plain text) before screenshots
 
 git:
   # Whether /soloflow:sprint runs each invocation on a dedicated branch that

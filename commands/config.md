@@ -193,15 +193,18 @@ Eight settings. Split across multiple `AskUserQuestion` calls.
 - `verification.run_linter` — boolean
 - `verification.visual_mobile` — boolean (visual flow below)
 - `verification.visual_web` — boolean (visual flow below)
+- `verification.visual_mobile_app_id` — string or null (bundle ID for ad-hoc Maestro flows; auto-detected when null)
 - `verification.visual_screenshot_budget` — integer ≥ 1
 - `verification.visual_prefer_hierarchy` — boolean
 - `verification.visual_maestro_flow_dirs` — list of strings
 
 **Visual verification flow:** when the user is toggling `visual_mobile` or
-`visual_web` from `false` → `true`, reuse the dependency-check and MCP
-registration procedure documented in `commands/init.md` (Step 4 "Dependency
-check" and "MCP server registration" subsections). Follow that exact procedure
-rather than duplicating it.
+`visual_web` from `false` → `true`, reuse the dependency-check and (for web)
+MCP registration procedure documented in `commands/init.md` (Step 4
+"Dependency check", "Simulator sanity check", "App bundle ID", and
+"MCP server registration (Playwright only)" subsections). Follow that
+procedure rather than duplicating it. Maestro (mobile) does not use an MCP
+server since 0.9.3 — only the CLI is required.
 
 **`visual_maestro_flow_dirs`:** show the current list, offer:
 - `"Keep current"`
@@ -314,6 +317,7 @@ verification.run_typecheck
 verification.run_linter
 verification.visual_mobile
 verification.visual_web
+verification.visual_mobile_app_id
 verification.visual_screenshot_budget
 verification.visual_prefer_hierarchy
 verification.visual_maestro_flow_dirs
