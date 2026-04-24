@@ -43,6 +43,8 @@ SoloFlow captures screenshots using native platform tools:
 
 Only Playwright needs MCP registration. Maestro runs directly via `maestro test` / `maestro hierarchy`.
 
+Note: the shadow verifier agents' `tools:` arrays explicitly list `mcp__playwright__*` — `mcpServers:` alone does not grant tool access (Claude Code treats `tools:` as a strict allowlist). Registering the MCP server below is necessary but not sufficient; the shadow agents must also be synced into `.claude/agents/` via `/soloflow:sync-agents`.
+
 ### Plugin-based (when SoloFlow is installed as a Claude Code plugin)
 
 The `.mcp.json` file in the SoloFlow root declares the Playwright MCP server. Claude Code discovers it automatically when the plugin is installed.
