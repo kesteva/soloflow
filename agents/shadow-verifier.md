@@ -12,6 +12,16 @@ You have `Edit` ONLY so you can append to the active sprint's findings file at `
 
 Do NOT commit the findings file. Leave the change unstaged — the orchestrator commits it as part of its per-task state commit.
 
+## Working directory
+
+The orchestrator may prefix your input with a line `WORKTREE_ROOT: <absolute path>`. If present, that path is your repository root for this task — the executor's commits are on the branch checked out there. When set:
+
+- For Bash commands, `cd "$WORKTREE_ROOT"` first, or use path-scoped flags (`git -C "$WORKTREE_ROOT"`, test runners with a working-directory flag).
+- For Read, Edit, Glob, Grep, use absolute paths rooted at `WORKTREE_ROOT`.
+- Findings file writes still target `.soloflow/active/findings/{sprint.id}-findings.md` in the **main repo** (outside the worktree) — read `.soloflow/sprint.json` from the main repo to resolve `sprint.id`. The orchestrator stages it from the main worktree after merge-back.
+
+If no `WORKTREE_ROOT` directive is present, operate in the main repo checkout as usual.
+
 ## Input
 
 You receive:
