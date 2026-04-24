@@ -76,6 +76,7 @@ No `AskUserQuestion` calls. Construct the phase 2 decisions payload:
   - If after filtering the list is empty, print `mad-max: no ready tasks matched filter "$ARGUMENTS".` and stop.
 - `sprint_id`: gathered `sprint_id_next`.
 - `skip_smoke`: pass gathered `skip_smoke` through unchanged.
+- `execution_mode`: derived from the cached resolved `limits.max_parallel_tasks` — `"parallel"` when `> 1`, otherwise `"serial"`. Mad-max never prompts; users who want per-task visual verify set `limits.max_parallel_tasks: 1` in `.soloflow/config.json`, which forces serial and keeps shadow-verifier's full Level 2 in play. Parallel mode skips per-task visual verify (matching `/soloflow:sprint` Step 1.5e); end-of-sprint visual verification still runs in Step 3.5.
 
 ---
 
@@ -91,6 +92,7 @@ Decisions:
   overrides: []
   remember_branch_choice: false
   skip_smoke: {gathered skip_smoke value}
+  execution_mode: "{serial|parallel}"        # parallel when limits.max_parallel_tasks > 1, else serial
 ```
 
 Parse the structured output. Handle:
@@ -215,3 +217,4 @@ Next step: run /soloflow:sprint to resume human review and merge, or inspect {ru
 - **Smoke baseline must be green.** Mad-max refuses to start on a red baseline because it cannot distinguish pre-existing failures from task-caused regressions. Use `/soloflow:sprint` if you need to run on a known-red baseline.
 - **High-severity deferred items must be resolved first.** Mad-max will not silently override `action_required` entries from prior sprints when their severity is `high`. Medium/low-severity blocking entries are surfaced but do not stop the run.
 - **No auto-merge.** The run branch always stays open. Use `/soloflow:sprint` to merge after human review.
+- **Per-task visual verify follows `limits.max_parallel_tasks`.** Mad-max sets `execution_mode` from config and never prompts — `limits.max_parallel_tasks > 1` skips per-task Maestro / Playwright checks; `limits.max_parallel_tasks: 1` keeps them on. End-of-sprint visual verification always runs.
