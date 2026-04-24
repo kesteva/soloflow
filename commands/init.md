@@ -260,7 +260,7 @@ Never run `claude mcp add` without the explicit user choice above — registerin
 
 ### Optional plugin probes
 
-Two Anthropic-published plugins can improve SoloFlow agent output when installed. **Neither is required** — SoloFlow's runtime agents fall back silently when they're missing. Probe each; if present, surface a `✓` detected line. If absent, offer to install via `AskUserQuestion` (mirrors the MCP-server registration pattern in the previous section). Never install silently.
+One Anthropic-published plugin can improve SoloFlow agent output when installed. **It is not required** — SoloFlow's runtime agents fall back silently when it is missing. Probe it; if present, surface a `✓` detected line. If absent, offer to install via `AskUserQuestion` (mirrors the MCP-server registration pattern in the previous section). Never install silently.
 
 **context7** (MCP plugin) — gives the researcher and roadmap-researcher version-accurate library docs via `resolve-library-id` + `query-docs`, reducing hallucinated APIs.
 
@@ -287,27 +287,7 @@ Two Anthropic-published plugins can improve SoloFlow agent output when installed
    - Parse the JSON output. On success: set `research_agents_status = "shadowed 2 agents"` and print `✓ Shadow-installed 2 research agents to .claude/agents/ (shadow-researcher, shadow-roadmap-researcher) — required for context7 tool bindings to reach these subagents. Version v{plugin_version} stamped into each shadow's frontmatter.`
    - On failure (script exits non-zero or `CLAUDE_PLUGIN_ROOT` missing): set `research_agents_status = "skipped_no_root"` and continue.
 
-**frontend-design** (plugin with skill) — gives the task-refiner and executor a distinctive UI design direction (aesthetic, typography, motion, spatial composition) for UI tasks.
-
-1. Probe: `claude plugin list 2>/dev/null | grep -qi frontend-design` first; if that command fails or returns empty, fall back to `ls ~/.claude/plugins 2>/dev/null | grep -qi frontend-design`.
-2. **If either probe passes:** print `✓ frontend-design plugin detected — task-refiner will establish Design Direction for UI slices.` Continue.
-3. **If both probes fail:** use `AskUserQuestion`:
-   - **Question:** `'The "frontend-design" plugin gives the task-refiner a distinctive UI design direction for UI tasks (UI tasks ship with conventional defaults when missing). Install it now?'`
-   - **Header:** `Install frontend-design`
-   - **Options:**
-     - `"Yes — user scope (all projects)"`
-     - `"Yes — project scope (this project only)"`
-     - `"Skip"`
-   - **On user scope:** run `claude plugin install frontend-design --scope user` via Bash.
-   - **On project scope:** run `claude plugin install frontend-design --scope project` via Bash.
-   - **On Skip:** print:
-     ```
-     ℹ frontend-design plugin not installed. Optional — UI tasks will ship with conventional defaults.
-       Install later with: /plugin install frontend-design@anthropics
-     ```
-4. After a successful install, re-run the probe at step 1. If it still fails, print `ℹ frontend-design installed — restart Claude Code to load it in this session.` Do NOT retry.
-
-A backend-only project has no need for frontend-design; a project that doesn't rely on third-party libraries has no need for context7 — both are safe to skip. Never run `claude plugin install` without the explicit user choice above.
+A project that doesn't rely on third-party libraries has no need for context7 — it is safe to skip. Never run `claude plugin install` without the explicit user choice above.
 
 ### Q3 — Branch strategy for `/soloflow:sprint`
 
