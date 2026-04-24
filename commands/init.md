@@ -173,39 +173,64 @@ Set config accordingly:
      - If still missing → warn: `⚠ Maestro installed but not on PATH. Add this line to your shell profile (~/.zshrc or ~/.bashrc):\n    export PATH="$PATH:$HOME/.maestro/bin"\nThen restart your shell.` Do NOT retry the installer.
    - **On Skip for now:** print: `Visual verification will still be enabled in config — the verifier will gracefully skip Maestro until \`maestro\` is on PATH. Install later with:\n    curl -Ls https://get.maestro.mobile.dev | bash`
 
+4. **Simulator / emulator sanity check.** Run:
+   ```bash
+   IOS=$(xcrun simctl list devices booted 2>/dev/null | grep -c Booted || true)
+   AND=$(adb devices 2>/dev/null | awk '$2=="device"' | wc -l | tr -d ' ' || true)
+   ```
+   - **If either is ≥ 1:** print `✓ Device detected ({IOS} iOS simulator(s), {AND} Android device(s))`.
+   - **If both are 0:** print `ℹ No simulator/emulator booted. Start one before running visual verification:\n    open -a Simulator      (iOS)\n    emulator -avd <name>   (Android)\nConfig will still be written — verifier will emit 'skipped_unable' until a device is running.` Do not block.
+
+5. **App bundle ID for ad-hoc flows (optional).** Ad-hoc Maestro flows need an `appId`. Use `AskUserQuestion`:
+   - **Question:** `"Set the app bundle ID for ad-hoc Maestro flows? (Leave auto-detect if the project already has Maestro flows in maestro/, .maestro/, or test/maestro/ — the verifier will read appId from them.)"`
+   - **Header:** `"App bundle ID"`
+   - **Options:**
+     - `"Auto-detect from existing flows"`
+     - `"Set explicitly"` — follow-up free-form text asks for the bundle ID (e.g., `com.example.myapp`) and writes it to `config.verification.visual_mobile_app_id`.
+     - `"Skip (set later)"`
+
+   On **Auto-detect** or **Skip**: leave `visual_mobile_app_id` unset (null). The verifier will grep existing flows for `appId:` at run time; if none exist, it emits `skipped_unable` with an actionable message.
+
 **Web / Playwright** — only if `visual_web` is now true:
 
 1. Run `which npx` via Bash.
 2. **If found:** print `✓ npx detected; Playwright MCP runs via "npx @playwright/mcp@latest" on demand — no separate install needed.`
 3. **If missing:** print `⚠ Node.js / npx is required for Playwright visual verification. Install Node.js from https://nodejs.org before running visual verification. Your config will still be written.` Do NOT attempt to install Node.
 
-### MCP server registration (runs after dependency check, per selected type)
+### MCP server registration (Playwright only — Maestro uses the CLI directly)
 
-The plugin does NOT ship its own `.mcp.json` — that would collide for any user who already has `maestro` or `playwright` registered. Instead, detect and offer to register.
+Maestro runs via `maestro test` / `maestro hierarchy` and does not use an MCP server. Only Playwright needs registration.
 
-For each required MCP server (`maestro` if `visual_mobile`, `playwright` if `visual_web`):
+The plugin does NOT ship its own `.mcp.json` — that would collide for any user who already has `playwright` registered. Instead, detect and offer to register.
 
-1. Run `claude mcp list` via Bash and grep the output for the server name.
-2. **If already registered:** print `✓ MCP server "<name>" already registered`. Continue.
+**Playwright MCP** — only if `visual_web` is `true`:
+
+1. Run `claude mcp list` via Bash and grep the output for `playwright`.
+2. **If already registered:** print `✓ MCP server "playwright" already registered`. Continue.
 3. **If missing:** use `AskUserQuestion`:
-   - **Question:** `'MCP server "<name>" is not registered with Claude Code. Register it now?'`
-   - **Header:** `Register <name>`
+   - **Question:** `'MCP server "playwright" is not registered with Claude Code. Register it now?'`
+   - **Header:** `Register playwright`
    - **Options:**
      - `"Yes — user scope (all projects)"`
      - `"Yes — project scope (this project only, writes .mcp.json)"`
      - `"Skip"`
-   - **On user scope:** run the appropriate command:
-     - maestro: `claude mcp add --scope user maestro maestro mcp`
-     - playwright: `claude mcp add --scope user playwright npx @playwright/mcp@latest`
+   - **On user scope:** `claude mcp add --scope user playwright npx @playwright/mcp@latest`
    - **On project scope:** same command with `--scope project`.
-   - **On Skip:** print `Visual verification will be enabled in config — the verifier will gracefully skip <name> until the MCP server is registered. Register later with: claude mcp add --scope user <args>`.
+   - **On Skip:** print `Visual verification will be enabled in config — the verifier will gracefully skip Playwright until the MCP server is registered. Register later with: claude mcp add --scope user playwright npx @playwright/mcp@latest`.
 4. After a successful `claude mcp add`, re-run `claude mcp list` and confirm the entry appears. If not, warn but do not retry.
 
 Never run `claude mcp add` without the explicit user choice above — registering servers silently is exactly the collision problem we're avoiding.
 
+**Informational: stale Maestro MCP detection.** Regardless of `visual_mobile`, run `claude mcp list 2>/dev/null | grep -qi maestro`. If it finds a `maestro` entry, print (no prompt, zero-click):
+
+```
+ℹ Maestro MCP detected in your registered servers. SoloFlow 0.9.3+ no longer uses it — Maestro runs via the CLI directly. The registration is harmless if left; remove with:
+    claude mcp remove maestro
+```
+
 ### Shadow-install visual verification agents (only if `visual_mobile` or `visual_web` is true)
 
-**Why this step exists — surface it clearly to the user.** Visual verification requires `shadow-verifier` and `shadow-sprint-verifier` to call `mcp__maestro__*` / `mcp__playwright__*` tools. Plugin-scoped subagents **cannot receive MCP tool bindings** in Claude Code, even when the agent frontmatter declares `mcpServers:` — the declaration is silently ignored for plugin agents. The plugin therefore does not ship a plugin-resolvable `verifier` / `sprint-verifier`; these agents exist only under the `shadow-` prefix and are installed project-local at init. Without this shadow-install, no verifier is available at all and every visual check would degrade to `skipped_unable`. This step is **mandatory** when visual verification is enabled; skip it only when the plugin root can't be resolved.
+**Why this step exists — surface it clearly to the user.** `shadow-verifier` and `shadow-sprint-verifier` need to call `mcp__playwright__*` tools for web visual verification (mobile runs via the Maestro CLI and does not depend on MCP bindings). Plugin-scoped subagents **cannot receive MCP tool bindings** in Claude Code, even when the agent frontmatter declares `mcpServers:` — the declaration is silently ignored for plugin agents. The plugin therefore does not ship a plugin-resolvable `verifier` / `sprint-verifier`; these agents exist only under the `shadow-` prefix and are installed project-local at init. Without this shadow-install, no verifier is available at all. This step is **mandatory** when visual verification is enabled; skip it only when the plugin root can't be resolved.
 
 1. Invoke the shadow sync utility with the `visual` set:
    ```
@@ -218,8 +243,8 @@ Never run `claude mcp add` without the explicit user choice above — registerin
 3. Print an explicit callout — visual verification users need to understand what happened and why:
    ```
    ✓ Shadow-installed visual verification agents to .claude/agents/ (plugin v{plugin_version}):
-       shadow-verifier.md         — per-task Level 2 visual check (mcpServers: [maestro, playwright])
-       shadow-sprint-verifier.md  — end-of-sprint visual check    (mcpServers: [maestro, playwright])
+       shadow-verifier.md         — per-task Level 2 visual check (mcpServers: [playwright])
+       shadow-sprint-verifier.md  — end-of-sprint visual check    (mcpServers: [playwright])
 
    Why: plugin-scoped subagents cannot receive MCP tool bindings in Claude Code. Project-local ones do.
    /soloflow:sprint spawns these by their shadow-* names, so the MCP tool bindings from .claude/agents/
