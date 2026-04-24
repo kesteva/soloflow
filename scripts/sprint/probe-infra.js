@@ -69,13 +69,17 @@ function tryShell(cmd) {
 
 function probeCategory(cat) {
   if (cat === 'maestro') {
-    // Maestro is CLI-only since 0.9.3 — no MCP registration required.
-    // Simulator/emulator availability is probed at verifier run-time
-    // (not preflight), since users commonly boot their device right
-    // before a sprint starts.
+    // Maestro runs MCP-first with CLI fallback since 0.9.7. Either path
+    // is sufficient at preflight — the verifier's Path Selection picks
+    // one at run-time. Simulator/emulator availability is probed at
+    // verifier run-time (not preflight), since users commonly boot
+    // their device right before a sprint starts.
+    const mcp = tryShell('claude mcp list 2>/dev/null | grep -qi maestro');
     const cli = tryShell('which maestro >/dev/null');
-    if (!cli.ok) return { ok: false, reason: 'CLI not found' };
-    return { ok: true };
+    if (mcp.ok && cli.ok) return { ok: true };
+    if (mcp.ok && !cli.ok) return { ok: true, reason: 'MCP registered; CLI not found (fallback unavailable)' };
+    if (!mcp.ok && cli.ok) return { ok: true, reason: 'CLI present; MCP not registered (fallback only)' };
+    return { ok: false, reason: 'neither MCP nor CLI available' };
   }
   if (cat === 'playwright') {
     const mcp = tryShell('claude mcp list 2>/dev/null | grep -qi playwright');
@@ -153,21 +157,23 @@ function main() {
     missing.push({ category: cat, reason, impacts });
   }
 
-  // Shadow-install cross-check for Playwright (web visual verification).
+  // Shadow-install cross-check for Playwright and Maestro.
   //
-  // `claude mcp list` + `which npx` only confirm the Playwright MCP server is
-  // registered and npx exists — they don't guarantee that `mcp__playwright__*`
-  // tool bindings reach the shadow-verifier subagent session. That propagation
-  // depends on the shadow agents at .claude/agents/shadow-verifier.md and
-  // shadow-sprint-verifier.md. Without current shadows, visual_web=true
-  // silently degrades to `skipped_unable` on every task. Cross-check shadow
-  // state here so the sprint-initiator surfaces the gap up-front instead of
-  // letting it accumulate across a whole sprint.
+  // `claude mcp list` only confirms the MCP server is registered — it doesn't
+  // guarantee `mcp__{playwright,maestro}__*` tool bindings reach the shadow-
+  // verifier subagent session. That propagation depends on the shadow agents
+  // at .claude/agents/shadow-verifier.md and shadow-sprint-verifier.md.
   //
-  // Maestro does NOT need this cross-check since 0.9.3 — it runs via the
-  // `maestro` CLI directly, which is available to every subagent's Bash tool
-  // regardless of shadow-install state.
-  if (configDriven.has('playwright')) {
+  // Playwright has no CLI fallback — broken shadows silently degrade every
+  // task to `skipped_unable`. Demote unconditionally when shadows are broken.
+  //
+  // Maestro has a CLI fallback (since 0.9.7). Broken shadows only degrade to
+  // CLI mode, which is still functional. Only demote when shadows are broken
+  // AND the CLI is also unavailable — otherwise the fallback absorbs the gap
+  // silently. (We still preserve Maestro's probeCategory reason when it
+  // indicates MCP isn't registered — in that case the fallback is the only
+  // path and the shadow cross-check is moot anyway.)
+  if (configDriven.has('playwright') || configDriven.has('maestro')) {
     let shadowState = null;
     try { shadowState = shadowAgents.check(); } catch { /* shadow module unavailable */ }
     if (shadowState) {
@@ -175,20 +181,33 @@ function main() {
       const broken = visualSet.filter((s) => s.status !== 'current');
       if (broken.length > 0) {
         const brokenDesc = broken.map((s) => `${s.name}=${s.status}`).join(', ');
-        const shadowReason = `shadow agents not current (${brokenDesc}) — mcp__playwright__* bindings will not reach shadow-verifier subagent session. Run /soloflow:sync-agents to install/update shadows. (required by verification.visual_web=true)`;
-        const availIdx = available.indexOf('playwright');
-        if (availIdx >= 0) {
-          available.splice(availIdx, 1);
-          const planImpacts = perPlan
-            .filter((p) => p.categories.includes('playwright'))
-            .map((p) => ({ task_id: p.task_id, test_targets: p.test_targets }));
-          const impacts = planImpacts.length > 0
-            ? planImpacts
-            : perPlan.map((p) => ({ task_id: p.task_id, test_targets: [] }));
-          missing.push({ category: 'playwright', reason: shadowReason, impacts });
-        } else {
-          const existing = missing.find((m) => m.category === 'playwright');
-          if (existing) existing.reason = `${existing.reason}; ${shadowReason}`;
+        const demote = (category, toolPrefix, tailMsg) => {
+          const shadowReason = `shadow agents not current (${brokenDesc}) — ${toolPrefix} bindings will not reach shadow-verifier subagent session. Run /soloflow:sync-agents to install/update shadows.${tailMsg}`;
+          const availIdx = available.indexOf(category);
+          if (availIdx >= 0) {
+            available.splice(availIdx, 1);
+            const planImpacts = perPlan
+              .filter((p) => p.categories.includes(category))
+              .map((p) => ({ task_id: p.task_id, test_targets: p.test_targets }));
+            const impacts = planImpacts.length > 0
+              ? planImpacts
+              : perPlan.map((p) => ({ task_id: p.task_id, test_targets: [] }));
+            missing.push({ category, reason: shadowReason, impacts });
+          } else {
+            const existing = missing.find((m) => m.category === category);
+            if (existing) existing.reason = `${existing.reason}; ${shadowReason}`;
+          }
+        };
+        if (configDriven.has('playwright')) {
+          demote('playwright', 'mcp__playwright__*', ' (required by verification.visual_web=true)');
+        }
+        if (configDriven.has('maestro')) {
+          const cli = tryShell('which maestro >/dev/null');
+          if (!cli.ok) {
+            demote('maestro', 'mcp__maestro__*', ' AND `maestro` CLI not installed — no fallback (required by verification.visual_mobile=true)');
+          }
+          // If CLI is present, broken shadows are tolerable: verifier falls
+          // back to CLI mode silently. Deliberately do not warn on that case.
         }
       }
     }
