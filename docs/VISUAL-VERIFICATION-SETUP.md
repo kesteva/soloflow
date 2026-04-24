@@ -1,12 +1,15 @@
 # Visual Verification Setup
 
-This guide covers how to configure the **Maestro CLI** (mobile) and **Playwright MCP** (web) for SoloFlow's visual verification.
+This guide covers how to configure visual verification for SoloFlow:
 
-Since SoloFlow 0.9.3, mobile visual verification runs via the Maestro CLI directly — no MCP server required. Only Playwright (web) still uses an MCP server.
+- **Mobile (Maestro)** — **MCP preferred, CLI fallback.** The verifier picks a path once per run: `mcp__maestro__*` if bound to the subagent session, else the `maestro` CLI. Both work; MCP is ~4–10× cheaper on hierarchy tokens and avoids the tmp-file ephemeral-flow dance.
+- **Web (Playwright)** — MCP only. No CLI fallback.
 
 ## Prerequisites
 
 ### Maestro (Mobile)
+
+Install the Maestro CLI (required for MCP *and* CLI mode — the MCP server is shipped inside the CLI):
 
 1. **Install Maestro CLI:**
    ```bash
@@ -23,15 +26,17 @@ Since SoloFlow 0.9.3, mobile visual verification runs via the Maestro CLI direct
    export PATH="$PATH:$HOME/.maestro/bin"
    ```
 
-4. **Have a simulator/emulator running** with your app installed.
+4. **Have a simulator/emulator running** with your app installed. (The MCP path's `start_device` tool can also boot one on demand, but most users boot explicitly.)
 
-### Screenshot dependencies (mobile)
+### Screenshot dependencies (mobile, CLI fallback path only)
 
-SoloFlow captures screenshots using native platform tools:
+If the verifier falls back to CLI mode, it captures screenshots using native platform tools:
 
 - **iOS:** `xcrun simctl io booted screenshot` — ships with **Xcode Command Line Tools** (`xcode-select --install`).
 - **Android:** `adb exec-out screencap -p` — ships with **Android Studio** / `platform-tools`.
 - **Downsize:** `sips -Z 1400` — built into macOS. On Linux, substitute ImageMagick `convert -resize 1400x`, or skip downsizing.
+
+MCP mode takes screenshots through `mcp__maestro__take_screenshot` and needs none of these.
 
 ### Playwright (Web)
 
@@ -41,21 +46,38 @@ SoloFlow captures screenshots using native platform tools:
 
 ## MCP Configuration
 
-Only Playwright needs MCP registration. Maestro runs directly via `maestro test` / `maestro hierarchy`.
+Both Maestro and Playwright can run as MCP servers. `/soloflow:init` detects what's missing and offers to register each — skipping is always an option (Maestro falls back to CLI; Playwright degrades to `skipped_unable`).
 
-Note: the shadow verifier agents' `tools:` arrays explicitly list `mcp__playwright__*` — `mcpServers:` alone does not grant tool access (Claude Code treats `tools:` as a strict allowlist). Registering the MCP server below is necessary but not sufficient; the shadow agents must also be synced into `.claude/agents/` via `/soloflow:sync-agents`.
+Note: the shadow verifier agents' `tools:` arrays explicitly list `mcp__maestro__*` and `mcp__playwright__*` — `mcpServers:` alone does not grant tool access (Claude Code treats `tools:` as a strict allowlist). Registering the MCP servers is necessary but not sufficient; the shadow agents must also be synced into `.claude/agents/` via `/soloflow:sync-agents`.
 
 ### Plugin-based (when SoloFlow is installed as a Claude Code plugin)
 
-The `.mcp.json` file in the SoloFlow root declares the Playwright MCP server. Claude Code discovers it automatically when the plugin is installed.
+The plugin does NOT ship a bundled `.mcp.json` — that would collide for any user who already has `maestro` or `playwright` registered. Run `/soloflow:init` to walk through registration interactively.
 
-### Manual (when using symlinks)
+### Manual
 
-Add the Playwright MCP server to your project's `.claude/settings.json` or `.claude/settings.local.json`:
+**User scope (recommended — all projects):**
+```bash
+claude mcp add --scope user maestro maestro mcp
+claude mcp add --scope user playwright npx @playwright/mcp@latest
+```
+
+**Project scope (this project only — writes `.mcp.json` in the project root):**
+```bash
+claude mcp add --scope project maestro maestro mcp
+claude mcp add --scope project playwright npx @playwright/mcp@latest
+```
+
+Or, for project scope, write `.mcp.json` directly:
 
 ```json
 {
   "mcpServers": {
+    "maestro": {
+      "type": "stdio",
+      "command": "maestro",
+      "args": ["mcp"]
+    },
     "playwright": {
       "command": "npx",
       "args": ["@playwright/mcp@latest"]
@@ -64,15 +86,13 @@ Add the Playwright MCP server to your project's `.claude/settings.json` or `.cla
 }
 ```
 
-Or add to your global `~/.claude/settings.json` to make it available in all projects.
-
 ## Enabling Visual Verification
 
 In `config/defaults.yaml` (or via `/soloflow:config`), set the toggles:
 
 ```yaml
 verification:
-  visual_mobile: true    # for Maestro CLI
+  visual_mobile: true    # for Maestro (MCP preferred, CLI fallback)
   visual_web: true       # for Playwright MCP
   visual_mobile_app_id: com.example.myapp   # optional — bundle ID for ad-hoc flows
 ```
@@ -83,7 +103,7 @@ The verifier agent checks these toggles before attempting visual verification. E
 
 ## Sandbox Permissions
 
-If Claude Code blocks any Maestro-adjacent command, add them to your allow list in settings:
+The MCP path needs no Bash permissions. If Claude Code blocks any Maestro-adjacent command during a CLI-fallback run, add them to your allow list in settings:
 
 ```json
 {
@@ -110,7 +130,7 @@ Add this to your shell profile (`~/.zshrc` or `~/.bashrc`) to make it permanent.
 
 ### No simulator/emulator booted
 
-Maestro requires a running iOS Simulator or Android emulator.
+Maestro requires a running iOS Simulator or Android emulator (for both MCP and CLI paths).
 
 **iOS:**
 ```bash
@@ -132,9 +152,15 @@ xcrun simctl list devices booted | grep -c Booted
 adb devices | awk '$2=="device"' | wc -l
 ```
 
+MCP's `start_device` tool can also boot one programmatically from inside a verification run.
+
 ### Multiple iOS simulators booted
 
-`maestro` and `xcrun simctl io booted` error with "multiple booted devices" when ≥2 iOS simulators are booted. Either shut down the extras:
+Both paths error on ambiguous device selection. CLI:
+```
+"multiple booted devices"
+```
+MCP: explicit `device_id` from `list_devices` is already required. CLI fallback:
 ```bash
 xcrun simctl shutdown <UDID>
 ```
@@ -155,16 +181,17 @@ npx @playwright/mcp@latest  # should start without errors
 
 Check the following in order:
 
-1. `which maestro` — is the CLI on PATH?
-2. `xcrun simctl list devices booted | grep -c Booted` (iOS) or `adb devices | awk '$2=="device"' | wc -l` (Android) — is at least one device booted?
-3. Is the app installed on the device, and does your flow `launchApp` step reference its bundle ID correctly?
-4. If you set `verification.visual_mobile_app_id`, does it match the bundle ID installed on the simulator?
+1. `claude mcp list | grep -i maestro` — is the MCP server registered? Registering it is optional, but if you intended to use MCP mode and shadow agents aren't current, the verifier silently falls back to CLI. If you want MCP specifically, register + sync shadows.
+2. `which maestro` — is the CLI on PATH? (Required for both MCP and CLI modes.)
+3. `xcrun simctl list devices booted | grep -c Booted` (iOS) or `adb devices | awk '$2=="device"' | wc -l` (Android) — is at least one device booted?
+4. Is the app installed on the device, and does your flow `launchApp` step reference its bundle ID correctly?
+5. If you set `verification.visual_mobile_app_id`, does it match the bundle ID installed on the simulator?
 
 If all those pass and verification still degrades, run `maestro hierarchy` manually — the failure mode will be reported directly.
 
-### Every web task emits `skipped_unable` despite Playwright being registered
+### Every mobile task degrades to CLI mode despite Maestro MCP being registered
 
-If `claude mcp list` shows `playwright: ✓ Connected` (main session has the server) but every verifier in your sprint marks `visual_web: skipped_unable`, the cause is almost certainly that `shadow-verifier` / `shadow-sprint-verifier` aren't installed in `.claude/agents/`. Claude Code does NOT honor the `mcpServers:` frontmatter key for plugin-scoped subagents — it's silently ignored. SoloFlow's verifier agents therefore ship only under the `shadow-` prefix and must live in project scope to receive Playwright/context7 bindings.
+If `claude mcp list` shows `maestro: ✓ Connected` (main session has the server) but every verifier falls back to the CLI path, the cause is almost certainly that `shadow-verifier` / `shadow-sprint-verifier` aren't installed in `.claude/agents/` (or the copies there are stale). Claude Code does NOT honor the `mcpServers:` frontmatter key for plugin-scoped subagents — it's silently ignored. SoloFlow's verifier agents therefore ship only under the `shadow-` prefix and must live in project scope to receive Maestro/Playwright/context7 bindings.
 
 **Fix:** re-run `/soloflow:sync-agents` (or `/soloflow:init`). After sync, **restart Claude Code** — the subagent list is loaded at session start, so freshly-copied agents are not picked up until the next session.
 
@@ -174,11 +201,18 @@ ls .claude/agents/
 # Expected: shadow-verifier.md, shadow-sprint-verifier.md, shadow-researcher.md, shadow-roadmap-researcher.md
 ```
 
+### Every web task emits `skipped_unable` despite Playwright being registered
+
+Same root cause as the Maestro MCP case above, but Playwright has no CLI fallback — when the shadows are stale, every web task degrades to `skipped_unable` instead of silently falling back. Re-run `/soloflow:sync-agents` and restart Claude Code.
+
 Why the `shadow-` prefix: earlier versions attempted to override plugin `verifier` / `sprint-verifier` agents with same-named project-local shadows, relying on Claude Code's documented project-first precedence. That precedence did not hold reliably in practice — plugin agents sometimes won and the MCP bindings were lost. The `shadow-` prefix removes the ambiguity entirely: orchestrators spawn `shadow-verifier` by name, and the plugin doesn't ship any non-shadow version to collide with.
 
-### Removing a stale Maestro MCP registration
+### Reinstalling Maestro MCP after removing it in 0.9.3–0.9.5
 
-SoloFlow 0.9.3+ does not use the Maestro MCP server. If your `claude mcp list` still shows `maestro`, the registration is inert — harmless to leave. To clean it up:
+SoloFlow 0.9.3–0.9.5 removed the Maestro MCP server from the verifier. If you ran `claude mcp remove maestro` during that window and want the 0.9.7+ MCP-preferred behavior back, register it again:
+
 ```bash
-claude mcp remove maestro
+claude mcp add --scope user maestro maestro mcp
 ```
+
+Then run `/soloflow:sync-agents` and restart Claude Code so the updated shadow agents (which declare `mcp__maestro__*` in their tools allowlist) are picked up.
