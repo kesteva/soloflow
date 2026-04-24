@@ -34,6 +34,7 @@ limits:
   checkpoint_interval: 3           # tasks between progress checkpoints
   max_sprint_tasks: 10
   context_limit_respawn_max: 3    # max context-limit respawns per agent per task
+  max_parallel_tasks: 3           # max tasks whose full loops run concurrently in a batch; 1 = serial
 
 code_review:
   enabled: true
