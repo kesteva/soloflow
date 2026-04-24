@@ -8,16 +8,16 @@ model: haiku
 
 Updates the four MCP-dependent agent shadows in `.claude/agents/` to match the current SoloFlow plugin version. Use this after a plugin update (or whenever `/soloflow:sprint`'s preflight warns about drift).
 
-**Why these shadows exist.** Plugin-scoped subagents silently ignore the `mcpServers:` frontmatter key, so a plugin-scoped verifier would never receive Playwright/context7 bindings. Project-local copies in `.claude/agents/` DO honor the declaration. To ensure no competing plugin-scoped `shadow-verifier` (etc.) overrides the project-local copy, the templates live at `{plugin_root}/agent-templates/` — outside the plugin's auto-discovered `agents/` directory. The plugin therefore exposes zero `shadow-*` agents of its own; the only ones the harness sees are the ones this command writes into `.claude/agents/`. Each shadow's `tools:` array also explicitly lists its MCP tool bindings (e.g. `mcp__playwright__*`, `mcp__context7__*`) — Claude Code treats `tools:` as a strict allowlist, so `mcpServers:` alone does not grant tool access. Each shadow carries its own version stamp as a YAML comment at the top of the frontmatter (`# soloflow-shadow: version=X synced=Y`) — invisible to Claude Code's YAML parser and to the LLM, but readable by this utility's drift check.
+**Why these shadows exist.** Plugin-scoped subagents silently ignore the `mcpServers:` frontmatter key, so a plugin-scoped verifier would never receive Maestro/Playwright/context7 bindings. Project-local copies in `.claude/agents/` DO honor the declaration. To ensure no competing plugin-scoped `shadow-verifier` (etc.) overrides the project-local copy, the templates live at `{plugin_root}/agent-templates/` — outside the plugin's auto-discovered `agents/` directory. The plugin therefore exposes zero `shadow-*` agents of its own; the only ones the harness sees are the ones this command writes into `.claude/agents/`. Each shadow's `tools:` array also explicitly lists its MCP tool bindings (e.g. `mcp__maestro__*`, `mcp__playwright__*`, `mcp__context7__*`) — Claude Code treats `tools:` as a strict allowlist, so `mcpServers:` alone does not grant tool access. Each shadow carries its own version stamp as a YAML comment at the top of the frontmatter (`# soloflow-shadow: version=X synced=Y`) — invisible to Claude Code's YAML parser and to the LLM, but readable by this utility's drift check.
 
-Note: Maestro is no longer listed — since 0.9.3, mobile visual verification runs via the Maestro CLI directly and does not require MCP tool bindings. The shadows remain because Playwright (web) and context7 (research) still use MCP.
+Note: the Maestro entry in the visual verifier shadows only governs the MCP path. Mobile visual verification also has a CLI fallback (via Bash), so stale Maestro shadows silently degrade to CLI mode rather than `skipped_unable`. Playwright has no CLI fallback.
 
 ## Managed agents
 
 | Agent | Declares | Used by |
 |---|---|---|
-| `shadow-verifier.md` | `mcpServers: [playwright]` | per-task Level 2 visual verification |
-| `shadow-sprint-verifier.md` | `mcpServers: [playwright]` | end-of-sprint visual check |
+| `shadow-verifier.md` | `mcpServers: [maestro, playwright]` | per-task Level 2 visual verification |
+| `shadow-sprint-verifier.md` | `mcpServers: [maestro, playwright]` | end-of-sprint visual check |
 | `shadow-researcher.md` | `mcpServers: [context7]` | idea research |
 | `shadow-roadmap-researcher.md` | `mcpServers: [context7]` | roadmap research |
 

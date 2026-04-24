@@ -4,6 +4,18 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.9.7] - 2026-04-24
+
+### Changed
+- **Mobile visual verification prefers Maestro MCP again; CLI is the fallback.** The 0.9.3 MCP→CLI swap is effectively reversed now that 0.9.6 fixed the `tools:` allowlist gap that had caused `mcp__maestro__*` bindings to silently drop. The verifier's new **Path Selection** step probes `mcp__maestro__list_devices` once per run; on success, it uses MCP (`run_flow_files`, `run_flow`, `inspect_view_hierarchy` — ~50-token CSV hierarchy, ~4–10× cheaper than CLI `maestro hierarchy`). On failure, it falls back to the CLI path (`maestro test`, `maestro hierarchy`, ephemeral-flow pattern) for the whole run. Paths are never mixed within a single run — both bind port 7001. The full CLI implementation built for 0.9.3 is retained as the fallback.
+- **`shadow-verifier` / `shadow-sprint-verifier` frontmatter restored** to `mcpServers: [maestro, playwright]` and `tools:` now allowlists `mcp__maestro__*` alongside `mcp__playwright__*`. Run `/soloflow:sync-agents` after upgrade, then restart Claude Code so the new bindings take effect.
+- **`/soloflow:init`** now offers Maestro MCP registration during visual setup (mirrors the existing Playwright prompt but with a "Skip (CLI fallback will be used)" option).
+- **`scripts/sprint/probe-infra.js`** `probeCategory('maestro')` is a dual check again: either MCP registered OR CLI installed is sufficient at preflight. Shadow-agents cross-check now covers Maestro too, but only demotes when shadows are broken AND the CLI is unavailable — otherwise broken shadows silently degrade MCP mode to CLI mode with no warning.
+- **Port-7001 guardrail restored** in agent prompts and the skill doc: never mix Maestro MCP and CLI calls within a single verification run — both bind port 7001. Path Selection picks one; stay on it.
+
+### Migration
+After upgrading the plugin: optionally register Maestro MCP with `claude mcp add --scope user maestro maestro mcp` (or let `/soloflow:init` walk you through it), then run `/soloflow:sync-agents` to sync the updated shadows into `.claude/agents/`. **Restart Claude Code** — subagents load their tool allowlists at session start, so freshly-synced shadows aren't picked up until the next session. Users who skip Maestro MCP registration keep working via the CLI fallback with zero config changes.
+
 ## [0.9.6] - 2026-04-24
 
 ### Added

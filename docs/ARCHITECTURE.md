@@ -162,15 +162,15 @@ Multi-layered verification, in order of authority:
 
 0. **Pre-execution prerequisites** — sprint-initiator probes per-task `prerequisites[]` (declared in each plan's frontmatter) + the maestro/playwright/docker infra check. Failing `blocking: true` probes gate the affected task out of the sprint at Step 2.8 with a human-review-queue entry carrying the suggested fix command. See `agents/task-refiner.md` step 5f for authoring.
 1. **Ground truth** — tests, type checker, linter (non-negotiable, automated)
-2. **Visual** — Maestro CLI (mobile), Playwright MCP (web), optional and gated on config. See [Visual Verification Setup](VISUAL-VERIFICATION-SETUP.md).
+2. **Visual** — Maestro (mobile; MCP preferred, CLI fallback), Playwright MCP (web), optional and gated on config. See [Visual Verification Setup](VISUAL-VERIFICATION-SETUP.md).
 3. **Requirements adherence** — each acceptance criterion checked with concrete evidence
 4. **Goal-backward** — "What must be TRUE for production?"
 5. **Per-task code review** — inline quality/reuse + security audit by the code-reviewer agent against the task's changed files. Can send the executor back with `IMPROVEMENTS_NEEDED`. Toggle: `code_review.enabled`; retry budget: `code_review.review_retry_max`.
 6. **Sprint-level code review** — inline quality/reuse + security assessment across `base_sha..HEAD` plus a cross-task redundancy sweep. **Advisory only** — findings are appended directly to the active sprint's findings file and consumed by the next `/soloflow:compound` run (the user is not prompted to triage them at sprint close). Never feeds back into execution. Toggle: `sprint_code_review.enabled` (resolves independently from `code_review.enabled`).
 
-**Visual verification runtime.** The verifier checks tool availability (`which maestro` + booted-device probe for mobile, `which npx` + Playwright MCP probe for web) before attempting verification; if tools aren't installed, no device is booted, or the Playwright MCP server isn't running, Level 2 is skipped gracefully.
+**Visual verification runtime.** The verifier picks a mobile path once per run via **Path Selection** (see `skills/visual-verify/SKILL.md`): probe `mcp__maestro__list_devices` first; on success use Maestro MCP for every mobile call this run; else fall back to `which maestro` + booted-device probe and use the CLI. For web: `which npx` + Playwright MCP probe. If nothing is available (Maestro MCP unbound AND CLI not installed / no device booted, or Playwright MCP unreachable), Level 2 is skipped gracefully.
 
-**Token budget.** Use `maestro hierarchy` (~200–600 tokens plain text) over screenshot capture (~1600 tokens after `sips -Z 1400` downsize) when layout-only checks suffice. Limit to 3 screenshots per verification. Serialize Maestro CLI calls — `maestro test` and `maestro hierarchy` both hold a device lock and cannot run in parallel against the same device.
+**Token budget.** MCP `inspect_view_hierarchy` (CSV, ~50 tokens) is ~4–10× cheaper than CLI `maestro hierarchy` (plain text, ~200–600 tokens); both are far cheaper than screenshot capture (~1600 tokens after `sips -Z 1400` downsize). Limit to 3 screenshots per verification. Never mix Maestro MCP and CLI within a single run — both bind port 7001. Within the chosen path, serialize against the same device.
 
 ## Key Constraint
 
