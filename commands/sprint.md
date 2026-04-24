@@ -155,6 +155,22 @@ Options (label `{M}` = resolved `limits.max_sprint_tasks`, fallback 10):
 
 If no tasks were selected, stop.
 
+### 1.5e: Execution mode (serial vs parallel)
+
+Per-task visual verification (Maestro / Playwright) cannot safely run across parallel worktrees — Maestro holds a per-device lock, and web dev servers bind to fixed ports. The user chooses up-front which trade-off applies to this sprint.
+
+1. Skip this prompt entirely and set `execution_mode = "serial"` if **any** of the following is true:
+   - Resolved `limits.max_parallel_tasks <= 1` (parallelism already disabled globally)
+   - `selected_task_ids.length <= 1` (nothing to parallelize)
+2. Otherwise, use **AskUserQuestion** with:
+   - **Question body:** `Run {N} tasks serially or in parallel?\n\nSerial keeps per-task visual verification on (Maestro / Playwright). Parallel runs up to {MAX_PARALLEL} tasks concurrently in isolated worktrees but skips per-task visual verify — end-of-sprint visual verification still runs in a single pass.` (substitute the resolved `limits.max_parallel_tasks` for `{MAX_PARALLEL}` and the selected task count for `{N}`).
+   - **Header:** `Execution mode`
+   - **Options:**
+     - `Serial — full per-task visual verify` → `execution_mode = "serial"`
+     - `Parallel — skip per-task visual verify` → `execution_mode = "parallel"`
+
+The chosen mode flows into Step 2 and is persisted on `sprint.json`. Checkpoint-resume reads it back in Step 3, so this prompt fires at most once per sprint.
+
 ## Step 2: Execute sprint initiation
 
 Spawn the **sprint-initiator** agent with:
@@ -167,6 +183,7 @@ Decisions:
   overrides: [{task_id, justification}, ...]  # empty if no overrides
   remember_branch_choice: {true|false}
   skip_smoke: {gathered skip_smoke value}
+  execution_mode: "{serial|parallel}"        # from Step 1.5e
 ```
 
 Parse its structured output. Handle:
@@ -229,6 +246,8 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
 
 **Parallelism cap.** Resolved `limits.max_parallel_tasks` (fallback `3`) controls how many task pipelines run concurrently per batch. Resolve it once here and cache it as `MAX_PARALLEL`. Cache `RUN_BRANCH` from `sprint.json`'s `run.branch` (if `run` is null, use the result of `git symbolic-ref --short HEAD`). When `MAX_PARALLEL == 1`, all batches degrade to single-task pipelines with no worktree overhead — this is the strict-serial kill switch.
 
+**Execution mode.** Read `sprint.json`'s `sprint.execution_mode` into `EXECUTION_MODE` (fallback `"serial"` if absent — preserves prior-schema sprints on resume). If `EXECUTION_MODE == "serial"`, force `MAX_PARALLEL = 1` for the rest of this run, overriding the config value. This is the kill switch that makes the user's Step 1.5e choice binding even when config would otherwise allow parallelism. When `EXECUTION_MODE == "parallel"`, every shadow-verifier spawn in pipeline step d must be prefixed with `VISUAL_VERIFY: skip` (see pipeline step d).
+
 1. **Build dependency graph** from tasks' `depends_on` fields. Run:
    ```
    node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/ready-tasks.js" [--completed TASK-AAA,TASK-BBB]
@@ -261,7 +280,7 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
    Phases (skip the same way SERIAL does for disabled per-task verification / code-review):
 
    1. **Executor.** Payload = `PLAN_T`. On return, classify per pipeline step c. For `COMPLETED`, keep T alive for phase 2. For `BLOCKED` or `STUCK`: write the stuck report (if STUCK) using the same epic-aware path rule, then run `worktree-merge.js T <blocked|stuck>` followed by `settle-task.js T <blocked|stuck> ...` as in pipeline step c, and drop T from the batch. For `CONTEXT_LIMIT`, respawn a fresh executor **for that T alone** with the handoff protocol from pipeline step c; keep T alive.
-   2. **Verifier.** Skip entirely (stub verdict per pipeline step d) when `per_task_verification_enabled` is `false`. Otherwise spawn `shadow-verifier` per T with payload = plan + T's executor report. On return, classify per pipeline step e:
+   2. **Verifier.** Skip entirely (stub verdict per pipeline step d) when `per_task_verification_enabled` is `false`. Otherwise spawn `shadow-verifier` per T with payload = plan + T's executor report; include `VISUAL_VERIFY: skip` in the prefix alongside `WORKTREE_ROOT:` (PARALLEL MODE implies `EXECUTION_MODE == "parallel"` — see pipeline step d). On return, classify per pipeline step e:
       - `APPROVED` / `APPROVED_WITH_DEFERRED` → keep for phase 3.
       - `NEEDS_CHANGES` → **per-task retry loop** for that T alone: if `executor_loops[T] < executor_retry_max`, increment `executor_loops[T]`, spawn a single executor for T with verifier feedback, then a single verifier for T, and loop. Sibling tasks in the batch do not wait — they have already returned. Use retries as in pipeline step e. On retry-budget exhaustion, write stuck report, run `worktree-merge.js T stuck` + `settle-task.js T stuck ...`, drop from batch.
       - `HUMAN_NEEDED` → append queue entry per pipeline step e, then `worktree-merge.js T abandon` + `settle-task.js T human_needed ...`, drop.
@@ -311,7 +330,7 @@ For the task (or tasks, in PARALLEL mode):
            - In both cases, include: *"Continue from where the previous executor left off."*
         3. Increment context-limit respawn counter (tracked separately from `executor_retry_max`). If respawn limit reached, escalate as STUCK.
 
-   d. **Verification.** If `per_task_verification_enabled` (Step 0.4) is `false`, skip the verifier spawn entirely. Synthesize a stub verdict: `{ verdict: "APPROVED", visual_mobile: "skipped_user_preference", visual_web: "skipped_user_preference" }` and proceed directly to step f. The NEEDS_CHANGES retry loop and APPROVED_WITH_DEFERRED branch cannot trigger without a verifier. Otherwise (default): spawn the **shadow-verifier** (`subagent_type: "shadow-verifier"`) with plan + executor report and wait for verdict.
+   d. **Verification.** If `per_task_verification_enabled` (Step 0.4) is `false`, skip the verifier spawn entirely. Synthesize a stub verdict: `{ verdict: "APPROVED", visual_mobile: "skipped_user_preference", visual_web: "skipped_user_preference" }` and proceed directly to step f. The NEEDS_CHANGES retry loop and APPROVED_WITH_DEFERRED branch cannot trigger without a verifier. Otherwise (default): spawn the **shadow-verifier** (`subagent_type: "shadow-verifier"`) with plan + executor report and wait for verdict. When `EXECUTION_MODE == "parallel"`, prepend a `VISUAL_VERIFY: skip` line to the shadow-verifier prompt (above the plan payload, alongside any `WORKTREE_ROOT:` directive). The verifier honors the directive by emitting `skipped_user_preference` for both platforms in its Visual Verification block — these values then flow into the done-report frontmatter via the existing copy-verbatim rule in step f3.
 
    e. Handle verifier verdict (skipped when `per_task_verification_enabled` is `false` — use the stub verdict from step d):
       - **APPROVED** → proceed to code review (step f).
