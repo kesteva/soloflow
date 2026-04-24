@@ -5,6 +5,7 @@ models:
   executor: sonnet
   idea_extractor: sonnet
   task_refiner: opus
+  bug_investigator: opus
   compounder: sonnet
   researcher: sonnet
   code_reviewer: opus
