@@ -8,14 +8,16 @@ model: haiku
 
 Updates the four MCP-dependent agent shadows in `.claude/agents/` to match the current SoloFlow plugin version. Use this after a plugin update (or whenever `/soloflow:sprint`'s preflight warns about drift).
 
-**Why these shadows exist.** Plugin-scoped subagents silently ignore the `mcpServers:` frontmatter key, so a plugin-scoped verifier would never receive Maestro/Playwright/context7 bindings. Project-local copies in `.claude/agents/` DO honor the declaration. The four MCP-dependent agents therefore ship under the `shadow-` prefix and are spawned by their `shadow-*` names exclusively — orchestrators call `shadow-verifier`, not `verifier`. No reliance on Claude Code's project/plugin precedence rule, which empirically did not hold when names collided. Each shadow carries its own version stamp as a YAML comment at the top of the frontmatter (`# soloflow-shadow: version=X synced=Y`) — invisible to Claude Code's YAML parser and to the LLM, but readable by this utility's drift check.
+**Why these shadows exist.** Plugin-scoped subagents silently ignore the `mcpServers:` frontmatter key, so a plugin-scoped verifier would never receive Playwright/context7 bindings. Project-local copies in `.claude/agents/` DO honor the declaration. The four MCP-dependent agents therefore ship under the `shadow-` prefix and are spawned by their `shadow-*` names exclusively — orchestrators call `shadow-verifier`, not `verifier`. No reliance on Claude Code's project/plugin precedence rule, which empirically did not hold when names collided. Each shadow carries its own version stamp as a YAML comment at the top of the frontmatter (`# soloflow-shadow: version=X synced=Y`) — invisible to Claude Code's YAML parser and to the LLM, but readable by this utility's drift check.
+
+Note: Maestro is no longer listed — since 0.9.3, mobile visual verification runs via the Maestro CLI directly and does not require MCP tool bindings. The shadows remain because Playwright (web) and context7 (research) still use MCP.
 
 ## Managed agents
 
 | Agent | Declares | Used by |
 |---|---|---|
-| `shadow-verifier.md` | `mcpServers: [maestro, playwright]` | per-task Level 2 visual verification |
-| `shadow-sprint-verifier.md` | `mcpServers: [maestro, playwright]` | end-of-sprint visual check |
+| `shadow-verifier.md` | `mcpServers: [playwright]` | per-task Level 2 visual verification |
+| `shadow-sprint-verifier.md` | `mcpServers: [playwright]` | end-of-sprint visual check |
 | `shadow-researcher.md` | `mcpServers: [context7]` | idea research |
 | `shadow-roadmap-researcher.md` | `mcpServers: [context7]` | roadmap research |
 
