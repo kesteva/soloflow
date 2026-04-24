@@ -148,7 +148,6 @@ function gather(filePath) {
   const { entries } = parseFile(filePath);
   const actionRequired = [];
   const actionRequiredVisual = [];
-  const sprintCodeReview = [];
   const configIssue = [];
   const overridden = [];
   const other = [];
@@ -158,23 +157,22 @@ function gather(filePath) {
     if (!e || typeof e !== 'object') { malformed.push(e); continue; }
     if (e.type === 'action_required' && e.level === 'visual') actionRequiredVisual.push(e);
     else if (e.type === 'action_required') actionRequired.push(e);
-    else if (e.type === 'sprint_code_review') sprintCodeReview.push(e);
     else if (e.type === 'config_issue') configIssue.push(e);
     else if (e.type === 'overridden') overridden.push(e);
+    // type: sprint_code_review is deprecated — falls through to `other` so
+    // /soloflow:review-queue Step 7 can surface the cleanup hint.
     else other.push(e);
   }
 
   const sortBySev = (a, b) => severityRank(b.severity) - severityRank(a.severity);
   actionRequired.sort(sortBySev);
   actionRequiredVisual.sort(sortBySev);
-  sprintCodeReview.sort(sortBySev);
 
   const pendingCount = entries.filter((e) => e && e.type !== 'overridden').length;
   return {
     entries,
     action_required: actionRequired,
     action_required_visual: actionRequiredVisual,
-    sprint_code_review: sprintCodeReview,
     config_issue: configIssue,
     overridden,
     other,

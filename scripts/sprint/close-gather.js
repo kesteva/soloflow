@@ -207,10 +207,6 @@ function main() {
     }
     g.severity = sev;
   }
-  const sprintCodeReviewItems = queue.sprint_code_review.map((e) => ({
-    task: e.task, severity: e.severity, finding: e.finding, location: e.location,
-    recommendation: e.recommendation, suspected_tasks: e.suspected_tasks || [],
-  }));
   const otherEntries = [...queue.other, ...queue.config_issue, ...queue.action_required_visual, ...queue.overridden];
 
   // 7. Compound proposal drafts.
@@ -279,7 +275,6 @@ function main() {
     blocked_tasks: blocked,
     review_queue: {
       action_required: actionRequiredGrouped,
-      sprint_code_review: sprintCodeReviewItems,
       other_count: otherEntries.length,
       other_summaries: otherEntries.slice(0, 10).map((e) => (e.finding || e.action || e.task || '').toString().slice(0, 120)),
     },
