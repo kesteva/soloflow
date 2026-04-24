@@ -69,8 +69,10 @@ function tryShell(cmd) {
 
 function probeCategory(cat) {
   if (cat === 'maestro') {
-    const mcp = tryShell('claude mcp list 2>/dev/null | grep -qi maestro');
-    if (!mcp.ok) return { ok: false, reason: mcp.code === 127 ? 'claude mcp list unavailable' : 'MCP server not registered' };
+    // Maestro is CLI-only since 0.9.3 — no MCP registration required.
+    // Simulator/emulator availability is probed at verifier run-time
+    // (not preflight), since users commonly boot their device right
+    // before a sprint starts.
     const cli = tryShell('which maestro >/dev/null');
     if (!cli.ok) return { ok: false, reason: 'CLI not found' };
     return { ok: true };
@@ -151,18 +153,21 @@ function main() {
     missing.push({ category: cat, reason, impacts });
   }
 
-  // Shadow-install cross-check for config-driven visual categories.
+  // Shadow-install cross-check for Playwright (web visual verification).
   //
-  // `claude mcp list` + `which` only confirm the MCP server is registered and
-  // the CLI exists — they don't guarantee that `mcp__{server}__*` tool
-  // bindings reach the shadow-verifier subagent session. That propagation
+  // `claude mcp list` + `which npx` only confirm the Playwright MCP server is
+  // registered and npx exists — they don't guarantee that `mcp__playwright__*`
+  // tool bindings reach the shadow-verifier subagent session. That propagation
   // depends on the shadow agents at .claude/agents/shadow-verifier.md and
-  // shadow-sprint-verifier.md. Without current shadows,
-  // visual_mobile/visual_web=true silently degrades to `skipped_unable` on
-  // every task. Cross-check shadow state here so the sprint-initiator
-  // surfaces the gap up-front instead of letting it accumulate across a
-  // whole sprint.
-  if (configDriven.has('maestro') || configDriven.has('playwright')) {
+  // shadow-sprint-verifier.md. Without current shadows, visual_web=true
+  // silently degrades to `skipped_unable` on every task. Cross-check shadow
+  // state here so the sprint-initiator surfaces the gap up-front instead of
+  // letting it accumulate across a whole sprint.
+  //
+  // Maestro does NOT need this cross-check since 0.9.3 — it runs via the
+  // `maestro` CLI directly, which is available to every subagent's Bash tool
+  // regardless of shadow-install state.
+  if (configDriven.has('playwright')) {
     let shadowState = null;
     try { shadowState = shadowAgents.check(); } catch { /* shadow module unavailable */ }
     if (shadowState) {
@@ -170,24 +175,20 @@ function main() {
       const broken = visualSet.filter((s) => s.status !== 'current');
       if (broken.length > 0) {
         const brokenDesc = broken.map((s) => `${s.name}=${s.status}`).join(', ');
-        for (const cat of ['maestro', 'playwright']) {
-          if (!configDriven.has(cat)) continue;
-          const configKey = cat === 'maestro' ? 'visual_mobile' : 'visual_web';
-          const shadowReason = `shadow agents not current (${brokenDesc}) — mcp__${cat}__* bindings will not reach shadow-verifier subagent session. Run /soloflow:sync-agents to install/update shadows. (required by verification.${configKey}=true)`;
-          const availIdx = available.indexOf(cat);
-          if (availIdx >= 0) {
-            available.splice(availIdx, 1);
-            const planImpacts = perPlan
-              .filter((p) => p.categories.includes(cat))
-              .map((p) => ({ task_id: p.task_id, test_targets: p.test_targets }));
-            const impacts = planImpacts.length > 0
-              ? planImpacts
-              : perPlan.map((p) => ({ task_id: p.task_id, test_targets: [] }));
-            missing.push({ category: cat, reason: shadowReason, impacts });
-          } else {
-            const existing = missing.find((m) => m.category === cat);
-            if (existing) existing.reason = `${existing.reason}; ${shadowReason}`;
-          }
+        const shadowReason = `shadow agents not current (${brokenDesc}) — mcp__playwright__* bindings will not reach shadow-verifier subagent session. Run /soloflow:sync-agents to install/update shadows. (required by verification.visual_web=true)`;
+        const availIdx = available.indexOf('playwright');
+        if (availIdx >= 0) {
+          available.splice(availIdx, 1);
+          const planImpacts = perPlan
+            .filter((p) => p.categories.includes('playwright'))
+            .map((p) => ({ task_id: p.task_id, test_targets: p.test_targets }));
+          const impacts = planImpacts.length > 0
+            ? planImpacts
+            : perPlan.map((p) => ({ task_id: p.task_id, test_targets: [] }));
+          missing.push({ category: 'playwright', reason: shadowReason, impacts });
+        } else {
+          const existing = missing.find((m) => m.category === 'playwright');
+          if (existing) existing.reason = `${existing.reason}; ${shadowReason}`;
         }
       }
     }
