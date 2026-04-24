@@ -61,7 +61,7 @@ SoloFlow is a set of Claude Code hooks, agent definitions, slash commands, and s
 - **Input:** Raw user description
 - **Output:** `IDEA-NNN.md` in `.soloflow/active/ideas/`
 - **Human touchpoint:** User reviews idea, approves/modifies/rejects
-- **Routing:** BUGFIX ideas redirect to `/soloflow:quick` for a shorter path
+- **Routing:** BUGFIX ideas redirect to `/soloflow:bugfix` (investigator → executor → verifier) for a shorter path. `/soloflow:quick` is also available when the user already knows the exact fix and wants to skip investigation.
 
 ### Phase 2: Task Refinement
 - **Agent:** `task-refiner` (Opus)
@@ -90,6 +90,17 @@ SoloFlow is a set of Claude Code hooks, agent definitions, slash commands, and s
 - **Flow:** user approves per-item (including "Accept skeptic's recommendations"); main agent applies approved items with atomic commits, then archives the proposal and findings file(s). Compound does not block the next sprint.
 - **Batching:** when multiple sprints are pending, `/soloflow:compound --all` (or a multi-select picker) batches them into ONE merged proposal (`active/compound/SPRINT-{MIN}-{MAX}-proposal.md`) with globally numbered items carrying a `Source-Sprint:` field, one review flow, and one apply pass. Each sprint's findings file still archives individually to `archive/findings/SPRINT-NNN-findings.md`. A single-sprint run keeps today's format (`SPRINT-NNN-proposal.md`).
 
+### Lightweight single-task paths
+
+Two commands skip Phase 1 + Phase 2 and run a single task inline (no run branch, no worktree, no per-task code review). They share the same plan format, sprint scaffold (`SPRINT-{prefix}-<timestamp>`), `settle-task.js` pipeline, and HUMAN_NEEDED escalation as `/soloflow:sprint`:
+
+| Command | Pre-execution agent | When to use |
+|---|---|---|
+| `/soloflow:bugfix` | `bug-investigator` (Opus, read-only) → user confirmation gate → executor → verifier → test-writer | Bug reports where the user describes a symptom but does not yet know the fix. The investigator does root-cause analysis before any code changes. |
+| `/soloflow:quick` | none | Bugs / small fixes where the user already knows what to change. Goes straight to executor + verifier. |
+
+Both paths emit a `TASK-NNN-plan.md`, run the standard executor → verifier loop with `limits.executor_retry_max` retries, and produce a done report consumable by `/soloflow:compound`.
+
 ## Hook System
 
 | Event | File | Purpose | Timeout |
@@ -109,6 +120,7 @@ Hooks are plain Node.js with no external dependencies. They read stdin for event
 | Orchestrator | Opus | Complex coordination, dependency management |
 | Verifier | Opus | Thorough analysis, skeptical evaluation |
 | Task Refiner | Opus | Architectural decisions, approach selection |
+| Bug Investigator | Opus | Root-cause diagnosis from a symptom |
 | Executor | Sonnet | Code implementation, high throughput |
 | Idea Extractor | Sonnet | Structured parsing, codebase search |
 | Compounder | Sonnet | Pattern extraction from completed work |
