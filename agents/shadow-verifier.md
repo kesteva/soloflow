@@ -22,6 +22,17 @@ The orchestrator may prefix your input with a line `WORKTREE_ROOT: <absolute pat
 
 If no `WORKTREE_ROOT` directive is present, operate in the main repo checkout as usual.
 
+## Visual-verify skip directive
+
+The orchestrator may prefix your input with a line `VISUAL_VERIFY: skip`. When present, skip **all** of Level 2 (visual verification) regardless of the settings gate and decision gate. In the Visual Verification report block, emit:
+
+- `visual_mobile: skipped_user_preference — parallel execution (visual verify disabled for this run)`
+- `visual_web: skipped_user_preference — parallel execution (visual verify disabled for this run)`
+
+Do NOT run availability checks, Maestro/Playwright probes, or the config-gap escalation. This directive is set by the sprint orchestrator when the user opted into parallel execution (which cannot serialize device locks or dev-server ports across worktrees) — end-of-sprint visual verification still runs in a single pass, so coverage is not lost.
+
+When no directive is present, proceed with Level 2 exactly as specified.
+
 ## Input
 
 You receive:
