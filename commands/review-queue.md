@@ -32,7 +32,7 @@ Mapping used in this command:
 1. If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
 2. If `.soloflow/human-review-queue.md` does not exist, report: "Human review queue file missing. Run `/soloflow:init` to repair state." and stop.
 3. `.soloflow/active/sprint.json` may be absent — that's OK. Cruft Scenarios 2 and 4 (which need it) are skipped gracefully.
-4. Initialize in-memory counters to 0: `cruft_resolved`, `actions_completed`, `actions_queued_reverify`, `actions_deferred`, `actions_dismissed`, `actions_needs_changes`, `visual_accepted`, `visual_deferred`, `issues_logged`, `issues_queued_refine`, `tasks_created`, `sprint_review_accepted`, `sprint_review_deferred`, `sprint_review_dismissed`.
+4. Initialize in-memory counters to 0: `cruft_resolved`, `actions_completed`, `actions_queued_reverify`, `actions_deferred`, `actions_dismissed`, `actions_needs_changes`, `visual_accepted`, `visual_deferred`, `issues_logged`, `issues_queued_refine`, `tasks_created`, `legacy_sprint_code_review_seen`.
 5. Initialize deferred-agent queues (in-memory): `pending_reverifies: []`, `pending_refines: []`. Populated during interactive phases, drained in Step 6.
 
 ---
@@ -58,7 +58,9 @@ Run:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" gather --group-by action
 ```
 
-The script returns JSON `{ entries, action_required, action_required_visual, sprint_code_review, config_issue, overridden, other, malformed, pending_count, action_required_grouped }`. Use these arrays directly in Step 2b below.
+The script returns JSON `{ entries, action_required, action_required_visual, config_issue, overridden, other, malformed, pending_count, action_required_grouped }`. Use these arrays directly in Step 2b below.
+
+**Legacy entries.** Older versions of this codebase wrote `type: sprint_code_review` entries into the queue. The current sprint-code-reviewer no longer does — findings land directly in `.soloflow/active/findings/{sprint_id}-findings.md` for the compounder. Any pre-existing `sprint_code_review` entries in the queue fall into the `other` bucket (informational); Step 7 surfaces a hint with the cleanup command.
 
 Entry formats present in the queue:
 
@@ -79,13 +81,12 @@ Free-form HUMAN_NEEDED (from `commands/quick.md` step 7, executor HUMAN_NEEDED b
 
 - `visual_items`: `type == action_required` AND `level == visual`.
 - `action_items`: `type == action_required` AND `level != visual`, plus HUMAN_NEEDED entries that include a concrete `action`.
-- `sprint_code_review_items`: `type == sprint_code_review` (written by the end-of-sprint sprint-code-reviewer; each entry is a standalone finding with `severity`, `finding`, `location`, `recommendation`, `suspected_tasks`).
-- `informational`: any other entry (no actionable remediation). Print a one-line count; do not iterate.
+- `informational`: any other entry (no actionable remediation), including any legacy `type: sprint_code_review` entries. Print a one-line count; do not iterate. Set `legacy_sprint_code_review_seen` to the count of `type == sprint_code_review` entries within this bucket so Step 7 can surface the cleanup hint.
 - `malformed`: entries that failed parse — surface as a final note; user edits manually.
 
 ### 2c. Short-circuit
 
-If `action_items`, `visual_items`, and `sprint_code_review_items` are all empty AND `informational` + `malformed` are the only remnants, print a one-line summary ("No actionable items; {N} informational, {M} malformed.") and proceed to Step 7 (final report). Otherwise continue.
+If `action_items` and `visual_items` are both empty AND `informational` + `malformed` are the only remnants, print a one-line summary ("No actionable items; {N} informational, {M} malformed.") and proceed to Step 7 (final report). Otherwise continue.
 
 ---
 
@@ -170,66 +171,6 @@ At end of Step 3, if any changes were made:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/state/commit-atomic.js" \
     --message "chore: review-queue — resolved {actions_completed} actions, dismissed {actions_dismissed}, queued {actions_queued_reverify} for re-verify" \
     --path .soloflow/human-review-queue.md
-```
-
----
-
-## Step 3.5: Sprint-level code-review triage
-
-Skip if `--actions-only` or `--visual-only` is set, or if `sprint_code_review_items` is empty.
-
-Sort `sprint_code_review_items` by severity (`high` > `medium` > `low`), then by entry order. Paginate at 15 items if needed (same rule as 3a).
-
-### 3.5a. Bulk triage
-
-One `AskUserQuestion` with the list embedded in the question text:
-
-```
-{N} sprint-level code review findings pending:
-  1. [HIGH] SPRINT-003 — Duplicate date formatter added in two tasks (src/utils/date.ts:12)
-  2. [MED]  SPRINT-003 — Store reset fires mid-flow (src/stores/flow.ts:44)
-  ...
-Triage how?
-```
-
-Options:
-- **Accept all — queue as findings** — every item flows into 3.5b's accept sub-loop.
-- **Accept some** — follow-up free-form list (e.g., `1, 3`); unlisted items → `sprint_review_deferred`.
-- **Defer all** — leave every entry in the queue; increment `sprint_review_deferred` by `len(sprint_code_review_items)`.
-- **Dismiss all** — confirm with a second `AskUserQuestion`, then remove every entry from the queue; increment `sprint_review_dismissed` accordingly.
-- **Triage item-by-item** — per-item `AskUserQuestion` (Accept / Defer / Dismiss) using the shape in 3.5b.
-
-### 3.5b. Per-item accept (append to the target sprint's findings file)
-
-For each item the user accepted, determine the target findings file:
-
-- `{sprint_id}` is the `task:` field from the queue entry (already shaped `SPRINT-NNN`).
-- Target path: `.soloflow/active/findings/{sprint_id}-findings.md`.
-- **If the target file does not exist** (the originating sprint has already been compounded and archived), fall back to the currently active sprint's findings file (read `.soloflow/active/sprint.json` for `sprint.id`). If no active sprint exists either, fall back to the most recently started sprint whose findings file is still in `active/findings/` (glob + sort by mtime). Record which fallback fired so the step-3.5d commit message can mention it.
-
-Append the finding via:
-```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/state/findings.js" append \
-    --sprint {sprint_id} --fields-json \
-    '{"source":"{task} (sprint-code-reviewer)","type":"improvement","severity":"{queue entry severity}","status":"open","location":"{location}","description":"{finding} — {recommendation}","suggested_action":"{recommendation}","resolved_by":""}'
-```
-
-The script picks the next FIND ID for the sprint, appends the entry, recomputes `pending_count`, and refreshes `last_updated`. Increment in-memory `sprint_review_accepted`.
-
-### 3.5c. Atomic queue update per decision
-
-After each per-item decision:
-- **Accept** or **Dismiss:** `review-queue.js remove --task SPRINT-NNN --type sprint_code_review`.
-- **Defer:** no-op.
-
-### 3.5d. Commit
-
-At end of Step 3.5, commit via `commit-atomic.js` with one `--path` per distinct findings file touched plus `--path .soloflow/human-review-queue.md`:
-```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/state/commit-atomic.js" \
-    --message "chore: review-queue — sprint-code-review: accepted {sprint_review_accepted}, dismissed {sprint_review_dismissed}" \
-    --path .soloflow/human-review-queue.md \
-    --path .soloflow/active/findings/<sprint_id>-findings.md ...
 ```
 
 ---
@@ -502,9 +443,6 @@ Actions completed          : {actions_completed}
 Actions needs-changes      : {actions_needs_changes}
 Actions deferred           : {actions_deferred}
 Actions dismissed          : {actions_dismissed}
-Sprint-review accepted      : {sprint_review_accepted}
-Sprint-review deferred      : {sprint_review_deferred}
-Sprint-review dismissed     : {sprint_review_dismissed}
 Visual stages passed        : {visual_accepted}
 Visual stages deferred      : {visual_deferred}
 Visual issues logged        : {issues_logged}
@@ -521,6 +459,17 @@ If there are needs-changes entries (actions_needs_changes > 0), list them with t
 Needs-changes actions:
   - TASK-NNN: {short changes-required summary}
     → /soloflow:quick "<short task description>"
+```
+
+If `legacy_sprint_code_review_seen > 0`, append a hint so the user can clear the deprecated entries:
+```
+Legacy queue entries:
+  {N} `type: sprint_code_review` entries are deprecated (sprint-code-reviewer
+  now writes findings directly to the per-sprint findings file). Either:
+    - hand-edit `.soloflow/human-review-queue.md` to delete them, or
+    - run for each unique SPRINT-NNN task field:
+      node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" remove --task SPRINT-NNN --type sprint_code_review
+  The compounder picks up new sprint-code-review findings automatically.
 ```
 
 End with:
