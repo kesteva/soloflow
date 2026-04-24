@@ -197,11 +197,11 @@ Set config accordingly:
 2. **If found:** print `✓ npx detected; Playwright MCP runs via "npx @playwright/mcp@latest" on demand — no separate install needed.`
 3. **If missing:** print `⚠ Node.js / npx is required for Playwright visual verification. Install Node.js from https://nodejs.org before running visual verification. Your config will still be written.` Do NOT attempt to install Node.
 
-### MCP server registration (Playwright only — Maestro uses the CLI directly)
+### MCP server registration (Playwright + Maestro)
 
-Maestro runs via `maestro test` / `maestro hierarchy` and does not use an MCP server. Only Playwright needs registration.
+Both Playwright and Maestro support MCP servers. Playwright is MCP-only; Maestro prefers MCP with a first-class CLI fallback — users can skip Maestro MCP registration and still get mobile visual verification via the CLI.
 
-The plugin does NOT ship its own `.mcp.json` — that would collide for any user who already has `playwright` registered. Instead, detect and offer to register.
+The plugin does NOT ship its own `.mcp.json` — that would collide for any user who already has one of these servers registered. Instead, detect and offer to register each.
 
 **Playwright MCP** — only if `visual_web` is `true`:
 
@@ -219,18 +219,27 @@ The plugin does NOT ship its own `.mcp.json` — that would collide for any user
    - **On Skip:** print `Visual verification will be enabled in config — the verifier will gracefully skip Playwright until the MCP server is registered. Register later with: claude mcp add --scope user playwright npx @playwright/mcp@latest`.
 4. After a successful `claude mcp add`, re-run `claude mcp list` and confirm the entry appears. If not, warn but do not retry.
 
+**Maestro MCP (optional, recommended)** — only if `visual_mobile` is `true`:
+
+1. Run `claude mcp list` via Bash and grep the output for `maestro`.
+2. **If already registered:** print `✓ MCP server "maestro" already registered`. Continue.
+3. **If missing:** use `AskUserQuestion`:
+   - **Question:** `'MCP server "maestro" is not registered. SoloFlow prefers Maestro MCP (cheaper hierarchy, inline run_flow) but falls back to the Maestro CLI. Register now?'`
+   - **Header:** `Register maestro`
+   - **Options:**
+     - `"Yes — user scope (all projects, recommended)"`
+     - `"Yes — project scope (this project only, writes .mcp.json)"`
+     - `"Skip (CLI fallback will be used)"`
+   - **On user scope:** `claude mcp add --scope user maestro maestro mcp`
+   - **On project scope:** same command with `--scope project`.
+   - **On Skip:** print `Mobile visual verification will run via the Maestro CLI only. Register later with: claude mcp add --scope user maestro maestro mcp`.
+4. After a successful `claude mcp add`, re-run `claude mcp list` and confirm the entry appears. If not, warn but do not retry.
+
 Never run `claude mcp add` without the explicit user choice above — registering servers silently is exactly the collision problem we're avoiding.
-
-**Informational: stale Maestro MCP detection.** Regardless of `visual_mobile`, run `claude mcp list 2>/dev/null | grep -qi maestro`. If it finds a `maestro` entry, print (no prompt, zero-click):
-
-```
-ℹ Maestro MCP detected in your registered servers. SoloFlow 0.9.3+ no longer uses it — Maestro runs via the CLI directly. The registration is harmless if left; remove with:
-    claude mcp remove maestro
-```
 
 ### Shadow-install visual verification agents (only if `visual_mobile` or `visual_web` is true)
 
-**Why this step exists — surface it clearly to the user.** `shadow-verifier` and `shadow-sprint-verifier` need to call `mcp__playwright__*` tools for web visual verification (mobile runs via the Maestro CLI and does not depend on MCP bindings). Plugin-scoped subagents **cannot receive MCP tool bindings** in Claude Code, even when the agent frontmatter declares `mcpServers:` — the declaration is silently ignored for plugin agents. The plugin therefore does not ship a plugin-resolvable `verifier` / `sprint-verifier`; these agents exist only under the `shadow-` prefix and are installed project-local at init. Without this shadow-install, no verifier is available at all. This step is **mandatory** when visual verification is enabled; skip it only when the plugin root can't be resolved.
+**Why this step exists — surface it clearly to the user.** `shadow-verifier` and `shadow-sprint-verifier` need to call `mcp__playwright__*` tools for web visual verification and `mcp__maestro__*` tools for mobile (when Maestro MCP is registered; the CLI fallback runs through Bash and is unaffected by shadow state). Plugin-scoped subagents **cannot receive MCP tool bindings** in Claude Code, even when the agent frontmatter declares `mcpServers:` — the declaration is silently ignored for plugin agents. The plugin therefore does not ship a plugin-resolvable `verifier` / `sprint-verifier`; these agents exist only under the `shadow-` prefix and are installed project-local at init. Without this shadow-install, no verifier is available at all (and Maestro MCP mode, if registered, silently falls back to CLI). This step is **mandatory** when visual verification is enabled; skip it only when the plugin root can't be resolved.
 
 1. Invoke the shadow sync utility with the `visual` set:
    ```
@@ -243,8 +252,8 @@ Never run `claude mcp add` without the explicit user choice above — registerin
 3. Print an explicit callout — visual verification users need to understand what happened and why:
    ```
    ✓ Shadow-installed visual verification agents to .claude/agents/ (plugin v{plugin_version}):
-       shadow-verifier.md         — per-task Level 2 visual check (mcpServers: [playwright])
-       shadow-sprint-verifier.md  — end-of-sprint visual check    (mcpServers: [playwright])
+       shadow-verifier.md         — per-task Level 2 visual check (mcpServers: [maestro, playwright])
+       shadow-sprint-verifier.md  — end-of-sprint visual check    (mcpServers: [maestro, playwright])
 
    Why: plugin-scoped subagents cannot receive MCP tool bindings in Claude Code. Project-local ones do.
    /soloflow:sprint spawns these by their shadow-* names, so the MCP tool bindings from .claude/agents/
