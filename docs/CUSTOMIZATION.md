@@ -130,11 +130,12 @@ Findings are stored at `.soloflow/active/findings/SPRINT-NNN-findings.md` — on
 | `verification.run_tests` | `true` | Test suite as Level-1 quality gate |
 | `verification.run_typecheck` | `true` | Type checker as Level-1 quality gate |
 | `verification.run_linter` | `true` | Auto-lint after Write/Edit |
-| `verification.visual_mobile` | `false` | Enable Maestro MCP visual verification (mobile) |
+| `verification.visual_mobile` | `false` | Enable Maestro CLI visual verification (mobile) |
 | `verification.visual_web` | `false` | Enable Playwright MCP visual verification (web) |
+| `verification.visual_mobile_app_id` | `null` | Bundle ID for ad-hoc Maestro flows (auto-detected from existing flows when null) |
 | `verification.visual_maestro_flow_dirs` | `["maestro/", ".maestro/", "test/maestro/"]` | Dirs searched for Maestro flows |
 | `verification.visual_screenshot_budget` | 3 | Max screenshots per verification run |
-| `verification.visual_prefer_hierarchy` | `true` | Prefer `inspect_view_hierarchy` (~50 tokens) over `take_screenshot` (~1600 tokens) |
+| `verification.visual_prefer_hierarchy` | `true` | Prefer `maestro hierarchy` (~200–600 tokens plain text) over screenshot capture (~1600 tokens) |
 
 See [VISUAL-VERIFICATION-SETUP.md](VISUAL-VERIFICATION-SETUP.md) for dependency + MCP setup.
 

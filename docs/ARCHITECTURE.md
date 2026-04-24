@@ -149,15 +149,15 @@ Multi-layered verification, in order of authority:
 
 0. **Pre-execution prerequisites** — sprint-initiator probes per-task `prerequisites[]` (declared in each plan's frontmatter) + the maestro/playwright/docker infra check. Failing `blocking: true` probes gate the affected task out of the sprint at Step 2.8 with a human-review-queue entry carrying the suggested fix command. See `agents/task-refiner.md` step 5f for authoring.
 1. **Ground truth** — tests, type checker, linter (non-negotiable, automated)
-2. **Visual** — Maestro MCP (mobile), Playwright MCP (web), optional and gated on config. See [Visual Verification Setup](VISUAL-VERIFICATION-SETUP.md).
+2. **Visual** — Maestro CLI (mobile), Playwright MCP (web), optional and gated on config. See [Visual Verification Setup](VISUAL-VERIFICATION-SETUP.md).
 3. **Requirements adherence** — each acceptance criterion checked with concrete evidence
 4. **Goal-backward** — "What must be TRUE for production?"
 5. **Per-task code review** — inline quality/reuse + security audit by the code-reviewer agent against the task's changed files. Can send the executor back with `IMPROVEMENTS_NEEDED`. Toggle: `code_review.enabled`; retry budget: `code_review.review_retry_max`.
 6. **Sprint-level code review** — inline quality/reuse + security assessment across `base_sha..HEAD` plus a cross-task redundancy sweep. **Advisory only** — findings go to human review (accept → active sprint's findings file / defer / dismiss), never back to execution. Toggle: `sprint_code_review.enabled` (resolves independently from `code_review.enabled`).
 
-**Visual verification runtime.** The verifier checks tool availability (`which maestro`, `which npx`) before attempting MCP interactions; if tools aren't installed or MCP servers aren't running, Level 2 is skipped gracefully.
+**Visual verification runtime.** The verifier checks tool availability (`which maestro` + booted-device probe for mobile, `which npx` + Playwright MCP probe for web) before attempting verification; if tools aren't installed, no device is booted, or the Playwright MCP server isn't running, Level 2 is skipped gracefully.
 
-**Token budget.** Use `inspect_view_hierarchy` (~50 tokens) over `take_screenshot` (~1600 tokens) when layout-only checks suffice. Limit to 3 screenshots per verification. Never run `maestro test` via Bash while Maestro MCP is active (port 7001 conflict).
+**Token budget.** Use `maestro hierarchy` (~200–600 tokens plain text) over screenshot capture (~1600 tokens after `sips -Z 1400` downsize) when layout-only checks suffice. Limit to 3 screenshots per verification. Serialize Maestro CLI calls — `maestro test` and `maestro hierarchy` both hold a device lock and cannot run in parallel against the same device.
 
 ## Key Constraint
 

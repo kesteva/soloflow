@@ -122,7 +122,7 @@ Values are embedded in agent and hook source files. To customize, edit the relev
 ## Visual Verification
 
 SoloFlow can optionally verify work visually using:
-- **Maestro MCP** for mobile apps (React Native, Expo, native)
+- **Maestro CLI** for mobile apps (React Native, Expo, native)
 - **Playwright MCP** for web apps
 
 Visual verification is disabled by default. See [Visual Verification Setup](docs/VISUAL-VERIFICATION-SETUP.md) for installation and configuration.
