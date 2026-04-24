@@ -4,6 +4,22 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.9.3] - 2026-04-23
+
+### Changed
+- **Mobile visual verification switched from Maestro MCP to Maestro CLI.** The verifier now drives mobile verification via `maestro test` (flow execution), `maestro hierarchy` (view hierarchy as plain text, ~200–600 tokens), and native screenshot capture (`xcrun simctl io booted screenshot` / `adb exec-out screencap -p` + `sips -Z 1400`). Ad-hoc navigation uses an **ephemeral-flow pattern** — write a minimal YAML flow to `/tmp/sf-maestro-*.yaml`, run `maestro test`, discard. The `skills/visual-verify/SKILL.md` is the canonical CLI reference; `shadow-verifier.md` and `shadow-sprint-verifier.md` delegate to it. Playwright (web) still uses the Playwright MCP server — this migration covers Maestro only; Playwright is the next likely candidate.
+- **`shadow-verifier` / `shadow-sprint-verifier` frontmatter narrowed** from `mcpServers: [maestro, playwright]` to `mcpServers: [playwright]`. Mobile no longer needs MCP tool bindings to reach subagent sessions. Run `/soloflow:sync-agents` after upgrade to sync the narrowed frontmatter into `.claude/agents/`.
+- **`/soloflow:init` dropped Maestro MCP registration** from its wizard. New steps in the Maestro branch: a simulator/emulator sanity check (`xcrun simctl list devices booted`, `adb devices`), and an optional prompt for `verification.visual_mobile_app_id` used for ad-hoc flows. If the wizard detects `maestro` already registered in `claude mcp list`, it prints a zero-click informational note explaining the registration is inert in 0.9.3+ and can be removed with `claude mcp remove maestro`.
+- **`scripts/sprint/probe-infra.js`** — Maestro probe narrowed to `which maestro` only (no more `claude mcp list` step). Shadow-install cross-check limited to Playwright, since mobile no longer depends on binding propagation.
+- **Port-7001 guardrail removed.** The "never run `maestro test` via Bash while Maestro MCP is active" note is gone from every prompt — without an MCP, there's no conflict. `maestro test`, `maestro hierarchy`, and `maestro record` all own port 7001 uncontested.
+
+### Added
+- **`verification.visual_mobile_app_id`** (default `null`) — optional bundle ID used for ad-hoc Maestro flows when a project has no existing flows to grep `appId:` from. If null, the verifier auto-detects from existing flows in `verification.visual_maestro_flow_dirs`; if none exist, it emits `skipped_unable` with an actionable message.
+- **Troubleshooting entries** in `docs/VISUAL-VERIFICATION-SETUP.md` for "No simulator booted", "Multiple iOS simulators booted", and "Removing a stale Maestro MCP registration".
+
+### Migration
+Existing users with `maestro` registered in `claude mcp list` can leave it — SoloFlow 0.9.3+ simply doesn't call it. Remove manually with `claude mcp remove maestro` if you want a clean list. After upgrading the plugin, run `/soloflow:sync-agents` to pick up the narrowed `mcpServers: [playwright]` frontmatter, then restart Claude Code so the refreshed shadows load at session start.
+
 ## [0.9.2] - 2026-04-23
 
 ### Fixed
