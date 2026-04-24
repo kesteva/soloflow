@@ -4,6 +4,17 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.9.5] - 2026-04-24
+
+### Added
+- **Parallel task execution in `/soloflow:sprint` and `/soloflow:mad-max`.** Step 3 now picks a batch of up to `limits.max_parallel_tasks` (default 3) ready tasks whose `files_owned` sets don't overlap and runs each phase of the per-task loop (executor → verifier → code-reviewer → test-writer) as one parallel Agent call across every task in the batch. Each task runs in a dedicated short-lived git worktree at `.soloflow/worktrees/TASK-NNN/` on branch `{run-branch}-TASK-NNN`; after its pipeline completes, the orchestrator fast-forward-merges the task branch back into the run branch (with a non-ff fallback if a sibling merged first) and removes the worktree. Subagents honor a `WORKTREE_ROOT:` prompt prefix documented in each agent's new "Working directory" section.
+- **`limits.max_parallel_tasks`** config key (default `3`, fallback `3`). Set to `1` to disable parallel mode and reproduce the prior strictly-serial behavior.
+- **`scripts/sprint/build-batch.js`** — greedy-packs ready tasks into a conflict-free batch by `files_owned`, capped at the configured max.
+- **`scripts/state/worktree-setup.js` / `worktree-merge.js`** — per-task worktree lifecycle helpers with ff/non-ff merge handling and conflict preservation (merge conflicts, which imply a `files_owned` mis-declaration, leave the worktree on disk and flag the task as `human_needed`).
+
+### Changed
+- `commands/mad-max.md` Step 3 now delegates to `commands/sprint.md` Step 3 instead of duplicating the per-task loop. Mad-max retains its no-prompt deltas and continue-on-terminal-status behavior.
+
 ## [0.9.4] - 2026-04-24
 
 ### Changed
