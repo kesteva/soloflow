@@ -267,10 +267,10 @@ If no items are accepted, skip to Step 5.
    - Read `.soloflow/config.json` for `verification.visual_mobile` / `verification.visual_web`.
    - Fall back to `${CLAUDE_PLUGIN_ROOT}/config/defaults.yaml` if not set.
 2. For each enabled surface, probe:
-   - **Mobile:** `which maestro` via Bash. If found, attempt Maestro MCP `inspect_view_hierarchy` as a probe (mirrors `commands/verify.md` Step 1).
+   - **Mobile:** `which maestro` via Bash. If found, probe for a booted device with `xcrun simctl list devices booted | grep -c Booted` and `adb devices | awk '$2=="device"' | wc -l`. If at least one device is booted, run `maestro hierarchy > /dev/null` as a live probe.
    - **Web:** `which npx` via Bash. If found, attempt a light Playwright MCP navigation probe.
 3. Record `{mobile_available: bool, web_available: bool}`.
-4. If both are unavailable, **do not abort**. Announce: "Visual MCP tools unavailable — stages will fall back to manual confirmation."
+4. If both are unavailable, **do not abort**. Announce: "Visual verification tooling unavailable — stages will fall back to manual confirmation."
 
 ### 4c. Build the testing plan
 
@@ -316,9 +316,9 @@ For each stage in order:
      - {check 1}
    ```
 2. Run verification depending on surface + availability:
-   - **Mobile + Maestro available:** if `maestro_flow` is set, invoke Maestro MCP `run_flow` on that path; else navigate ad-hoc using `launch_app`, `tap_on`, `input_text`. Prefer `inspect_view_hierarchy` (~50 tokens) over `take_screenshot` (~1600 tokens). Cap screenshots at 3 per stage. **Do not run `maestro test` via Bash while Maestro MCP is active — port 7001 conflict.**
+   - **Mobile + Maestro available:** if `maestro_flow` is set, run `maestro test <path>` via Bash and parse exit status; else use the ephemeral-flow ad-hoc pattern from `skills/visual-verify/SKILL.md`. Prefer `maestro hierarchy` (~200–600 tokens plain text) over screenshot capture (`xcrun simctl io` / `adb exec-out` + `sips -Z 1400`, ~1600 tokens). Cap screenshots at 3 per stage. Serialize Maestro CLI calls — never run two in parallel against the same device.
    - **Web + Playwright available:** navigate to the relevant URL; check element presence/content; one screenshot only if appearance is under review.
-   - **Manual fallback:** skip programmatic verification. Note in the user prompt: "MCP unavailable — verify manually before choosing verdict."
+   - **Manual fallback:** skip programmatic verification. Note in the user prompt: "tooling unavailable — verify manually before choosing verdict."
 3. Prompt for verdict via `AskUserQuestion`:
    Question: `Stage {i}/{N} TASK-NNN — {flow}. Verdict?`
    Options:
@@ -538,7 +538,7 @@ Next steps:
 - **Never `git add .` or `-A`.** Every commit stages only explicit paths. Matches global atomic-commits policy.
 - **Skip commits silently** if the project is not a git repo or `.soloflow/` is gitignored.
 - **Atomic queue writes:** every modification to `.soloflow/human-review-queue.md` uses temp-file + rename so abort never leaves half-written content.
-- **Maestro port conflict:** never run `maestro test` via Bash while the Maestro MCP server is active — both use port 7001.
+- **Serialize Maestro CLI calls:** `maestro test` and `maestro hierarchy` hold a device lock; do not run two Maestro commands in parallel against the same device.
 - **Re-verify budget:** one respawn per re-verify on CONTEXT_LIMIT; one respawn total for the task-refiner.
 - **HUMAN_NEEDED entries** have no structured `blocked_checks`; the "Queue re-verify" option is omitted for them in Step 3b.
 - **Pagination:** bulk-classification prompts (Step 3a, 4a) paginate at 15 items / chunks of 12 to stay within AskUserQuestion's text budget.
