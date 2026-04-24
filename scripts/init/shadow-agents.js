@@ -6,11 +6,13 @@
 // Maintains project-local copies of MCP-dependent SoloFlow agents at
 // .claude/agents/shadow-*.md so `mcpServers:` frontmatter actually binds
 // MCP tools (plugin-scoped subagents have this field silently ignored).
-// The shadow-* prefix is baked into the plugin file names and the agents'
-// `name:` frontmatter, so callers spawn `shadow-verifier` etc. explicitly —
-// no reliance on Claude Code's project/plugin precedence rule, which
-// empirically did not hold when names collided. Each shadow carries its
-// own version stamp as a YAML comment at the top of its frontmatter, e.g.:
+// Source templates live at {plugin_root}/agent-templates/shadow-*.md —
+// deliberately outside the plugin's auto-discovered `agents/` directory so
+// there is no plugin-scoped `shadow-verifier` (etc.) that would collide with
+// the project-local copy and override its `mcpServers:` bindings. Callers
+// spawn `shadow-verifier` etc. by name and the harness sees exactly one
+// agent, the synced project-local copy. Each shadow carries its own version
+// stamp as a YAML comment at the top of its frontmatter, e.g.:
 //
 //     ---
 //     # soloflow-shadow: version=0.8.10 synced=2026-04-23T19:48:32.011Z
@@ -86,7 +88,7 @@ function shadowPath(name) {
 function sourcePath(name) {
   const root = pluginRoot();
   if (!root) return null;
-  return path.join(root, 'agents', name);
+  return path.join(root, 'agent-templates', name);
 }
 
 // Read the `# soloflow-shadow: version=X synced=Y` comment from a shadow's
