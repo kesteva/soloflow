@@ -2,7 +2,7 @@
 name: shadow-researcher
 description: Performs external ecosystem research for approved ideas — library comparisons, best practices, API docs, prior art
 model: sonnet
-tools: [Read, Glob, Grep, WebSearch, WebFetch]
+tools: [Read, Glob, Grep, WebSearch, WebFetch, mcp__context7__*]
 mcpServers: [context7]
 ---
 

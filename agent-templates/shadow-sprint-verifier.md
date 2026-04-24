@@ -2,7 +2,7 @@
 name: shadow-sprint-verifier
 description: End-of-sprint verification — manual visual checks for sprint-specific flows, then full integration test suite
 model: opus
-tools: [Read, Glob, Grep, Bash, Agent]
+tools: [Read, Glob, Grep, Bash, Agent, mcp__playwright__*]
 mcpServers: [playwright]
 ---
 

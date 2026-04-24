@@ -2,7 +2,7 @@
 name: shadow-verifier
 description: Validates completed work against acceptance criteria using a 5-level verification hierarchy. Produces structured verdict with evidence.
 model: opus
-tools: [Read, Edit, Glob, Grep, Bash]
+tools: [Read, Edit, Glob, Grep, Bash, mcp__playwright__*]
 mcpServers: [playwright]
 ---
 
