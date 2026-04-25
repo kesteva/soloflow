@@ -4,9 +4,14 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.9.8] - 2026-04-24
+
 ### Added
 - **`/soloflow:map-codebase`** — new one-shot command that surveys the project and creates missing `CLAUDE.md`, `ARCHITECTURE.md`, and `CODE-PATTERNS.md` (at root or under `docs/`). Idempotent and additive — never overwrites existing artifacts. Templates are deliberately lean so the user fills in what the survey can't infer.
 - **`/soloflow:init`** now detects which of those three context docs are missing and offers to defer to `/soloflow:map-codebase`. The recommendation surfaces in the final report's Next steps block when the user opts in.
+
+### Changed
+- **`/soloflow:roadmap` Path B (Approve as plans) refines epics in parallel.** Per-epic `task-refiner` spawns previously ran sequentially with the task counter threaded through each iteration; now the orchestrator pre-allocates non-overlapping TASK ID ranges per epic (`STRIDE = 50`), snapshots the existing-epics list once, and dispatches all refiners in a single parallel batch. Outputs are processed sequentially after the batch returns; existing noclobber/`wx` writes handle rare cross-refiner ID collisions and same-slug new-epic creation (first-write-wins on `EPIC-{slug}.md`). Final TASK IDs may have gaps between epics — expected and harmless.
 
 ## [0.9.7] - 2026-04-24
 
