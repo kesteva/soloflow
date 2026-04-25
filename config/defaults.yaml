@@ -74,6 +74,27 @@ verification:
     - test/maestro/
   visual_screenshot_budget: 3   # max screenshots per verification run
   visual_prefer_hierarchy: true # use maestro hierarchy (plain text) before screenshots
+  # Optional: sprint-managed dev server (e.g., Metro for React Native).
+  # When enabled, sprint-initiator probes `probe_url` at sprint start. The
+  # orchestrator offers to start (offline) or kill+restart (running externally)
+  # the process under sprint ownership using `Bash run_in_background`. The
+  # harness assigns an output_path that subagents read for bundler errors.
+  # The visual-verify skill also probes this URL before Maestro setup so a
+  # Metro-offline run short-circuits to `visual_mobile: skipped_metro_offline`
+  # instead of wasting a full simulator/MCP setup chain.
+  dev_server:
+    enabled: false
+    name: "dev-server"                            # display name in prompts
+    probe_url: "http://localhost:8081/status"     # Metro: 8081/status
+    probe_match: "packager-status:running"        # body substring required to count alive (empty = any 200)
+    probe_port: 8081                              # used to kill external listener on `restart`
+    start_command: "npx react-native start"
+    startup_timeout_seconds: 30
+  # Example — Vite:
+  #   probe_url: "http://localhost:5173/"
+  #   probe_match: ""
+  #   probe_port: 5173
+  #   start_command: "npm run dev"
 
 git:
   # Whether /soloflow:sprint runs each invocation on a dedicated branch that
