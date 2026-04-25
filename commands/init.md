@@ -430,6 +430,41 @@ If any exist, add them to the "Orphaned files" section of the final report.
 **Do NOT delete them automatically** — stay additive. The user can remove
 them manually.
 
+## Step 6.5: Project context detection
+
+SoloFlow agents work best when the project ships three "shared-context" docs
+that every subagent loads on entry: `CLAUDE.md`, `ARCHITECTURE.md`, and
+`CODE-PATTERNS.md`. Detect which (if any) are missing and offer to bootstrap
+them via `/soloflow:map-codebase`. This step never writes those files itself —
+the user runs the dedicated command after init exits, since map-codebase is
+interactive (multi-select prompts, file generation).
+
+1. Glob for each artifact in its conventional locations (same rules as
+   `commands/map-codebase.md` Step 1):
+   - **CLAUDE.md** → `CLAUDE.md` at project root.
+   - **ARCHITECTURE.md** → first match wins among: `ARCHITECTURE.md`,
+     `docs/ARCHITECTURE.md`, `docs/architecture.md`, `ARCHITECTURE/README.md`.
+   - **CODE-PATTERNS.md** → first match wins among: `CODE-PATTERNS.md`,
+     `docs/CODE-PATTERNS.md`, `docs/code-patterns.md`.
+2. Build `missing_context` — the list of artifact names that have no match.
+3. Set `context_status` for the Step 7 report:
+   - If `missing_context` is empty → `"all present"` and skip to Step 7.
+   - Otherwise → `"missing: <comma-joined names>"`, then continue to step 4.
+4. Use `AskUserQuestion`:
+   - **Question:** `"Missing project-context docs: {comma-joined missing names}. SoloFlow agents work better when these exist. Run /soloflow:map-codebase to scaffold them?"`
+   - **Header:** `"Map codebase"`
+   - **Options:**
+     - `"Yes — I'll run /soloflow:map-codebase after init"`
+     - `"Skip for now"`
+5. On **Yes**: append ` — user will run /soloflow:map-codebase` to
+   `context_status` and set `suggest_map_codebase = true` so Step 7 surfaces
+   the command at the top of the Next steps block.
+6. On **Skip for now**: append ` — skipped` to `context_status` and leave
+   `suggest_map_codebase = false`.
+
+If `.soloflow/` was already initialized before this run AND `missing_context`
+is empty, omit step 4's prompt — there is nothing to ask about.
+
 ## Step 7: Report
 
 Tell the user:
@@ -449,12 +484,16 @@ Status line: {configured|already configured|skipped (user kept existing)|not con
 Allow list:  {added N safe commands|already up to date|skipped}
 Visual verification agents: {shadowed 2 agents (verifier, sprint-verifier)|not shadowed — visual verification disabled|skipped_no_root}
 Research agents:            {shadowed 2 agents (shadow-researcher, shadow-roadmap-researcher)|skipped_no_root}
+Project context:            {context_status from Step 6.5}
 
 {if any orphaned files:}
 Orphaned files (safe to remove manually):
   .soloflow/counters.json   (removed in 0.5.0)
 
 Next steps:
+  {if suggest_map_codebase from Step 6.5:}
+  /soloflow:map-codebase                     — scaffold missing CLAUDE.md / ARCHITECTURE.md / CODE-PATTERNS.md
+  {end if}
   /soloflow:idea-extractor "<description>"   — start the full pipeline
   /soloflow:quick "<bug description>"        — fast path for bugfixes
   /soloflow:status                           — check current state
