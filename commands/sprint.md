@@ -517,7 +517,7 @@ Run the deterministic close-gather script directly (no agent spawn needed — th
 node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/close-gather.js"
 ```
 
-Parse its JSON output. The payload contains: sprint metadata + run info, task tallies (completed/stuck/human-needed/blocked counts), per-task summaries, parsed `human-review-queue.md` entries (action_required grouped by action, plus other count), compound-proposal status, findings reconciliation list, and resolved `merge_strategy`.
+Parse its JSON output. The payload contains: sprint metadata + run info, task tallies (completed/stuck/human-needed/blocked counts), per-task summaries, parsed `human-review-queue.md` entries (per-bucket counts plus `actions` and `testing` grouped by action; `decisions` and `deferred_visual` listed individually; `other_count` for overridden + malformed), compound-proposal status, findings reconciliation list, and resolved `merge_strategy`.
 
 If the script exits non-zero (e.g., no active sprint), surface stderr as the error and stop.
 
@@ -525,16 +525,19 @@ If the script exits non-zero (e.g., no active sprint), surface stderr as the err
 
 Using the gathered payload, present a consolidated review:
 - **Completed tasks** with brief summaries (from `completed_tasks`)
-- **Tasks needing human judgment** with notes (from `human_needed_tasks` and `review_queue.other_summaries`)
+- **Tasks needing human judgment** with notes (from `human_needed_tasks` and the gathered `review_queue.decisions` list)
 - **Stuck tasks** with failure details and what was tried (from `stuck_tasks`)
 - **Sprint statistics:** `stats.completed_count`, `stats.stuck_count`, `stats.human_needed_count`, `stats.total_executor_loops`, `stats.total_code_review_rounds`
+- **Review-queue snapshot.** Print one line summarizing `review_queue.buckets`: `Decisions: {N} · Actions: {N} · Testing: {N} · Deferred Visual: {N}`. Direct the user to `/soloflow:review-queue` for full triage.
 - **Code review findings queued.** If `sprint_code_review.ran` is true, print one line: "Code review: {N} findings queued for next `/soloflow:compound`" where `N = sprint_code_review.findings_count.critical + .important + .minor`. If `N == 0`, print "Code review: clean (no findings)." If `sprint_code_review.ran` is false, omit the line.
 
-**Deferred verification.** If `review_queue.action_required` is non-empty, present entries grouped by action, sorted by severity (`high` first, then `medium`, then `low`). For each action, use **AskUserQuestion**: "[{SEVERITY}] Have you completed: {action}?" with options **Yes — re-verify now** / **Not yet — keep deferred** / **No longer needed — dismiss**. (`{SEVERITY}` comes from the gathered `review_queue.action_required[].severity` field.)
+**Deferred verification — Actions bucket.** If `review_queue.actions` is non-empty, present entries grouped by action, sorted by severity (`high` first, then `medium`, then `low`). For each action, use **AskUserQuestion**: "[{SEVERITY}] Have you completed: {action}?" with options **Yes — re-verify now** / **Not yet — keep deferred** / **No longer needed — dismiss**. (`{SEVERITY}` comes from the gathered `review_queue.actions[].severity` field.)
 
-- **Yes:** Re-spawn the **shadow-verifier** (or **shadow-sprint-verifier** for sprint-level flows) with the original plan + executor report, scoped to only the previously deferred checks. Handle the verdict normally — if it passes, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" remove --task TASK-NNN --type action_required` to drop the entry and recompute `pending_count`. If it fails, convert to `NEEDS_CHANGES` and present to the user.
+- **Yes:** Re-spawn the **shadow-verifier** with the original plan + executor report, scoped to only the previously deferred checks. Handle the verdict normally — if it passes, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" remove --task TASK-NNN --bucket actions` to drop the entry and recompute counts. If it fails, convert to `NEEDS_CHANGES` and present to the user.
 - **Not yet:** Leave in the queue. The entry persists for the next session.
-- **Dismiss:** Run `review-queue.js remove --task TASK-NNN --type action_required` to drop the entry and recompute `pending_count`.
+- **Dismiss:** Run `review-queue.js remove --task TASK-NNN --bucket actions` to drop the entry and recompute counts.
+
+**Deferred verification — Testing bucket.** If `review_queue.testing` is non-empty, do not re-spawn a verifier here — manual testing belongs in `/soloflow:review-queue` where the visual + manual stage iterator can run. Print one line: `{N} testing items pending — run /soloflow:review-queue --testing-only to walk them.`
 
 Sprint-level code-review findings are **not** triaged here — the
 sprint-code-reviewer wrote them straight to the active sprint's findings

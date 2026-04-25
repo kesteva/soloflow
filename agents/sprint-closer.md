@@ -39,7 +39,7 @@ The script performs all the bookkeeping this phase used to encode in prose:
 - Sums `executor_loops` and `code_review_rounds` across the sprint's reports.
 - Rolls up per-task visual-coverage enums and sprint-level visual-coverage from `.soloflow/active/sprint-verification.md`.
 - Extracts sprint-code-reviewer counts from `.soloflow/active/sprint-code-review.md`.
-- Parses `.soloflow/human-review-queue.md` and groups `action_required` entries by action (max severity). Sprint-code-reviewer findings are no longer routed through the queue — they live directly in the active sprint's findings file for the compounder, and the gather payload exposes only counts via the top-level `sprint_code_review` block.
+- Parses `.soloflow/human-review-queue.md` and emits per-bucket data: `actions` and `testing` grouped by action text (max severity preserved); `decisions` and `deferred_visual` listed individually with task / action / severity / plan_ref. The full bucket counts are also surfaced via `review_queue.buckets`. Sprint-code-reviewer findings are no longer routed through the queue — they live directly in the active sprint's findings file for the compounder, and the gather payload exposes only counts via the top-level `sprint_code_review` block.
 - Detects compound-proposal drafts in `active/compound/` (plus legacy `COMPOUND-PROPOSAL.md`), normalizes `sprints:` membership, and computes archive paths by the span rule.
 - Reconciles findings by reading each done report's `**Findings resolved:**` line and flagging FIND IDs still `status: open` in the findings file.
 - Resolves `git.merge_strategy` via the config recipe (fallback `--no-ff`).
@@ -103,13 +103,33 @@ human_needed_tasks: [TASK-NNN, ...]
 blocked_tasks: [TASK-NNN, ...]
 
 review_queue:
-  action_required:
+  buckets:                         # totals per bucket
+    decisions: {N}
+    actions: {N}
+    testing: {N}
+    deferred_visual: {N}
+  actions:                         # grouped by action text (operational work)
     - action: "{action description}"
-      severity: "{low|medium|high}"   # max across grouped task_ids; default medium if absent in queue
+      severity: "{low|medium|high}"   # max across grouped task_ids; default medium if absent
       blocked_checks: ["{check1}", ...]
       task_ids: [TASK-NNN, ...]
     # empty list if none
-  other_count: {N}
+  testing:                         # grouped by action text (manual verification)
+    - action: "{action description}"
+      severity: "{low|medium|high}"
+      blocked_checks: ["{check1}", ...]
+      task_ids: [TASK-NNN, ...]
+  decisions:                       # individual judgment-call entries
+    - task: TASK-NNN
+      action: "{what to decide}"
+      severity: "{low|medium|high}"
+      plan_ref: "{plan path or null}"
+  deferred_visual:                 # visual failures awaiting promote/re-test
+    - task: TASK-NNN
+      action: "{description}"
+      severity: "{low|medium|high}"
+      plan_ref: "{plan path or null}"
+  other_count: {N}                 # overridden + malformed + (legacy) decisions surplus
   other_summaries: ["{brief1}", ...]
 
 sprint_code_review:

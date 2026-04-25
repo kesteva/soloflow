@@ -215,6 +215,6 @@ Next step: run /soloflow:sprint to resume human review and merge, or inspect {ru
 
 - **Context-limit prompts still exist.** If the orchestrator itself hits `SOLOFLOW CONTEXT CRITICAL`, it writes a checkpoint and asks the user to compact-or-exit. There's no unattended-safe alternative for an out-of-context main agent. If this matters for your run, pre-empt it by keeping batches small or splitting work across sessions.
 - **Smoke baseline must be green.** Mad-max refuses to start on a red baseline because it cannot distinguish pre-existing failures from task-caused regressions. Use `/soloflow:sprint` if you need to run on a known-red baseline.
-- **High-severity deferred items must be resolved first.** Mad-max will not silently override `action_required` entries from prior sprints when their severity is `high`. Medium/low-severity blocking entries are surfaced but do not stop the run.
+- **High-severity deferred items must be resolved first.** Mad-max will not silently override `action_required` entries (Actions or Testing bucket) from prior sprints when their severity is `high`. Medium/low-severity blocking entries are surfaced but do not stop the run.
 - **No auto-merge.** The run branch always stays open. Use `/soloflow:sprint` to merge after human review.
 - **Per-task visual verify follows `limits.max_parallel_tasks`.** Mad-max sets `execution_mode` from config and never prompts — `limits.max_parallel_tasks > 1` skips per-task Maestro / Playwright checks; `limits.max_parallel_tasks: 1` keeps them on. End-of-sprint visual verification always runs.

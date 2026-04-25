@@ -21,6 +21,8 @@ Display the current SoloFlow workflow state for this project.
    - Count `.md` files in `.soloflow/archive/done/` for completed tasks
    - Count `.md` files in `.soloflow/archive/compound/` for compound proposals
 
+3.5. **Resolve queue bucket counts.** Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" gather` and read `buckets.{decisions,actions,testing,deferred_visual}` from the JSON output (plus `pending_count` for the total). If the queue file does not exist, treat all counts as 0.
+
 4. **Display the report:**
 
 ```
@@ -44,6 +46,7 @@ Display the current SoloFlow workflow state for this project.
 
 ### Human Review Queue
 - **Pending:** {count or "Empty"}
+- **Buckets:** Decisions {N} · Actions {N} · Testing {N} · Deferred Visual {N}
 
 ### Last Checkpoint
 - **Updated:** {timestamp or "No checkpoint"}
