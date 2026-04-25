@@ -1,1 +1,6 @@
 workflow-implementation-plan.md
+
+# MCP server registrations — plugin policy is not to ship .mcp.json
+# so it doesn't collide for users who already have these servers
+# registered. Local dev registrations stay untracked.
+.mcp.json
