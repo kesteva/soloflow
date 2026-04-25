@@ -171,6 +171,30 @@ Per-task visual verification (Maestro / Playwright) cannot safely run across par
 
 The chosen mode flows into Step 2 and is persisted on `sprint.json`. Checkpoint-resume reads it back in Step 3, so this prompt fires at most once per sprint.
 
+### 1.5f: Dev server
+
+Read `dev_server` from gather output.
+
+- If `null` (`verification.dev_server.enabled` is false) — set `dev_server_action = null` and skip this prompt. The sprint runs with no dev-server management.
+- Otherwise branch on `online` × `managed_by_sprint`:
+  - **`online: false`, `managed_by_sprint: false`** → use **AskUserQuestion**:
+    - **Header:** `Dev server`
+    - **Question body:** `{name} is not running. Start it under the sprint so agents can read bundler errors?`
+    - **Options:**
+      - `Start under sprint (Recommended)` → `dev_server_action = "start"`
+      - `Skip` → `dev_server_action = "skip"`
+  - **`online: true`, `managed_by_sprint: false`** → use **AskUserQuestion**:
+    - **Header:** `Dev server`
+    - **Question body:** `{name} is already running outside SoloFlow. Kill it and restart under the sprint so agents can read its output? (Choosing 'Keep external' leaves your process alone but agents won't see its output.)`
+    - **Options:**
+      - `Restart under sprint (Recommended)` → `dev_server_action = "restart"`
+      - `Keep external` → `dev_server_action = "keep"`
+      - `Skip` → `dev_server_action = "skip"`
+  - **`online: true`, `managed_by_sprint: true`** → silent; set `dev_server_action = "keep"`.
+  - **`online: false`, `managed_by_sprint: true`** → print `Sprint's prior dev_server is no longer responding; will start a fresh one.` and set `dev_server_action = "start"`.
+
+`dev_server_action` is consumed in Step 2.5 (after sprint-initiator phase 2). It is informational only and is NOT passed to sprint-initiator phase 2 — process lifecycle stays in the orchestrator.
+
 ## Step 2: Execute sprint initiation
 
 Spawn the **sprint-initiator** agent with:
@@ -190,14 +214,51 @@ Parse its structured output. Handle:
 - If `status: ERROR` → report the error and stop.
 - If `run` is non-null, print: `Run branch: {run.branch} (base: {run.base_branch}@{run.base_sha short})`.
 
+## Step 2.5: Dev server start/restart
+
+If `dev_server_action` (from Step 1.5f) is `"skip"`, `"keep"`, or `null`, proceed to Step 2.8 with no action.
+
+Resolve the dev-server config keys:
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/config/resolve.js" \
+    --key verification.dev_server.name --fallback "dev-server" \
+    --key verification.dev_server.start_command --fallback "" \
+    --key verification.dev_server.probe_url --fallback "" \
+    --key verification.dev_server.probe_port --fallback 0 \
+    --key verification.dev_server.startup_timeout_seconds --fallback 30
+```
+
+If `dev_server_action == "restart"`:
+1. Run `lsof -ti :{probe_port}` via Bash. For each PID returned, run `kill {pid}`. After 3s, `kill -0 {pid}` to verify exit; `kill -9 {pid}` if still alive.
+2. Fall through to start.
+
+If `dev_server_action == "start"` (or fell through from restart):
+1. Call **Bash with `run_in_background: true`** invoking `{start_command}` from the repo root. Capture the bash result — extract `task_id` and the output file path that the harness assigns. Do NOT use `Bash` without `run_in_background: true` here; the process must outlive the tool call.
+2. Poll readiness: every 1s up to `startup_timeout_seconds`, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/probe-dev-server.js" --probe-only` via Bash and read the JSON `online` field. Stop polling on the first `true`. Track `final_online`.
+3. Update `.soloflow/active/sprint.json` to add a `dev_server` block:
+   ```json
+   "dev_server": {
+     "name": "{name}",
+     "task_id": "{task_id}",
+     "output_path": "{output_path}",
+     "started_at": "{ISO timestamp}",
+     "online": true|false
+   }
+   ```
+   Use a Read+Edit pair (no script helper exists for partial sprint.json patches). Do NOT commit this update — `task_id` is session-state, not durable. The block will be removed at sprint close.
+4. If `final_online == false` (probe never returned 200 within `startup_timeout_seconds`), do not abort — surface the failure in Step 2.8.
+
 ## Step 2.8: Smoke and infra decision
 
-Surface three orthogonal signals from the phase 2 output: the smoke baseline, task-level infra availability, and per-task plan-declared prerequisites. Present a single **AskUserQuestion** only if at least one of the following is true:
+Surface four orthogonal signals from the phase 2 output: the smoke baseline, task-level infra availability, per-task plan-declared prerequisites, and dev-server start state (Step 2.5). Present a single **AskUserQuestion** only if at least one of the following is true:
 - `smoke_results` is non-null AND (any failures OR `smoke_results.missing_infra` is non-empty)
 - `infra_check.missing` is non-empty
 - `infra_check.task_prerequisites` contains any entry with `status: "fail"` or `status: "timeout"` (blocking or advisory)
+- `dev_server_action` was `"start"` or `"restart"` AND `sprint.json.dev_server.online == false` (Step 2.5 failed to bring it online)
 
-Otherwise print `Smoke baseline clean; all required infra available; all task prerequisites satisfied.` and proceed to Step 3 with no prompt.
+If none of the above triggers a prompt:
+- If `dev_server_action` was `"start"` or `"restart"` AND `sprint.json.dev_server.online == true`, print `{name} running under sprint (task_id: {task_id}; agents can read output_path from sprint.json.dev_server.output_path).`
+- Print `Smoke baseline clean; all required infra available; all task prerequisites satisfied.` and proceed to Step 3 with no prompt.
 
 Let `gated_task_ids` = the set of task IDs in `task_prerequisites` with at least one failing entry where `blocking: true`. This set drives the gating behavior below.
 
@@ -214,6 +275,9 @@ Compose the question body from these sections (omit a section if it has nothing 
 - Header: `{N} task(s) in this sprint expect infrastructure that isn't available:`
 - Per `missing` entry: `- {category} — {reason}. Affected: {task_id list}. Tests that will be skipped: {flattened test_targets}.`
 - Trailer: `Continuing will skip these checks; verifier will mark them SKIPPED — {category} not available.`
+
+**Dev server** (only if `dev_server_action` was `"start"` or `"restart"` AND `sprint.json.dev_server.online == false`):
+- `{name} failed to come online within {startup_timeout_seconds}s after {dev_server_action}. Output captured at {sprint.json.dev_server.output_path}.`
 
 **Task prerequisites** (only if `task_prerequisites` contains any `fail`/`timeout` entry):
 - Blocking failures header (only if `gated_task_ids` is non-empty): `{N} task(s) have failing BLOCKING prerequisites and will be gated out of the sprint if you continue:`
@@ -514,6 +578,14 @@ Handle the outcome:
 - Otherwise capture `merge.outcome`, `merge.merge_sha` / `merge.pr_url`, and `head_sha` for Step 5.
 
 The closer handles all staging and committing internally — do not run additional `git add` or `git commit` here.
+
+## Step 4.6: Stop sprint-managed dev server
+
+If the closer's gather output contained `dev_server_to_stop`, call **`TaskStop({ task_id: "<task_id>" })`** with the captured task_id. Print `{name} (task_id: {task_id}) stopped at sprint close.`
+
+If gather output did not contain `dev_server_to_stop`, this step is a no-op (the sprint either had `verification.dev_server.enabled: false`, or the user chose `Skip` / `Keep external` at Step 1.5f).
+
+The harness retains the output file in its task store; no SoloFlow-managed cleanup is needed. `sprint.json.dev_server` was never committed (Step 2.5), so it is naturally archived with the rest of `sprint.json` at the closer's finalize step without leaking the now-stale `task_id`.
 
 ## Step 5: Report
 
