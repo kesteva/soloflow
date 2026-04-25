@@ -60,6 +60,12 @@ Phase: gather
 
 8. **Determine smoke eligibility.** Glob `.soloflow/archive/done/**/TASK-*-done.md`. If any match, set `skip_smoke: true` (prior sprint established baseline). Otherwise `skip_smoke: false`.
 
+9. **Probe dev server.** Run:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/probe-dev-server.js"
+   ```
+   Parse the JSON. If `enabled: false`, set `dev_server: null` in gather output. Otherwise pass through `name`, `online`, and `managed_by_sprint` (the orchestrator drives the start/restart prompt from these three fields). The script also reads `.soloflow/active/sprint.json` to detect a sprint-managed task_id; you do NOT need to read sprint.json yourself.
+
 ### Output
 
 ```
@@ -102,6 +108,11 @@ deferred_items:
 
 sprint_id_next: "SPRINT-{NNN}"
 skip_smoke: {true|false}
+
+dev_server:                         # null when verification.dev_server.enabled is false
+  name: "{display name}"
+  online: {true|false}
+  managed_by_sprint: {true|false}   # true when sprint.json already has a live dev_server.task_id
 `` `
 ```
 
