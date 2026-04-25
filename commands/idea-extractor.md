@@ -129,13 +129,27 @@ Tell the user:
 ```
 Idea extracted: IDEA-{NNN} ({title})
 {Research report: IDEA-{NNN}-research.md  — if applicable}
-
-Next step: /soloflow:planner IDEA-{NNN}
 ```
+
+## Step 6: Prompt to refine into tasks
+
+Use the **AskUserQuestion** tool to ask whether to refine now. Do not phrase this as a suggestion in prose — the user must answer through the picker.
+
+- `question`: `"Refine IDEA-{NNN} into execution-ready tasks now?"`
+- `header`: `"Refine now"`
+- `multiSelect`: `false`
+- `options` (in this order):
+  1. `label: "Refine now (Recommended)"`, `description: "Run /soloflow:planner against IDEA-{NNN} immediately, in this same session."`
+  2. `label: "Not yet"`, `description: "Stop here. Run /soloflow:planner IDEA-{NNN} later when ready."`
+
+The tool call blocks until the user responds.
+
+- If the user chose **Not yet** (or any free-form answer that clearly defers): stop.
+- If the user chose **Refine now**: read `${CLAUDE_PLUGIN_ROOT}/commands/planner.md` with the `Read` tool and execute its procedure end-to-end with `$ARGUMENTS = IDEA-{NNN}`. Treat that file's instructions (model resolution, Step 1 → Step 4) as a continuation of this run — including its own human checkpoint. Do not re-run Step 1 to ask the user to pick an idea; the ID is already known.
 
 ---
 
 ## Notes
 
-- This command does NOT refine into tasks — that's `/soloflow:planner`.
+- Refinement into tasks happens via `/soloflow:planner`, which Step 6 invokes inline when the user chooses "Refine now."
 - If the user's description is too vague, ask for clarification BEFORE spawning the extractor. Prefer the **AskUserQuestion** tool when the clarification can be framed as a choice; use a free-form text question only when the clarification is genuinely open-ended.
