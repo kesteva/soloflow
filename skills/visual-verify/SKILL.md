@@ -10,6 +10,28 @@ This skill provides patterns for visually verifying UI changes. For mobile, Solo
 
 Pick a path **once per verification run** — never mix MCP and CLI Maestro calls in the same run (both own port 7001; mixing causes contention).
 
+## Dev-Server Preflight (mobile only)
+
+Before any Maestro path selection or device probe, check whether the project's dev server (Metro for React Native, Vite for web app shells, etc.) is reachable. The most common reason a `visual_mobile` run produces nothing actionable is that Metro is offline — the dev-client launches into the Expo Dev Launcher screen and can't load the task's JS changes. The verifier used to discover this only after a full Maestro setup chain (MCP probe → simulator wakefulness → device pick → screenshot), then emit a generic "Metro bundler offline" finding per task. Short-circuit that here with a single config-driven probe.
+
+Run:
+
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/probe-dev-server.js" --probe-only
+```
+
+Parse the JSON `online` field:
+
+- **`{ "online": null, "skipped": true }`** — `verification.dev_server.enabled` is `false`. The preflight is opt-in; **continue to Path Selection** below. Existing behavior unchanged.
+- **`{ "online": true }`** — dev server reachable. **Continue to Path Selection.**
+- **`{ "online": false, ... }`** — dev server offline. **Stop immediately:**
+  - Emit `visual_mobile: skipped_metro_offline` in the verification result (replaces the old `skipped_unable` for this specific failure mode — surfaces in done-report frontmatter and rolls up in sprint-closer's per-task mobile bucket).
+  - Single-line note for the result: `{name} unreachable at {probe_url} — start it (e.g., \`npx expo start --dev-client\`) before running visual verification.` (read `name` and `probe_url` from `verification.dev_server` config or rerun the probe without `--probe-only` to get them).
+  - **Do NOT proceed** to MCP availability check, simulator wakefulness, device pick, app launch, or screenshot capture. Aborting at this point saves ~3-5 tool calls per task.
+  - The verifier agent's caller will route this skip to the end-of-sprint visual audit (one structured skip per task — no duplicate FIND entries spawned per Maestro setup attempt; see compound finding D1, SPRINT-026).
+
+This preflight runs **only on the visual_mobile path**. The web (Playwright) path has its own availability section below and does not depend on the dev server (Playwright launches its own browser).
+
 ## Path Selection (once per run)
 
 Before running any mobile verification, probe which path to use and record the decision for the rest of the run:
