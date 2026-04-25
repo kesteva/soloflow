@@ -208,32 +208,40 @@ it wherever "Cap at 3 respawns" appears below.
 
 1. Compute the starting IDEA ID and starting TASK ID from the filesystem (same glob recipes as Path A for ideas, and the standard TASK glob for tasks).
 
-2. For each approved epic in phase order:
+2. **Pre-allocate ID ranges per epic.** Let `N` be the number of approved epics in phase order, indexed `0..N-1`. For epic `i`:
+   - `idea_id_i = base_idea_id + i`
+   - `starting_task_counter_i = base_task_id + i * STRIDE`, where `STRIDE = 50` (a generous upper bound on tasks per epic).
 
-   a. Create a brief IDEA file (same format as Path A) for traceability. Write to `.soloflow/active/ideas/`.
+   The stride guarantees parallel refiners produce non-overlapping TASK IDs even when some epics yield far fewer tasks than others. Final TASK IDs may have gaps between epics; that is expected and harmless.
 
-   b. Spawn the **task-refiner** agent via the Agent tool with:
-      - The idea file content
-      - Prefix: "A research report is provided below. Use it to inform approach selection, library choices, and resolve open questions before doing your own research."
-      - The relevant research reports (all 4 dimension reports)
-      - The starting task counter (TASK-{NNN})
-      - The existing epics list (including any epics created by earlier iterations in this loop)
-      - Instruction: "Refine this idea into execution-ready plans. Start task numbering at TASK-{NNN}. Output each plan file's content clearly separated. For any new epic slugs, also output an EPIC-{slug}.md block."
+3. **Write IDEA files for traceability.** For each approved epic, create a brief IDEA file (same format as Path A) and write to `.soloflow/active/ideas/IDEA-{idea_id_i}.md`.
 
-   c. Parse the refiner output into individual plan files + EPIC-{slug}.md blocks.
+4. **Snapshot existing epics once.** Glob `.soloflow/active/plans/*/EPIC-*.md` and read each `EPIC-{slug}.md`. This snapshot is passed verbatim to every parallel refiner; it is NOT updated during the parallel run (refiners cannot see epics created by their peers).
 
-   d. For each plan:
+5. **Spawn task-refiner agents in parallel** — one per approved epic, all in a single tool-call batch via the Agent tool. Each spawn passes:
+   - The IDEA file content for that epic (written in step 3)
+   - Prefix: "A research report is provided below. Use it to inform approach selection, library choices, and resolve open questions before doing your own research."
+   - The relevant research reports (all 4 dimension reports)
+   - The pre-allocated starting task counter for this epic (`starting_task_counter_i`)
+   - The frozen existing-epics snapshot from step 4
+   - Instruction: "Refine this idea into execution-ready plans. Start task numbering at TASK-{NNN}. Output each plan file's content clearly separated. For any new epic slugs, also output an EPIC-{slug}.md block."
+
+   Wait for **all** refiners to complete before proceeding. If any refiner reports **CONTEXT_LIMIT**, read its `### Handoff` and respawn a fresh refiner for that epic with the handoff content (capped at resolved `limits.context_limit_respawn_max`). Each epic manages its own respawn budget independently.
+
+6. **Process refiner outputs sequentially** (after the parallel batch returns):
+
+   a. For each refiner output, parse plan files + `EPIC-{slug}.md` blocks.
+
+   b. For each plan:
       - If `epic: <slug>` -> write to `.soloflow/active/plans/{slug}/TASK-{NNN}-plan.md` (create folder if missing)
       - If `epic: null` or absent -> write to `.soloflow/active/plans/TASK-{NNN}-plan.md`
-      - Use noclobber semantics
+      - Use noclobber/`wx` semantics. If a path collides (rare cross-epic ID collision when a refiner over-produced beyond `STRIDE`), recompute the next free TASK ID for the remaining plans of that refiner and retry.
 
-   e. For each new epic: write `EPIC-{slug}.md` to `.soloflow/active/plans/{slug}/EPIC-{slug}.md` (do NOT overwrite existing)
+   c. For each new epic slug emitted by any refiner: write `EPIC-{slug}.md` to `.soloflow/active/plans/{slug}/EPIC-{slug}.md`. Do NOT overwrite existing files — if two parallel refiners independently introduced the same new slug, first-write-wins; tasks from the second land in the same epic folder, which is the desired outcome.
 
-   f. Add each task to `.soloflow/active/backlog.json` with `status: "ready"` and `depends_on` list.
+   d. Add each task to `.soloflow/active/backlog.json` with `status: "ready"` and its `depends_on` list.
 
-   g. Update the starting task counter for the next epic iteration.
-
-3. Update the roadmap file's frontmatter:
+7. Update the roadmap file's frontmatter:
    - Set `status: materialized`
    - Set `materialized_at: {ISO timestamp}`
    - Set `materialized_as: plans`
