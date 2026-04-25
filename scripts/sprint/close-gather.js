@@ -197,17 +197,23 @@ function main() {
 
   // 6. Review-queue gather.
   const queue = rq.gather(paths.reviewQueuePath(cwd));
-  const actionRequiredGrouped = rq.groupByAction(queue.action_required);
-  // Map group.severity correctly (groupByAction starts from 'low' — use true max).
-  for (const g of actionRequiredGrouped) {
-    let sev = 'low';
-    for (const e of queue.action_required) {
-      if (!g.task_ids.includes(e.task) || e.action !== g.action) continue;
-      sev = severityMax(sev, e.severity || 'medium');
+  const actionsGrouped = rq.groupByAction(queue.actions);
+  const testingGrouped = rq.groupByAction(queue.testing);
+  // groupByAction tracks max severity already, but it starts from 'low'; ensure
+  // the merged severity reflects the strongest entry per group.
+  function recomputeSeverity(grouped, source) {
+    for (const g of grouped) {
+      let sev = 'low';
+      for (const e of source) {
+        if (!g.task_ids.includes(e.task) || e.action !== g.action) continue;
+        sev = severityMax(sev, e.severity || 'medium');
+      }
+      g.severity = sev;
     }
-    g.severity = sev;
   }
-  const otherEntries = [...queue.other, ...queue.config_issue, ...queue.action_required_visual, ...queue.overridden];
+  recomputeSeverity(actionsGrouped, queue.actions);
+  recomputeSeverity(testingGrouped, queue.testing);
+  const otherEntries = [...queue.decisions, ...queue.deferred_visual, ...queue.overridden, ...queue.malformed];
 
   // 7. Compound proposal drafts.
   const activeCompoundDir = path.join(paths.activeDir(cwd), 'compound');
@@ -286,7 +292,21 @@ function main() {
     human_needed_tasks: humanNeeded,
     blocked_tasks: blocked,
     review_queue: {
-      action_required: actionRequiredGrouped,
+      buckets: queue.buckets,
+      actions: actionsGrouped,
+      testing: testingGrouped,
+      decisions: queue.decisions.map((e) => ({
+        task: e.task,
+        action: e.action,
+        severity: e.severity || 'medium',
+        plan_ref: e.plan_ref || null,
+      })),
+      deferred_visual: queue.deferred_visual.map((e) => ({
+        task: e.task,
+        action: e.action,
+        severity: e.severity || 'medium',
+        plan_ref: e.plan_ref || null,
+      })),
       other_count: otherEntries.length,
       other_summaries: otherEntries.slice(0, 10).map((e) => (e.finding || e.action || e.task || '').toString().slice(0, 120)),
     },
