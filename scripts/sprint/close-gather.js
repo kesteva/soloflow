@@ -66,7 +66,7 @@ function severityMax(a, b) {
 }
 
 function tallyVisualCoverage(doneReports, sprintId) {
-  const init = () => ({ pass: 0, fail: 0, not_applicable: 0, skipped_user_preference: 0, skipped_unable: 0 });
+  const init = () => ({ pass: 0, fail: 0, not_applicable: 0, skipped_user_preference: 0, skipped_unable: 0, skipped_metro_offline: 0 });
   const mobile = init();
   const web = init();
   for (const dr of doneReports) {
@@ -253,6 +253,18 @@ function main() {
   // 8. Merge strategy.
   const mergeStrategy = config.resolve('git.merge_strategy', '--no-ff', cwd);
 
+  // 9. Dev-server cleanup. The orchestrator's Step 2.5 wrote a transient
+  //    {task_id, output_path, name} block to sprint.json when it started a
+  //    dev server in a background shell. Surface it so the orchestrator can
+  //    call TaskStop after sprint-closer finalize completes.
+  let devServerToStop = null;
+  if (state.dev_server && typeof state.dev_server.task_id === 'string' && state.dev_server.task_id.length > 0) {
+    devServerToStop = {
+      task_id: state.dev_server.task_id,
+      name: state.dev_server.name || 'dev-server',
+    };
+  }
+
   // Emit.
   const payload = {
     sprint: { id: sprintId, status: state.sprint.status, started: state.sprint.started },
@@ -282,6 +294,7 @@ function main() {
     findings_reconciliation: findingsReconciliation,
     compound_drafts: compoundDrafts,
     merge_strategy: mergeStrategy,
+    dev_server_to_stop: devServerToStop,
   };
 
   process.stdout.write(JSON.stringify(payload, null, 2) + '\n');
