@@ -1,7 +1,7 @@
 ---
 description: Quickly capture multiple ideas and tasks from a braindump session
 argument-hint: "- idea one\n- idea two\n- fix the login bug"
-allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion]
+allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 
 # /soloflow:braindump
@@ -218,7 +218,7 @@ Write the updated backlog.json back.
 4. Otherwise commit: `chore: braindump — {idea_count} ideas, {task_count} tasks`
 5. Skip this step silently if the project is not inside a git repo or if `.soloflow/` is gitignored.
 
-## Step 7: Report and Next Steps
+## Step 7: Report and route to planner
 
 Print a summary:
 
@@ -230,25 +230,33 @@ Created:
   Tasks: TASK-{first}..TASK-{last} ({count}) — added to backlog
 
 Next steps:
-  /soloflow:planner IDEA-{NNN}          — refine an idea into tasks
   /soloflow:idea-extractor IDEA-{NNN}   — full extraction with codebase grounding
   /soloflow:sprint                     — execute ready tasks from backlog
 ```
 
-If any IDEAs were created, use `AskUserQuestion` with options:
+If no IDEAs were created (TASKs only), stop here.
 
-1. **Run planner on all new ideas** — the user will invoke `/soloflow:planner` for each IDEA sequentially
-2. **Run planner on specific ideas** — let the user pick which IDEA IDs to refine
-3. **Done for now** — stop
+Otherwise, use the **AskUserQuestion** tool to ask whether to refine the new IDEAs now. Do not phrase this as a suggestion in prose — the user must answer through the picker.
 
-If only TASKs were created (no IDEAs), skip the question and just report.
+- `question`: `"Refine the new IDEA(s) into execution-ready tasks now?"`
+- `header`: `"Refine now"`
+- `multiSelect`: `false`
+- `options` (in this order):
+  1. `label: "Refine all (Recommended)"`, `description: "Run /soloflow:planner inline for each new IDEA, sequentially, in this same session."`
+  2. `label: "Refine some"`, `description: "Pick which IDEA IDs to refine now; the rest stay in active/ideas/ for later."`
+  3. `label: "Not yet"`, `description: "Stop here. Run /soloflow:planner IDEA-{NNN} later when ready."`
 
-On "Run planner on all new ideas" or "Run planner on specific ideas": print the exact commands the user should run, e.g.:
+The tool call blocks until the user responds.
 
-```
-Run these commands to refine your ideas:
-  /soloflow:planner IDEA-{NNN}
-  /soloflow:planner IDEA-{NNN}
-```
+**Branch on the answer:**
 
-Then stop. Braindump does not invoke the planner itself — it is a pure capture tool.
+- **Not yet** → print the deferred-commands hint and stop:
+  ```
+  Run these commands when you're ready to refine:
+    /soloflow:planner IDEA-{first}
+    /soloflow:planner IDEA-{...}
+  ```
+- **Refine all** → set `to_refine = [every newly created IDEA-{NNN}]`.
+- **Refine some** → use a follow-up `AskUserQuestion` (free-form) asking *"Which IDEA IDs? (e.g., 'IDEA-007, IDEA-009')"*. Parse the response into a list of IDs intersected with the IDs created in this run; that becomes `to_refine`. If `to_refine` ends up empty, print the deferred-commands hint and stop.
+
+For each ID in `to_refine`, in order: read `${CLAUDE_PLUGIN_ROOT}/commands/planner.md` with the `Read` tool and execute its procedure end-to-end with `$ARGUMENTS` set to that ID. Treat each invocation as a continuation of this run — including the planner's own human checkpoint. Do not re-run the planner's Step 1 idea-picker; the ID is already known.
