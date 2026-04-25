@@ -106,7 +106,10 @@ function main() {
     const task = opts.task;
     const justification = opts.justification;
     if (!task || !justification || justification === true) die('review-queue', 'override needs --task and --justification');
-    const predicate = (e) => e && e.task === task && e.type !== 'overridden';
+    // Default scope: action_required entries (the override flow is for blocking
+    // prereqs, not HUMAN_NEEDED decisions). Override with --type to broaden.
+    const types = (opts.type && opts.type.length > 0) ? opts.type : ['action_required'];
+    const predicate = (e) => e && e.task === task && types.includes(e.type);
     const count = rq.overrideEntry(filePath(opts), predicate, justification);
     process.stdout.write(JSON.stringify({ overridden: count }) + '\n');
     return;

@@ -101,10 +101,10 @@ Once `USE_MAESTRO_MCP` is decided, do not switch mid-run. `maestro mcp` and `mae
 
 **Config-gap escalation (required when emitting `skipped_unable`):** When the settings gate resolves to enabled but the tool surface is unavailable, the user's configured verification is silently degraded. You MUST make this visible:
 
-1. **Append to `.soloflow/human-review-queue.md`** via `review-queue.js append`. `plan_ref` is the path to the task's plan file — include the `{epic}/` subfolder if the plan has an epic, omit it otherwise.
+1. **Append to `.soloflow/human-review-queue.md`** via `review-queue.js append`. `plan_ref` is the path to the task's plan file — include the `{epic}/` subfolder if the plan has an epic, omit it otherwise. Use `bucket: actions` — fixing this is operational work (install Maestro CLI, register the MCP server, etc.).
    ```
    node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" append --entry-json \
-     '{"task":"TASK-NNN","type":"config_issue","plan_ref":".soloflow/active/plans/[{epic}/]TASK-NNN-plan.md","action":"Verifier could not run {mobile|web} visual verification despite visual_{mobile|web}=true. {Maestro MCP not bound to subagent AND CLI missing/no device | Playwright MCP tools unreachable — confirm the MCP server is registered and its tool bindings reach subagent sessions}. See docs/VISUAL-VERIFICATION-SETUP.md.","blocked_checks":["Level 2 visual verification for {platform}"],"level":"visual","severity":"medium"}'
+     '{"task":"TASK-NNN","type":"config_issue","bucket":"actions","plan_ref":".soloflow/active/plans/[{epic}/]TASK-NNN-plan.md","action":"Verifier could not run {mobile|web} visual verification despite visual_{mobile|web}=true. {Maestro MCP not bound to subagent AND CLI missing/no device | Playwright MCP tools unreachable — confirm the MCP server is registered and its tool bindings reach subagent sessions}. See docs/VISUAL-VERIFICATION-SETUP.md.","blocked_checks":["Level 2 visual verification for {platform}"],"level":"visual","severity":"medium"}'
    ```
 2. **Append a FIND entry** to the active sprint's findings file via `findings.js append --sprint {sprint.id} --fields-json '{"type":"claude-md",...}'` with a `description` naming the specific gap (e.g., "mcp__maestro__* bindings not exposed to verifier AND maestro CLI not installed / simulator not booted — see docs/VISUAL-VERIFICATION-SETUP.md" or "mcp__playwright__* bindings not exposed to verifier subagent despite project .mcp.json registration") so the compounder can propose a setup-doc fix.
 
@@ -187,14 +187,21 @@ Check each condition. This catches things the acceptance criteria might have mis
 
 ### Deferred Checks — Human Action Required
 
-At any level, if a check cannot run until a human performs a prerequisite action (deploy an edge function, run a migration, provision a service, etc.), mark it `DEFERRED_ACTION` — do not fail or skip it. Append to `.soloflow/human-review-queue.md` via:
+At any level, if a check cannot run until a human performs a prerequisite action (deploy an edge function, run a migration, provision a service, run a Maestro flow themselves, etc.), mark it `DEFERRED_ACTION` — do not fail or skip it. Append to `.soloflow/human-review-queue.md` via:
 
 ```
 node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" append --entry-json \
-  '{"task":"TASK-NNN","type":"action_required","plan_ref":".soloflow/active/plans/[{epic}/]TASK-NNN-plan.md","action":"{what the human must do}","blocked_checks":["{criterion blocked}"],"level":"{ground_truth|visual|requirements|goal_backward}","severity":"{low|medium|high}"}'
+  '{"task":"TASK-NNN","type":"action_required","bucket":"{actions|testing}","plan_ref":".soloflow/active/plans/[{epic}/]TASK-NNN-plan.md","action":"{what the human must do}","blocked_checks":["{criterion blocked}"],"level":"{ground_truth|visual|requirements|goal_backward}","severity":"{low|medium|high}"}'
 ```
 
 `plan_ref` is the path to the task's plan file — include the `{epic}/` subfolder if the plan has an epic, omit it otherwise. The operator reads the plan for full acceptance-criteria and archive-schema context.
+
+**Bucket selection** (required field):
+
+- `bucket: actions` — the human performs operational work on the system (deploy, run a migration, provision a service, install tooling, set an env var, configure a service). After they do it, the verifier re-runs to confirm.
+- `bucket: testing` — the human verifies something themselves (run a Maestro flow, open the page in Safari, curl an endpoint and confirm the response, click through a manual flow). The verifier won't re-run these — the human's confirmation is the verification. **Always use `bucket: testing` when `level: visual`.**
+
+Pick by asking: *who runs the check after this entry is resolved?* If the agent re-runs → `actions`. If the human runs the check themselves → `testing`.
 
 Pick `severity` so the user can scan the queue and tell which deferred items matter most:
 

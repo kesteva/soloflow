@@ -44,7 +44,7 @@ Apply the gates in this order for each platform:
 
    If all flows for a platform pass, emit `pass`. If any flow fails, emit `fail` (the Regressions section captures details).
 
-5. **Defer flows requiring human action.** If a flow cannot be tested because it requires a prerequisite human action (migration, deploy, seed data, etc.), append an `action_required` entry to `.soloflow/human-review-queue.md` with the action needed, the blocked flow, and a `severity` field (`low | medium | high`) — see the verifier's Deferred Checks Protocol for the rubric (default `medium` for visual flow gaps; `high` if the flow guards a foundational invariant). Then continue to the next flow. Deferred flows do not themselves change the platform outcome — classify based on the flows that did run.
+5. **Defer flows requiring human action.** If a flow cannot be tested because it requires a prerequisite human action (migration, deploy, seed data, etc.), append an `action_required` entry to `.soloflow/human-review-queue.md` with the action needed, the blocked flow, and a `severity` field (`low | medium | high`) — see the verifier's Deferred Checks Protocol for the rubric (default `medium` for visual flow gaps; `high` if the flow guards a foundational invariant). Set `bucket: actions` when the human performs operational work (migrate/deploy/seed) and the verifier will re-run after; set `bucket: testing` when the human runs the visual flow themselves. Then continue to the next flow. Deferred flows do not themselves change the platform outcome — classify based on the flows that did run.
 
 6. **Report findings.** For each visual failure:
    - Which flow and which step failed

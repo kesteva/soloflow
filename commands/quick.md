@@ -148,12 +148,13 @@ Check the loop counter (starts at 1, capped at resolved `limits.executor_retry_m
    ```
    - task: TASK-{NNN}
      type: HUMAN_NEEDED
+     bucket: decisions
      plan_ref: .soloflow/active/plans/[{epic}/]TASK-{NNN}-plan.md
      verdict_notes: "{verifier's HUMAN_NEEDED rationale}"
      action: "{what the human should review or decide}"
      severity: "{low | medium | high}"
    ```
-   `plan_ref` is the task's plan path — include `{epic}/` if the plan has an epic, omit otherwise. This is the canonical HUMAN_NEEDED task-entry schema; other writers (e.g. sprint orchestrator) reference this template.
+   `plan_ref` is the task's plan path — include `{epic}/` if the plan has an epic, omit otherwise. `bucket: decisions` is fixed for HUMAN_NEEDED entries — they are always judgment calls (UX, copy, scope, security tradeoffs), not operational work or manual verification. This is the canonical HUMAN_NEEDED task-entry schema; other writers (e.g. sprint orchestrator) reference this template.
 2. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" TASK-{NNN} human_needed --touched .soloflow/active/plans/TASK-{NNN}-plan.md --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings/{sprint_id}-findings.md`.
 3. Report to the user that the fix works technically but needs their review for product judgment.
 

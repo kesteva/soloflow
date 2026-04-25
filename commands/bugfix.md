@@ -60,7 +60,7 @@ Wait for the investigator's report and read its verdict.
   - **Provide more context** — accept free-form input, then re-spawn the investigator with the original report + transcript of what was ruled out + the new user input. Cap at 2 re-spawns; on the third inconclusive, escalate as below.
   - **Treat as inconclusive and stop** — exit without writing a plan; report what was learned.
 
-  If the cap is hit, write a one-line entry to `.soloflow/human-review-queue.md` (use the canonical schema from [commands/quick.md](quick.md) Step 7 HUMAN_NEEDED branch, with `type: investigation_inconclusive` and `task: null`) and stop. No TASK-NNN is allocated when investigation never converges.
+  If the cap is hit, write a one-line entry to `.soloflow/human-review-queue.md` (use the canonical schema from [commands/quick.md](quick.md) Step 7 HUMAN_NEEDED branch, with `type: investigation_inconclusive`, `task: null`, and `bucket: decisions` — investigation outcomes that cannot converge are always judgment calls for the user) and stop. No TASK-NNN is allocated when investigation never converges.
 - **NOT_A_BUG** → present the investigator's reasoning to the user and stop. Do not allocate a TASK-NNN. Suggest the user file `/soloflow:idea-extractor` if they actually want a behavior change.
 - **CONTEXT_LIMIT** → read the `### Handoff` section. If respawns < `limits.context_limit_respawn_max`, spawn a fresh investigator with the original report + "Continue from previous investigator's handoff: {handoff section}". Otherwise treat as `INVESTIGATION_INCONCLUSIVE` (run the cap-hit branch).
 

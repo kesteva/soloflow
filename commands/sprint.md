@@ -291,10 +291,11 @@ Compose the question body from these sections (omit a section if it has nothing 
   1. If `infra_check.missing` was non-empty, append one line to the sprint's findings file (`.soloflow/active/findings/{sprint_id}-findings.md`) via Bash: `SPRINT-{sprint_id} started with missing infra: {categories}; tests deferred.`
   2. **If `gated_task_ids` is non-empty, gate those tasks out.** For each gated task:
      a. Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" {task_id} blocked --touched .soloflow/active/findings/{sprint_id}-findings.md` — matches the BLOCKED handling in Step 3 and removes the task from the active sprint loop.
-     b. Append to `.soloflow/human-review-queue.md` one entry per failing blocking prereq on that task:
+     b. Append to `.soloflow/human-review-queue.md` one entry per failing blocking prereq on that task. Use `bucket: actions` — installing/configuring a missing prereq is operational work the user performs before re-running the sprint.
         ```yaml
         - task: {task_id}
           type: action_required
+          bucket: actions
           action: "{fix}"
           blocked_checks: ["prerequisite: {description}"]
           level: "ground_truth"
@@ -360,7 +361,7 @@ This step does NOT fix failures — it only surfaces baseline state and lets the
    1. Write T's done report to `.soloflow/archive/done/{EPIC_T}/TASK-NNN-done.md` (or flat if no epic), using the frontmatter schema in pipeline step f3. Write it from the main worktree — done reports live outside the task's code scope.
    2. `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/worktree-merge.js" T done --base-branch "$RUN_BRANCH"`. Parse the output:
       - `merge: "ff"` or `"non-ff"` → proceed.
-      - `merge: "conflict"` → this indicates a `files_owned` mis-declaration (disjoint declarations should never produce a merge conflict). Append a `type: "merge-conflict"` entry to `.soloflow/human-review-queue.md` referencing the preserved worktree path in the script's `error` field, then run `settle-task.js T human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`. Skip the rest of this task's merge-back; the worktree stays on disk for the human to inspect. Continue with the next T.
+      - `merge: "conflict"` → this indicates a `files_owned` mis-declaration (disjoint declarations should never produce a merge conflict). Append a `type: "merge-conflict"` entry to `.soloflow/human-review-queue.md` with `bucket: actions` (resolving the conflict is operational work in the preserved worktree), referencing the preserved worktree path in the script's `error` field, then run `settle-task.js T human_needed --touched .soloflow/human-review-queue.md --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`. Skip the rest of this task's merge-back; the worktree stays on disk for the human to inspect. Continue with the next T.
    3. On successful merge: `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/settle-task.js" T done --done-report <path> --touched .soloflow/active/findings/{sprint_id}-findings.md --touched .soloflow/checkpoint.md`.
    4. Epic archival check per pipeline step f3.
 
@@ -451,7 +452,7 @@ If `sprint_verification_enabled` (Step 0.4) is `false`, skip this entire step �
 Otherwise, spawn the **shadow-sprint-verifier** agent (`subagent_type: "shadow-sprint-verifier"`) with the sprint ID, base SHA (from `sprint.json`'s `run.base_sha` or the commit before sprint start), the list of completed tasks with their plans and changed files, and the resolved visual verification config. Wait for its report.
 
 Handle the report:
-- If regressions were found (visual or integration), append each to `.soloflow/human-review-queue.md` via `review-queue.js append --entry-json '{...}'` with the failure details, evidence, and suspected responsible task.
+- If regressions were found (visual or integration), append each to `.soloflow/human-review-queue.md` via `review-queue.js append --entry-json '{...}'` with the failure details, evidence, and suspected responsible task. Set `bucket: testing` for visual regressions (the user re-runs the flow after fixing) and `bucket: actions` for integration regressions that need operational follow-up (e.g., re-deploy a service).
 - Commit via:
   ```
   node "${CLAUDE_PLUGIN_ROOT}/scripts/state/commit-atomic.js" \
