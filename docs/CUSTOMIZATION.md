@@ -138,8 +138,40 @@ Findings are stored at `.soloflow/active/findings/SPRINT-NNN-findings.md` — on
 | `verification.visual_maestro_flow_dirs` | `["maestro/", ".maestro/", "test/maestro/"]` | Dirs searched for Maestro flows |
 | `verification.visual_screenshot_budget` | 3 | Max screenshots per verification run |
 | `verification.visual_prefer_hierarchy` | `true` | Prefer `maestro hierarchy` (~200–600 tokens plain text) over screenshot capture (~1600 tokens) |
+| `verification.dev_server.enabled` | `false` | Opt in to sprint-managed dev server (Metro / Vite / etc.) |
+| `verification.dev_server.name` | `dev-server` | Display name in prompts |
+| `verification.dev_server.probe_url` | `http://localhost:8081/status` | URL probed at sprint start + before visual_mobile |
+| `verification.dev_server.probe_match` | `packager-status:running` | Substring required in probe response body (empty = any 200 OK) |
+| `verification.dev_server.probe_port` | `8081` | Port killed by `lsof -ti :{port}` on `restart` |
+| `verification.dev_server.start_command` | `npx react-native start` | Command run in a background shell on `start` / `restart` |
+| `verification.dev_server.startup_timeout_seconds` | `30` | Max wait for `probe_url` to respond after start |
 
 See [VISUAL-VERIFICATION-SETUP.md](VISUAL-VERIFICATION-SETUP.md) for dependency + MCP setup.
+
+#### `verification.dev_server` — sprint-managed dev server
+
+When enabled, `/soloflow:sprint` probes `probe_url` at sprint start (sprint-initiator Phase 1) and offers to start it (offline) or kill+restart it (running externally) under sprint ownership. The dev server runs in a Claude Code background shell; subagents read its output via the harness-assigned path recorded in `sprint.json` under `dev_server.output_path`.
+
+The `visual-verify` skill also probes the same URL before any Maestro setup. On offline, it emits `visual_mobile: skipped_metro_offline` and stops — saving the full Maestro path-selection / simulator boot / screenshot chain when the bundler isn't running.
+
+Lifecycle: started by `/soloflow:sprint` Step 2.5; stopped by `TaskStop` after `sprint-closer` finalize (Step 4.6). The transient `dev_server` block in `sprint.json` is not committed — it's session-state.
+
+Defaults target Metro. For Vite or other dev servers, override via `.soloflow/config.json`:
+
+```json
+{
+  "verification": {
+    "dev_server": {
+      "enabled": true,
+      "name": "Vite",
+      "probe_url": "http://localhost:5173/",
+      "probe_match": "",
+      "probe_port": 5173,
+      "start_command": "npm run dev"
+    }
+  }
+}
+```
 
 ### Git
 
