@@ -172,6 +172,15 @@ Multi-layered verification, in order of authority:
 
 **Token budget.** MCP `inspect_view_hierarchy` (CSV, ~50 tokens) is ~4–10× cheaper than CLI `maestro hierarchy` (plain text, ~200–600 tokens); both are far cheaper than screenshot capture (~1600 tokens after `sips -Z 1400` downsize). Limit to 3 screenshots per verification. Never mix Maestro MCP and CLI within a single run — both bind port 7001. Within the chosen path, serialize against the same device.
 
+**Deferred-check routing.** When a verification level cannot run because it requires a prerequisite human action, the verifier appends an entry to `.soloflow/human-review-queue.md` with one of four `bucket` values:
+
+- `actions` — the human performs operational work (deploy, configure, install, migrate). After completion, the verifier re-runs.
+- `testing` — the human verifies something themselves (run the Maestro flow, open Safari, curl a URL). The human's confirmation IS the verification. **Always used when `level: visual`** since visual deferred checks are gated on tooling/device availability or human confirmation.
+- `decisions` — judgment calls (HUMAN_NEEDED, SECURITY_ISSUE escalations, investigation_inconclusive). No re-verification path.
+- `deferred_visual` — visual *failures* (verification ran and a check failed) the user explicitly chose to defer rather than promote to a TASK immediately. Populated only by `/soloflow:review-queue` Step 5; never by the verifier directly.
+
+See [STATE-LAYER.md#human-review-queue](STATE-LAYER.md#human-review-queue) for storage layout and [commands/review-queue.md](../commands/review-queue.md) for the triage flow.
+
 ## Key Constraint
 
 Subagents cannot spawn subagents in Claude Code. The phase commands (`/soloflow:idea-extractor`, `/soloflow:planner`, `/soloflow:sprint`, `/soloflow:compound`) run in the main session and act as the orchestrator for their phase. All agents (executor, verifier, idea-extractor, task-refiner, compounder) are leaf-node subagents.

@@ -22,7 +22,7 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 
 **`.soloflow/` root:**
 - `checkpoint.md` — context restoration after compaction
-- `human-review-queue.md` — batched items for human review
+- `human-review-queue.md` — batched items for human review, organized into four buckets (see "Human review queue" section below)
 - `config.json` — project-level overrides for every key in `config/defaults.yaml`. Read at runtime via the three-tier recipe in `CUSTOMIZATION.md#config-resolution`. Edit interactively via `/soloflow:config`. Unknown keys are preserved; nothing reads them until they're documented in `defaults.yaml`.
 
 **Why two JSON files (backlog, sprint):** enables parallel worktree execution without merge conflicts. Completed tasks are removed from `sprint.json` and their reports move to `archive/done/`.
@@ -73,7 +73,22 @@ Executor / verifier / code-reviewer / **sprint-code-reviewer** agents append ent
 
 The compounder consumes the sprint's findings file at learning time and uses it as the primary seed for clean-up, backlog, and CLAUDE.md proposals; the file is archived to `archive/findings/` only after that sprint is compounded. Findings files are always per-sprint — merging across sprints happens only at compounder invocation when `/soloflow:compound` batches multiple pending sprints, and each findings file still archives individually to `archive/findings/SPRINT-NNN-findings.md`.
 
-**Legacy:** projects that predate the per-sprint layout may still have a single `active/findings.md`; it is migrated automatically by sprint-initiator (or concatenated into the next compound run by `/soloflow:compound`). Projects that predate the direct-to-findings sprint-code-reviewer may also have leftover `type: sprint_code_review` entries in `human-review-queue.md`; those are deprecated and surfaced by `/soloflow:review-queue` Step 7 with a one-shot cleanup command.
+**Legacy:** projects that predate the per-sprint layout may still have a single `active/findings.md`; it is migrated automatically by sprint-initiator (or concatenated into the next compound run by `/soloflow:compound`). Projects that predate the direct-to-findings sprint-code-reviewer may also have leftover `type: sprint_code_review` entries in `human-review-queue.md`; those are deprecated and surfaced by `/soloflow:review-queue` Step 8 with a one-shot cleanup command.
+
+## Human review queue
+
+`.soloflow/human-review-queue.md` collects items that need a human between SoloFlow runs. Every item carries an explicit `bucket` field that drives both storage layout and triage flow:
+
+- **decisions** — judgment calls (UX/copy/scope/security tradeoffs). The human reads context and picks a direction. No agent re-verifies. Producers: verifier `HUMAN_NEEDED`, code-reviewer `SECURITY_ISSUE`, bugfix `investigation_inconclusive`.
+- **actions** — operational work the human performs on systems (deploy, configure, migrate, install tooling, set env vars, resolve merge conflicts). After completion, the verifier re-runs the previously-blocked check. Producers: verifier deferred checks where the human's job is operational, verifier `config_issue`, sprint orchestrator merge conflicts and prereq fails.
+- **testing** — verification only a human can do (visual flows, manual flows, ground-truth checks like "open Safari and confirm copy" or "curl /api/foo and confirm 200"). The human's confirmation IS the verification — no agent re-runs. Producers: verifier deferred checks at `level: visual` or with verify-style action verbs.
+- **deferred_visual** — visual verification failures the user explicitly chose to defer in `/soloflow:review-queue` Step 5 instead of promoting to a TASK immediately. Holding area before promotion or re-test. Producer: review-queue command itself.
+
+**File format.** Frontmatter holds `pending_count` (sum across the four buckets, excluding `overridden`) and a `buckets:` map with per-bucket counts. The body has the four sections under fixed `## Decisions / ## Actions / ## Testing / ## Deferred Visual` headings; empty sections render `_No items._`. Each item is a YAML list entry under its section heading. Soft-deleted (`type: overridden`) entries live under a `## Overridden` section so round-trip parsing preserves them.
+
+**Legacy fallback.** Pre-bucket queues (a flat YAML list directly under `# Human Review Queue`) parse fine — the library auto-classifies each entry by `type` / `level` / `action` verb. The next mutating call (append/remove/override/recompute) rewrites the file in the new sectioned format with explicit `bucket` fields.
+
+**Tooling.** All access goes through `scripts/state/review-queue.js` — never hand-edit during agent runs. Subcommands: `gather`, `append`, `remove`, `override`, `recompute`. `--bucket` filters `remove` and `gather --group-by action`. See `commands/review-queue.md` for the triage UX.
 
 ## Epics
 

@@ -24,7 +24,7 @@ The script returns JSON with seven per-scenario buckets plus a `total`. Each sce
 - **`stale_stuck_file`** — stuck file whose task is not in `sprint.json`. If a done report exists, move stuck file to `.soloflow/archive/stuck/`; otherwise prompt (archive or delete).
 - **`mid_commit_settle`** — done report exists AND task still in `sprint.json.tasks`. Resolution: re-run `settle-task.js TASK-{NNN} done --done-report <path>` (finalizes the state transition + commits).
 - **`empty_epic`** — epic folder with no `TASK-*-plan.md` files AND no tasks in `sprint.json.tasks` matching the folder slug. Resolution: move `EPIC-<slug>.md` → `.soloflow/archive/done/<slug>/EPIC-<slug>.md` and flip its frontmatter `status` to `complete`.
-- **`malformed_queue`** — queue entries missing required fields (`task`, `type`). Resolution: surface at end of Step B for manual edit — do not auto-repair.
+- **`malformed_queue`** — queue entries missing required fields (`task`, `type`) or with an unknown `bucket` value. Resolution: surface at end of Step B for manual edit — do not auto-repair. Note that legacy entries without a `bucket` field are NOT malformed: the queue library auto-classifies them at read time and rewrites the file in the new sectioned format on the next mutation.
 - **`completed_in_backlog`** — done report exists in `archive/done/` AND task is still listed in `backlog.json.tasks`. Resolution: delete the task entry from `backlog.json` and commit.
 
 If `total` is 0, print `"No cruft detected."` and return immediately.
