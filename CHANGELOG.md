@@ -4,6 +4,10 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **`/soloflow:map-codebase`** — new one-shot command that surveys the project and creates missing `CLAUDE.md`, `ARCHITECTURE.md`, and `CODE-PATTERNS.md` (at root or under `docs/`). Idempotent and additive — never overwrites existing artifacts. Templates are deliberately lean so the user fills in what the survey can't infer.
+- **`/soloflow:init`** now detects which of those three context docs are missing and offers to defer to `/soloflow:map-codebase`. The recommendation surfaces in the final report's Next steps block when the user opts in.
+
 ## [0.9.7] - 2026-04-24
 
 ### Changed

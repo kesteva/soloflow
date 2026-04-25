@@ -83,6 +83,7 @@ To uninstall: `bash /tmp/soloflow/scripts/uninstall.sh /path/to/your/project`
 | Command | When to Use |
 |---------|-------------|
 | `/soloflow:init` | One-time setup — scaffold `.soloflow/` state in the current project |
+| `/soloflow:map-codebase` | One-time setup — scaffold missing `CLAUDE.md`, `ARCHITECTURE.md`, and `CODE-PATTERNS.md` so agents have shared context to load |
 | `/soloflow:config` | Interactive walkthrough of every SoloFlow setting; writes `.soloflow/config.json` |
 | `/soloflow:idea-extractor <description>` | Phase 1 — extract a structured idea from raw input, with optional research |
 | `/soloflow:planner <IDEA-NNN>` | Phase 2 — refine an approved idea into execution-ready task plans |
