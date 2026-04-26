@@ -259,4 +259,74 @@ The tool call blocks until the user responds.
 - **Refine all** → set `to_refine = [every newly created IDEA-{NNN}]`.
 - **Refine some** → use a follow-up `AskUserQuestion` (free-form) asking *"Which IDEA IDs? (e.g., 'IDEA-007, IDEA-009')"*. Parse the response into a list of IDs intersected with the IDs created in this run; that becomes `to_refine`. If `to_refine` ends up empty, print the deferred-commands hint and stop.
 
-For each ID in `to_refine`, in order: read `${CLAUDE_PLUGIN_ROOT}/commands/planner.md` with the `Read` tool and execute its procedure end-to-end with `$ARGUMENTS` set to that ID. Treat each invocation as a continuation of this run — including the planner's own human checkpoint. Do not re-run the planner's Step 1 idea-picker; the ID is already known.
+**Resolve parallelism config** once before refining:
+
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/config/resolve.js" \
+    --key parallelism.task_refiner_parallel --key models.task_decomposer \
+    --key models.task_refiner --key limits.context_limit_respawn_max \
+    --fallback true --fallback sonnet --fallback opus --fallback 3
+```
+
+Lines: parallelism toggle / task-decomposer model / task-refiner model / respawn cap.
+
+**Branch on `to_refine.length` and the parallelism toggle:**
+
+- **`to_refine.length === 1`** OR **parallelism toggle === false** → fall back to sequential per-IDEA invocation. For each ID in `to_refine`, in order: read `${CLAUDE_PLUGIN_ROOT}/commands/planner.md` with the `Read` tool and execute its procedure end-to-end with `$ARGUMENTS` set to that ID. Treat each invocation as a continuation of this run — including the planner's own human checkpoint. Do not re-run the planner's Step 1 idea-picker; the ID is already known. Stop after the last ID's planner run completes.
+
+- **`to_refine.length >= 2` AND parallelism toggle === true** → run the parallel orchestration below. This replaces the inline planner.md loop with cross-IDEA fan-out plus a single combined human checkpoint at the end.
+
+### Parallel multi-IDEA refinement
+
+1. **Per-IDEA setup (sequential, fast).** For each ID in `to_refine`:
+   - Read `.soloflow/active/ideas/{ID}.md` content.
+   - Note that no research report exists for braindump-source IDEAs (they're freshly captured here without research). Pass empty research to the decomposer.
+   Discover existing epics ONCE for the whole batch: glob `.soloflow/active/plans/*/EPIC-*.md` and collect each slug + body. Same list passed to every decomposer.
+
+2. **Decomposer fan-out.** Issue **one message containing one `Agent` tool call per selected IDEA** (`subagent_type: "task-decomposer"`, `model: <resolved task_decomposer>`). Each call's prompt is the standard decomposer payload from `commands/planner.md` Step 2 parallel path step 1, scoped to its IDEA. Wait for all calls to return.
+
+3. **Parse and validate each skeleton.** Apply the same JSON parse + validation pre-checks as `commands/planner.md` Step 2 parallel path steps 2–3 (slot uniqueness, depends_on locality, files_owned_hint disjointness within the IDEA, epic-slug consistency). On any IDEA's decomposer failing parse twice or producing invalid skeleton: drop that IDEA from the batch, surface it in the combined checkpoint as `Decomposition failed for IDEA-{NNN}`, and continue with the rest.
+
+4. **Allocate real TASK-NNN IDs across all IDEAs.** Run `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/next-ids.js" --kind task` ONCE for the batch starting counter. Walk the IDEAs in `to_refine` order; for each IDEA, walk its skeleton's `tasks[]` in source order and assign sequential TASK-NNN IDs from the running counter. Build a per-IDEA slot→TASK map. Remap each task's `depends_on` from slot IDs to real TASK IDs using its IDEA's map. Cross-IDEA dependencies are not allowed (decomposer's contract is per-IDEA).
+
+5. **Detailer fan-out.** Build the prompt for each task across all IDEAs, in the same shape as `commands/planner.md` Step 2 parallel path step 6 (`MODE: detail`, `TASK_ID:`, `TASK_SKELETON:` with remapped depends_on, `SIBLING_DAG:` covering only that IDEA's siblings, IDEA body, no research, existing-epics list). Issue **one message containing one `Agent` tool call per task across the entire batch** (`subagent_type: "task-refiner"`, `model: <resolved task_refiner>`). Wait for all calls to return.
+
+6. **Collate per-IDEA, parity gates, materialize EPIC files.** For each IDEA in the batch:
+   - Collect its detailer outputs.
+   - On `CONTEXT_LIMIT` from any detailer, respawn that one slot only with handoff (cap at resolved `limits.context_limit_respawn_max`); on terminal failure drop the slot and surface in the combined checkpoint.
+   - Apply parity gates 3a (`test_strategy` ↔ `files_owned`) and 3b (`acceptance_criteria` ↔ `files_owned`/`files_readonly`) per `commands/planner.md`. Record auto-corrections per-plan and per-IDEA.
+   - Generate `EPIC-{slug}.md` bodies for entries in this IDEA's decomposer `new_epics[]`.
+
+7. **Write all plans + EPIC files.** For each IDEA, write its plans to `.soloflow/active/plans/{epic}/TASK-{NNN}-plan.md` (or flat for orphans) using `wx`/noclobber semantics. On collision, recompute the next ID for the remaining unwritten plans and retry. Add each task to `.soloflow/active/backlog.json` with `status: "ready"` + remapped `depends_on`. Write each new EPIC body if not already present.
+
+8. **Single combined human checkpoint.** Print a per-IDEA summary block first (count, dep graph, epic groupings, parity-gate auto-corrections, dropped slots, scope_drops) then use **AskUserQuestion** (single question, single-select):
+   - `question`: `"How should we proceed with the {N} refined IDEAs?"`
+   - `options`:
+     1. `label: "Approve all (Recommended)"` — leave every task `status: "ready"`.
+     2. `label: "Approve subset"` — follow up with a free-form `AskUserQuestion` asking which IDEA IDs (or specific TASK IDs) to defer; mark those as `status: "deferred"` in `backlog.json`.
+     3. `label: "Reject all"` — delete every plan file written in this batch and remove their backlog entries.
+     4. `label: "Cancel"` — leave plan files on disk and backlog entries `ready` but stop here without committing or archiving.
+
+   The tool call blocks until the user responds.
+
+9. **Commit state.** Stage only the specific paths touched (each plan file written, every modified EPIC-{slug}.md, `.soloflow/active/backlog.json`). Never `git add .`. If `git diff --cached --quiet` reports no staged changes, skip. Otherwise:
+   - **Approve all** → commit `chore: queue TASK-{first}..TASK-{last} from braindump batch` (cite the IDEA range too if useful).
+   - **Approve subset** → same commit message, plus a "deferred: TASK-X, TASK-Y" line in the body.
+   - **Reject all** → `git rm` the deleted plans + revert the backlog entries; commit `chore: reject braindump-batch plans`.
+   - **Cancel** → no commit. Stop.
+
+10. **Archive source IDEAs.** For every IDEA in the batch whose plans were not "Reject all"-deleted:
+    - `mkdir -p .soloflow/archive/ideas`
+    - Move `.soloflow/active/ideas/{ID}.md` → `.soloflow/archive/ideas/{ID}.md`. (No research files for braindump-source IDEAs.)
+    - `git add` the moved files; commit `chore: archive {first-id}..{last-id} from braindump batch` (single combined commit).
+
+    Skip silently if not in a git repo or `.soloflow/` is gitignored.
+
+11. **Final report.** Print:
+    ```
+    Refined {N} IDEAs in parallel.
+    - Tasks created: {count} (TASK-{first}..TASK-{last})
+    - Approved: {ready_count} | Deferred: {deferred_count} | Rejected: {rejected_count}
+
+    Next step: /soloflow:sprint
+    ```
