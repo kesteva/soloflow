@@ -64,10 +64,11 @@ SoloFlow is a set of Claude Code hooks, agent definitions, slash commands, and s
 - **Routing:** BUGFIX ideas redirect to `/soloflow:bugfix` (investigator → executor → verifier) for a shorter path. `/soloflow:quick` is also available when the user already knows the exact fix and wants to skip investigation.
 
 ### Phase 2: Task Refinement
-- **Agent:** `task-refiner` (Opus)
+- **Agents:** `task-decomposer` (Sonnet) + N × `task-refiner` (Opus). The decomposer fixes the cross-task skeleton (DAG, epic decisions, files_owned non-overlap); detailers run in parallel — one per task — to flesh out acceptance criteria, implementation steps, test strategy. Single-task IDEAs short-circuit to one detailer call.
 - **Input:** Approved idea file
 - **Output:** One or more `TASK-NNN-plan.md` files in `.soloflow/active/plans/`
-- **Human touchpoint:** User reviews all plans, approves/defers/requests changes
+- **Parallel fan-out:** `/soloflow:planner` issues the detailer batch as a single message containing N `Agent` tool calls (the same pattern `/soloflow:sprint` Step 4.b uses). `/soloflow:braindump` extends the fan-out across multiple selected IDEAs in one batched message. `/soloflow:review-queue` Step 7c spawns one detailer per `pending_refines` item — no decomposer, since each item maps 1:1 to a task. Fall back to a single whole-IDEA `task-refiner` call by setting `parallelism.task_refiner_parallel: false`.
+- **Human touchpoint:** User reviews all plans, approves/defers/requests changes (one combined checkpoint for braindump multi-IDEA batches; one per IDEA otherwise)
 
 ### Phase 3: Execution Sprint
 - **Agents:** `executor` (Sonnet) + `verifier` (Opus) + `code-reviewer` (Opus), coordinated by the main session via the `/soloflow:sprint` command
@@ -119,7 +120,8 @@ Hooks are plain Node.js with no external dependencies. They read stdin for event
 |------|-------|-----------|
 | Orchestrator | Opus | Complex coordination, dependency management |
 | Verifier | Opus | Thorough analysis, skeptical evaluation |
-| Task Refiner | Opus | Architectural decisions, approach selection |
+| Task Decomposer | Sonnet | Coarse skeleton — task DAG, epic cohesion, file-ownership non-overlap. Cheap pre-pass that lets detailers run in parallel. |
+| Task Refiner | Opus | Architectural decisions, approach selection. Runs in whole-IDEA mode (legacy) or single-task detail mode (parallel detailer). |
 | Bug Investigator | Opus | Root-cause diagnosis from a symptom |
 | Executor | Sonnet | Code implementation, high throughput |
 | Idea Extractor | Sonnet | Structured parsing, codebase search |
