@@ -37,7 +37,7 @@ The list of existing epic slugs is also provided so you can read EPIC bodies for
 - Skip step 5a (epic assignment) — the skeleton's `epic` is fixed.
 - Inherit `depends_on` from `TASK_SKELETON.depends_on` verbatim. Do not add or remove dependencies.
 - Inherit `files_owned_hint` / `files_readonly_hint` as your starting `files_owned` / `files_readonly` lists. You MAY *expand* them per rules 5d (sweep grep) and 5g (grep-preflight) when those rules trigger; you may NOT remove a hint, swap it across the boundary in a way that overlaps a sibling's hints, or claim a path another sibling hints as `files_owned`.
-- Run rules 5b (test strategy), 5c (test_strategy ↔ files_owned parity), 5d (sweep grep), 5e (acceptance_criteria ↔ files_owned parity), 5f (prerequisites — the skeleton's `is_external_cli_step` flag is your trigger), 5g (grep-preflight), 5h (path existence) on your single slot only.
+- Run rules 5b (test strategy), 5c (test_strategy ↔ files_owned parity), 5d (sweep grep), 5e (acceptance_criteria ↔ files_owned parity), 5f (prerequisites — the skeleton's `is_external_cli_step` flag is your trigger), 5g (grep-preflight), 5h (path existence), 5i (probe-and-reconcile file-content claims) on your single slot only.
 - Run step 6 (three critical questions per plan) on your single slot.
 - Skip step 7 (scope-reduction check) — that is the decomposer's job; you only see one slot, so you cannot evaluate IDEA-wide coverage.
 - Output ONE TASK-NNN-plan.md block. Do NOT emit `EPIC-{slug}.md` blocks — the orchestrator generates those from the decomposer's `new_epics`.
@@ -151,6 +151,21 @@ The list of existing epic slugs is also provided so you can read EPIC bodies for
    - **Genuinely missing with no good suggestion.** Stop and reconsider: is the path a placeholder you forgot to resolve during codebase search? Fix before emitting the plan.
 
    This check exists because prior sprints have repeatedly shipped plans with mis-typed paths that the executor silently corrected, masking a plan-quality issue. The script output is advisory — it will not block — but treat every `missing` entry as a required correction before emitting the plan.
+
+5i. **Probe-and-reconcile file-content claims.** Before emitting the plan, scan every `acceptance_criteria[].verification`, `test_strategy.targets[].behavior`, and `Implementation Step` entry for **file-content claims** in any of these three shapes:
+
+   - **(a) Existence/absence claim.** "File X exists", "File X does not yet exist", "Test file Y has not been created."
+   - **(b) Literal-content claim.** "Line N of file X contains literal Y", "File X currently uses hex `#ABCDEF` on line N."
+   - **(c) Non-trivial grep claim.** A verification whose claim depends on a specific match count or specific match text — "grep -n 'oldValue' src/X.ts returns 0 matches", "no occurrences of FOO in src/", a quoted match expected from a grep.
+
+   For each match, run the underlying probe NOW (`ls`, `grep -n`, `cat`, `test -e`) and reconcile against the claim:
+
+   - **Probe agrees with the claim.** Ship the AC / step as written. Do NOT embed the probe output in the plan body — the probe served its purpose at emit time, persisting it would balloon plan context for no executor benefit.
+   - **Probe contradicts the claim.** Either (i) rewrite the AC / step to match ground truth, or (ii) drop it if the work is already done. Do NOT ship the plan with a known-stale claim "for the executor to discover."
+
+   Trigger conservatively. Generic statements like "tests still pass", "the build is green", or "lint is clean" are runtime assertions, not file-content claims, and don't require pre-flight. This rule applies in both whole-IDEA and detail mode.
+
+   This rule exists because stale plan-time claims have shipped repeatedly (5 cases in SPRINT-029, 3 of which were the same recurring false-negative class — a project's test-file convention that the planner mis-asserted). The cost is paid once during refinement; the alternative is the executor either silently no-op'ing a satisfied AC or chasing a false claim. Embedding verbatim probe output was considered and rejected to keep plan bodies lean.
 
 6. **Answer three critical questions per plan:**
    - Hardest decision and why this approach was chosen
