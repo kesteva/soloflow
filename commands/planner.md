@@ -17,11 +17,13 @@ The target idea is: **$ARGUMENTS**
 Run once:
 ```
 node "${CLAUDE_PLUGIN_ROOT}/scripts/config/resolve.js" \
-    --key models.task_refiner --key limits.context_limit_respawn_max \
-    --fallback opus --fallback 3
+    --key models.task_refiner --key models.task_decomposer \
+    --key limits.context_limit_respawn_max \
+    --key parallelism.task_refiner_parallel \
+    --fallback opus --fallback sonnet --fallback 3 --fallback true
 ```
 
-Line 1 is the task-refiner model; line 2 is the context-limit respawn cap.
+Line 1: task-refiner model. Line 2: task-decomposer model. Line 3: context-limit respawn cap. Line 4: parallelism toggle (`true`/`false`).
 
 ## Step 0: Check initialization
 
@@ -37,6 +39,12 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
 
 ## Step 2: Refine
 
+Two paths: **parallel** (decomposer + N detailers) when `parallelism.task_refiner_parallel` resolves to `true`, **legacy** (single whole-IDEA refiner call) when `false`. Pick once based on the resolved value.
+
+### Step 2 — legacy path (parallelism disabled)
+
+Skip this whole subsection if `parallelism.task_refiner_parallel === true`. When disabled:
+
 1. Spawn the **task-refiner** agent via the Agent tool with:
    - The approved idea file content
    - If a research report exists, include it with: "A research report is provided below. Use it to inform your approach selection, library choices, and to resolve open questions before doing your own research."
@@ -45,7 +53,58 @@ If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflo
    - Instruction: "Refine this idea into execution-ready plans. Start task numbering at TASK-{NNN}. Output each plan file's content clearly separated. For any new epic slugs you introduce, also output an EPIC-{slug}.md block."
 2. Capture the refiner's output.
    - If the task-refiner reports **CONTEXT_LIMIT**: read the `### Handoff` section to get plans produced so far. Write the completed plans to disk (same as normal flow). Spawn a **fresh task-refiner** with: the original idea, "Continue refinement from previous refiner's handoff. These tasks are already planned: {list}. Start numbering at TASK-{next}.", the handoff content, and the updated starting counter. Merge outputs. Cap at resolved `limits.context_limit_respawn_max` context-limit respawns; after that, proceed with whatever plans exist.
-3. Parse the output into individual plan files and any new EPIC-{slug}.md blocks.
+3. Parse the output into individual plan files and any new EPIC-{slug}.md blocks. Skip ahead to step 3a (parity gates) below.
+
+### Step 2 — parallel path (default)
+
+1. **Decompose.** Spawn the **task-decomposer** agent via the Agent tool (`subagent_type: "task-decomposer"`, `model: <resolved task_decomposer>`) with:
+   - The approved idea file content
+   - The research report (if present), prefaced with: "A research report is provided below. Use it to inform task boundaries, library choices, and how slices group into tasks."
+   - The list of existing epics from Step 1.5 (slug + `EPIC-{slug}.md` contents). Instruct: "Reuse these existing epics when a slot fits their objective; propose a new slug only when 2+ slots share an objective. Leave `epic: null` for orphans."
+   - Instruction: "Decompose this idea into a coarse task skeleton per your output schema. Use slot IDs T1..TN — the orchestrator will allocate real TASK IDs. Cross-task invariants (depends_on DAG, files_owned_hint disjointness across siblings, epic decisions) are your responsibility."
+2. **Parse the skeleton.** The decomposer's output is a single fenced JSON block with `tasks[]`, `new_epics[]`, `scope_drops[]`. `JSON.parse` it. On parse failure, retry the decomposer once with the error message; on second failure, fall back to the legacy path for this run and surface a warning in Step 3.
+3. **Validate the skeleton (cheap pre-checks).** Before allocating IDs:
+   - Each `tasks[].slot` is unique and matches `^T\d+$`.
+   - Every `depends_on` entry references a sibling slot.
+   - `files_owned_hint` lists are pairwise disjoint across siblings (no path appears as `files_owned_hint` in two slots). On overlap: respawn the decomposer once with a targeted note ("slots TX and TY both claim `<path>` in files_owned_hint — split or merge"). On second failure, surface as a Step 3 warning and proceed (the parity gates 3a/3b will partially recover).
+   - Every `epic` value is `null`, an existing slug, or a slug that appears in `new_epics`. Mismatches → respawn once, then warn.
+4. **Allocate real TASK-NNN IDs.** Resolve the starting counter from Step 1 step 4. Assign IDs sequentially in `tasks[]` source order: slot `T1` → `TASK-{starting}`, `T2` → `TASK-{starting+1}`, etc. Build a slot→TASK map. Remap each task's `depends_on` from slot IDs to real TASK IDs using the map.
+5. **Single-task short-circuit.** If `tasks.length === 1`, skip the parallel fan-out and spawn ONE `task-refiner` in detail mode (next step's prompt shape) for that one task. Otherwise continue.
+6. **Detail in parallel.** Issue **one message containing one `Agent` tool call per skeleton task**, identical to the parallel-pipeline pattern in `commands/sprint.md` Step 4.b. Each call:
+   - `subagent_type: "task-refiner"`
+   - `model: <resolved task_refiner>`
+   - Prompt body, in this order:
+     ```
+     MODE: detail
+     TASK_ID: TASK-{NNN}
+     TASK_SKELETON: <JSON of this task's slot, with depends_on remapped to real TASK IDs>
+     SIBLING_DAG:
+       TASK-007 | <title> | <epic> | depends_on=[TASK-008]
+       TASK-008 | <title> | <epic> | depends_on=[]
+       ...
+
+     # Idea
+     <full IDEA file content>
+
+     # Research (if present)
+     <research report content, with the same preface as the legacy path>
+
+     # Existing epics (for context — do NOT propose new slugs)
+     <slug + EPIC-{slug}.md contents for each>
+     ```
+
+   Wait for all calls to return.
+7. **Collate detailer outputs.** Each detailer output is one TASK-NNN-plan.md block (frontmatter + body). Parse each.
+   - On any detailer reporting **CONTEXT_LIMIT**: read its `### Handoff`, then respawn a fresh detailer **for that one slot only** (same prompt shape, plus the previous handoff prepended). Cap at resolved `limits.context_limit_respawn_max` per slot. Do not respawn sibling detailers.
+   - If a detailer fails entirely (no parseable plan after respawn cap): drop that slot, surface it in Step 3 as `Detailer failed for TASK-{NNN}: <slug>`, and proceed with the rest. The user can re-run after fixing.
+8. **Materialize new EPIC files.** For each entry in the decomposer's `new_epics[]`, generate its `EPIC-{slug}.md` body using the schema from `agents/task-refiner.md` Output Format ("originating_ideas" → `[IDEA-{NNN}]`, status `active`, the decomposer's title/objective/scope/success_signal). The detailers do NOT emit EPIC blocks in this path.
+
+After step 7 (or step 5's short-circuit), you have parsed plans + EPIC blocks ready for parity gates 3a/3b below.
+
+### Step 2 — common (both paths): parity gates and write
+
+The legacy path ends here too — `Skip ahead to step 3a (parity gates) below.` lands on this subsection. From this point both paths share identical handling.
+
 3a. **Validate `test_strategy` ↔ `files_owned` parity (deterministic gate).** For each parsed plan, cross-check every `test_strategy.targets[].test_file` against that plan's `files_owned` list:
    - If a target `test_file` is missing from `files_owned`, auto-insert it into `files_owned` before writing the plan to disk.
    - Record each auto-correction (task ID + file path) and surface the list in Step 3 so the user sees what was adjusted.
