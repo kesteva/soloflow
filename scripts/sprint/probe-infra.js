@@ -58,12 +58,14 @@ function categoriesForPlan(planPath) {
   return { categories: Array.from(categories), test_targets: testStrategy.map((t) => t && t.behavior).filter(Boolean) };
 }
 
-function tryShell(cmd) {
+function tryShell(cmd, opts = {}) {
   try {
-    execFileSync('bash', ['-c', cmd], { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+    const execOpts = { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' };
+    if (opts.timeoutMs) execOpts.timeout = opts.timeoutMs;
+    execFileSync('bash', ['-c', cmd], execOpts);
     return { ok: true };
   } catch (e) {
-    return { ok: false, code: e.status || 1, err: (e.stderr || e.message || '').toString().trim() };
+    return { ok: false, code: e.status || 1, err: (e.stderr || e.message || '').toString().trim(), signal: e.signal };
   }
 }
 
@@ -91,7 +93,7 @@ function probeCategory(cat) {
   if (cat === 'docker') {
     const bin = tryShell('which docker >/dev/null');
     if (!bin.ok) return { ok: false, reason: 'not installed' };
-    const info = tryShell('timeout 3 docker info >/dev/null 2>&1');
+    const info = tryShell('docker info >/dev/null 2>&1', { timeoutMs: 3000 });
     if (!info.ok) return { ok: false, reason: 'daemon not running' };
     return { ok: true };
   }
@@ -108,10 +110,10 @@ function probePrereqs(plans) {
       if (!pr || !pr.check) continue;
       let status, err;
       try {
-        execFileSync('bash', ['-c', `timeout 5 bash -c '${pr.check.replace(/'/g, "'\\''")}'`], { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8' });
+        execFileSync('bash', ['-c', pr.check], { stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: 5000 });
         status = 'pass';
       } catch (e) {
-        status = e.status === 124 ? 'timeout' : 'fail';
+        status = (e.signal === 'SIGTERM' || e.signal === 'SIGKILL') ? 'timeout' : 'fail';
         err = (e.stderr || e.message || '').toString().trim();
       }
       out.push({ task_id: taskId, description: pr.description || pr.check, status, blocking: Boolean(pr.blocking), fix: pr.fix || '' });
