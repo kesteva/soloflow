@@ -53,7 +53,11 @@ Skip this whole subsection if `parallelism.task_refiner_parallel === true`. When
    - Instruction: "Refine this idea into execution-ready plans. Start task numbering at TASK-{NNN}. Output each plan file's content clearly separated. For any new epic slugs you introduce, also output an EPIC-{slug}.md block."
 2. Capture the refiner's output.
    - If the task-refiner reports **CONTEXT_LIMIT**: read the `### Handoff` section to get plans produced so far. Write the completed plans to disk (same as normal flow). Spawn a **fresh task-refiner** with: the original idea, "Continue refinement from previous refiner's handoff. These tasks are already planned: {list}. Start numbering at TASK-{next}.", the handoff content, and the updated starting counter. Merge outputs. Cap at resolved `limits.context_limit_respawn_max` context-limit respawns; after that, proceed with whatever plans exist.
-3. Parse the output into individual plan files and any new EPIC-{slug}.md blocks. Skip ahead to step 3a (parity gates) below.
+3. Parse the output into individual plan files and any new EPIC-{slug}.md blocks. Before parsing each plan block, pipe its raw text through the post-fence sanitizer:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/refiner/sanitize-plan.js" --task-id TASK-{NNN} --input <raw-plan-tmpfile>
+   ```
+   Use the returned `body` as the plan content to parse and write. If `stripped_bytes > 0`, record the count and the task ID — surface it in Step 3 as an advisory: "Sanitized N bytes of post-fence debug output from TASK-{NNN}'s plan." This is non-blocking; proceed regardless. Skip ahead to step 3a (parity gates) below.
 
 ### Step 2 — parallel path (default)
 
@@ -94,7 +98,11 @@ Skip this whole subsection if `parallelism.task_refiner_parallel === true`. When
      ```
 
    Wait for all calls to return.
-7. **Collate detailer outputs.** Each detailer output is one TASK-NNN-plan.md block (frontmatter + body). Parse each.
+7. **Collate detailer outputs.** Each detailer output is one TASK-NNN-plan.md block (frontmatter + body). Before parsing each, pipe the raw text through the post-fence sanitizer to strip telemetry tokens (`agentId:`, `<usage>`, `<input_tokens>`, etc.) and any chain-of-thought prose appended after the closing fence:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/refiner/sanitize-plan.js" --task-id TASK-{NNN} --input <raw-plan-tmpfile>
+   ```
+   Use the returned `body` as the plan content to parse and write. Aggregate `stripped_bytes` per task; surface the totals in Step 3 as an advisory line ("Sanitized N bytes of post-fence debug output from TASK-{NNN}'s plan."). This is non-blocking — pipeline continues regardless.
    - On any detailer reporting **CONTEXT_LIMIT**: read its `### Handoff`, then respawn a fresh detailer **for that one slot only** (same prompt shape, plus the previous handoff prepended). Cap at resolved `limits.context_limit_respawn_max` per slot. Do not respawn sibling detailers.
    - If a detailer fails entirely (no parseable plan after respawn cap): drop that slot, surface it in Step 3 as `Detailer failed for TASK-{NNN}: <slug>`, and proceed with the rest. The user can re-run after fixing.
 8. **Materialize new EPIC files.** For each entry in the decomposer's `new_epics[]`, generate its `EPIC-{slug}.md` body using the schema from `agents/task-refiner.md` Output Format ("originating_ideas" → `[IDEA-{NNN}]`, status `active`, the decomposer's title/objective/scope/success_signal). The detailers do NOT emit EPIC blocks in this path.

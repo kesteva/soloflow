@@ -252,6 +252,8 @@ originating_ideas: [{IDEA-NNN}]
 {What TRUE-in-production looks like for the epic as a whole}
 ```
 
+Emit nothing after the final closing fence — no chain-of-thought, no `agentId:` lines, no `<usage>` blocks, no telemetry. The orchestrator parses on the fence as the document terminator and runs `scripts/refiner/sanitize-plan.js` as a safety net.
+
 ## Context Limit Protocol
 
 The system monitors context usage and will inject warnings into your conversation:
