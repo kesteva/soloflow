@@ -4,6 +4,7 @@ models:
   verifier: opus
   executor: sonnet
   idea_extractor: sonnet
+  task_decomposer: sonnet
   task_refiner: opus
   bug_investigator: opus
   compounder: sonnet
@@ -36,6 +37,14 @@ limits:
   max_sprint_tasks: 10
   context_limit_respawn_max: 3    # max context-limit respawns per agent per task
   max_parallel_tasks: 3           # max tasks whose full loops run concurrently in a batch; 1 = serial
+
+# Parallelism for refinement (planner / braindump / review-queue).
+#   task_refiner_parallel = when an IDEA has ≥2 tasks, run task-decomposer
+#                           first then fan out N task-refiner detailers in
+#                           parallel. Set false to keep the single-call
+#                           whole-IDEA flow.
+parallelism:
+  task_refiner_parallel: true
 
 code_review:
   enabled: true

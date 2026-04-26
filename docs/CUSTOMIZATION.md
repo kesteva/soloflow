@@ -50,6 +50,7 @@ All settings below live in `config/defaults.yaml` and are runtime-overridable. `
 | `models.verifier` | `opus` | `agents/shadow-verifier.md` |
 | `models.executor` | `sonnet` | `agents/executor.md` |
 | `models.idea_extractor` | `sonnet` | `agents/idea-extractor.md` |
+| `models.task_decomposer` | `sonnet` | `agents/task-decomposer.md` |
 | `models.task_refiner` | `opus` | `agents/task-refiner.md` |
 | `models.bug_investigator` | `opus` | `agents/bug-investigator.md` |
 | `models.compounder` | `sonnet` | `agents/compounder.md` |
@@ -88,6 +89,12 @@ Valid values: `opus`, `sonnet`, `haiku`. Callsites that spawn these agents via t
 | `limits.max_sprint_tasks` | 10 | Maximum tasks in a single execution sprint |
 | `limits.context_limit_respawn_max` | 3 | Max context-limit respawns per agent per task |
 | `limits.max_parallel_tasks` | 3 | Max task pipelines executed concurrently per batch when `files_owned` doesn't overlap. `1` disables parallel mode (strict serial). See "Parallel task execution" below. |
+
+### Parallelism
+
+| Setting | Default | Description |
+|---|---|---|
+| `parallelism.task_refiner_parallel` | `true` | When an IDEA has ≥2 tasks, `/soloflow:planner` first runs `task-decomposer` to fix the task DAG, then fans out N `task-refiner` detailers in parallel (one per slot). Set `false` to keep the legacy single-call whole-IDEA flow. Affects `/soloflow:planner`, `/soloflow:braindump` multi-IDEA refinement, and `/soloflow:review-queue` Step 7c. |
 
 ### Code review
 
