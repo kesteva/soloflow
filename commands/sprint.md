@@ -155,6 +155,26 @@ Options (label `{M}` = resolved `limits.max_sprint_tasks`, fallback 10):
 
 If no tasks were selected, stop.
 
+### 1.5d.1: Transitive scope expansion
+
+The user's selection (whether from `$ARGUMENTS` or the 1.5d prompt) is a starting set, not the final scope. Expand it transitively over `depends_on` so:
+- A selected task pulls in any of its still-`ready` deps still sitting in the backlog (**backward**) — without this, the per-task scheduler in `scripts/sprint/ready-tasks.js` would silently treat the missing dep as externally-complete and run the dependent task with un-done prerequisites.
+- A selected task pulls in any backlog-`ready` task whose only blockers are now in scope (**forward**) — these dependents would otherwise be stranded in the backlog even though the sprint completes their unblocker.
+
+Run:
+```
+node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/expand-selection.js" --initial TASK-NNN,TASK-MMM,...
+```
+
+Parse the JSON output `{ initial, added_backward, added_forward, expanded, reasons }`. Behavior:
+- If the script exits non-zero, print its stderr and stop (fail closed; e.g. an `$ARGUMENTS`-supplied task ID that isn't ready in backlog).
+- Replace `selected_task_ids` with `expanded` for Step 2's `Phase: execute` payload.
+- If `added_backward.length + added_forward.length > 0`, print one notice line — no extra prompt:
+  ```
+  Pulled in {N} dependent task(s): {for each id in added_backward ∪ added_forward: "TASK-NNN ({reasons[id].direction} via {reasons[id].via.join(',')})"}
+  ```
+  Independent ready tasks are never auto-added — only tasks with at least one dependency edge to the selected set.
+
 ### 1.5e: Execution mode (serial vs parallel)
 
 Per-task visual verification (Maestro / Playwright) cannot safely run across parallel worktrees — Maestro holds a per-device lock, and web dev servers bind to fixed ports. The user chooses up-front which trade-off applies to this sprint.
