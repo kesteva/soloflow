@@ -1,12 +1,12 @@
 ---
-description: Unattended backlog-drain mode — runs executor → verifier → code-reviewer loops on all ready tasks, logs stuck/human-needed, never prompts
+description: Unattended backlog-drain mode — runs executor → verifier → code-reviewer loops on all ready tasks, logs stuck/human-needed, never prompts. Visual verify off; parallel by default.
 argument-hint: [optional: TASK-NNN TASK-NNN ... or IDEA-NNN to filter]
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 
 # /soloflow:mad-max
 
-Unattended variant of `/soloflow:sprint`. Drains every ready task in the backlog through the full per-task quality loop (executor → verifier → code-reviewer → test-writer), runs the end-of-sprint regression check, and leaves the run branch open for human review. **No interactive prompts during the run.**
+Unattended variant of `/soloflow:sprint`. Drains every ready task in the backlog through the full per-task quality loop (executor → verifier → code-reviewer → test-writer) and leaves the run branch open for human review. Visual verification is unconditionally off and tasks run in parallel by default (floor of 3); end-of-sprint verification is skipped. **No interactive prompts during the run.**
 
 Use this when you want to start a run and walk away. Use `/soloflow:sprint` when you want to review scope, deferred items, and merge choice interactively.
 
@@ -76,7 +76,9 @@ No `AskUserQuestion` calls. Construct the phase 2 decisions payload:
   - If after filtering the list is empty, print `mad-max: no ready tasks matched filter "$ARGUMENTS".` and stop.
 - `sprint_id`: gathered `sprint_id_next`.
 - `skip_smoke`: pass gathered `skip_smoke` through unchanged.
-- `execution_mode`: derived from the cached resolved `limits.max_parallel_tasks` — `"parallel"` when `> 1`, otherwise `"serial"`. Mad-max never prompts; users who want per-task visual verify set `limits.max_parallel_tasks: 1` in `.soloflow/config.json`, which forces serial and keeps shadow-verifier's full Level 2 in play. Parallel mode skips per-task visual verify (matching `/soloflow:sprint` Step 1.5e); end-of-sprint visual verification still runs in Step 3.5.
+- `execution_mode`: always `"parallel"` in mad-max. Mad-max is unattended, so per-task visual verification is unconditionally off (it requires a human to react to evidence and would also collide on Maestro device locks / web dev-server ports across worktrees). The existing `VISUAL_VERIFY: skip` prefix in pipeline step d fires whenever `EXECUTION_MODE == "parallel"`, so this single setting takes care of per-task visual skipping. End-of-sprint visual verification is also skipped — see Step 3.5.
+
+After Step 1.5 completes, **override the cached `limits.max_parallel_tasks`** in working memory to `max(cached, 3)` for the remainder of this run. This guarantees ≥ 3-way parallelism even when the project config sets `limits.max_parallel_tasks: 1`. The override is in-memory only and is **not** written back to config. Users who genuinely want strictly-serial runs or per-task visual coverage must use `/soloflow:sprint` instead.
 
 ---
 
@@ -92,7 +94,7 @@ Decisions:
   overrides: []
   remember_branch_choice: false
   skip_smoke: {gathered skip_smoke value}
-  execution_mode: "{serial|parallel}"        # parallel when limits.max_parallel_tasks > 1, else serial
+  execution_mode: "parallel"                 # mad-max is always parallel; per-task visual verify off via existing prefix
 ```
 
 Parse the structured output. Handle:
@@ -129,7 +131,7 @@ Mirror `commands/sprint.md` Step 3 exactly — including the batching wrapper (b
 
 - **No new early stops.** All terminal statuses (`STUCK`, `HUMAN_NEEDED`, `BLOCKED`, `merge-conflict`) write their report / queue entry / `sprint.json` update and continue to the next ready task.
 - **No interactive checkpoint surfacing.** Checkpoints still get written every `checkpoint_interval` completed tasks (pipeline step g) for crash recovery, but mad-max never prompts about them during the run.
-- **Always use the cached `limits.max_parallel_tasks` resolved above.** Mad-max does not override it — users who want strictly-serial runs set `limits.max_parallel_tasks: 1` in `.soloflow/config.json`.
+- **Force `EXECUTION_MODE = "parallel"` and floor `MAX_PARALLEL` at 3.** When sprint.md Step 3 reads `EXECUTION_MODE` from `sprint.json` and `MAX_PARALLEL` from cached `limits.max_parallel_tasks`, both come out of the Step 1.5 hardcoded decisions / in-memory override above. Per-task visual verification is therefore always skipped via the existing `VISUAL_VERIFY: skip` prefix in pipeline step d. Single-task batches naturally degrade to single-task pipelines via the existing batch fork — no special-casing needed.
 
 Refer to `commands/sprint.md` Step 3 for the full procedure: Parallelism cap → build dependency graph → pick batch → SERIAL MODE (single task, no worktree) or PARALLEL MODE (N ≥ 2 tasks, one worktree per task, batched parallel Agent calls per phase, sequential merge-back + settle from the main worktree) → Per-Task Pipeline definition (lettered steps a, a2, b, c, d, e, f, f2, f3, g, h).
 
@@ -139,15 +141,15 @@ The same `WORKTREE_ROOT:` prefix injection, `worktree-setup.js` / `worktree-merg
 
 ---
 
-## Step 3.5: End-of-sprint verification
+## Step 3.5: End-of-sprint verification (skipped in mad-max)
 
-Spawn the **shadow-sprint-verifier** agent (`subagent_type: "shadow-sprint-verifier"`) with: sprint ID, base SHA (from `sprint.json`'s `run.base_sha`), the list of completed tasks with their plans and changed files, and the resolved visual verification config. Wait for its report.
+Skip this step entirely. Mad-max is unattended, so end-of-sprint visual verification has no human to react to its evidence and would not block the run anyway. Print one line:
 
-Handle the report:
-- Append any regressions (visual or integration) to `.soloflow/human-review-queue.md` with the failure details, evidence, and suspected responsible task.
-- Stage `.soloflow/active/sprint-verification.md` (sprint-closer reads it for sprint-level visual coverage) and commit any `.soloflow/` state changes with `chore(SPRINT-{NNN}): end-of-sprint verification`. Use `git add` with explicit paths — never `git add -A`.
+```
+mad-max: skipping end-of-sprint visual verification (unattended run; use /soloflow:sprint or /soloflow:visual-verify after the run for visual coverage).
+```
 
-Capture `regressions_count` for the final summary.
+Do not spawn `shadow-sprint-verifier`. Do not write `.soloflow/active/sprint-verification.md`. The sprint-closer's gather phase already handles the missing file (tallies sprint-level mobile/web as `not_applicable` with note "sprint-verifier did not run"), so Step 5's summary still renders cleanly. There is no `regressions_count` to capture in mad-max.
 
 ---
 
@@ -187,7 +189,7 @@ The closer handles all staging and committing internally — do not run addition
 
 ## Step 5: Final summary
 
-Render using fields from the closer's gather and finalize outputs and the sprint-verifier report:
+Render using fields from the closer's gather and finalize outputs (sprint-verifier never runs in mad-max — see Step 3.5):
 
 ```
 ## SoloFlow Mad-Max — Summary
@@ -197,7 +199,7 @@ Render using fields from the closer's gather and finalize outputs and the sprint
 - **Stuck:** {stats.stuck_count}{if >0: ` — see .soloflow/active/stuck/`}
 - **Human-needed:** {stats.human_needed_count}{if >0: ` — see .soloflow/human-review-queue.md`}
 - **Blocked:** {stats.blocked_count}
-- **Regressions flagged:** {sprint_verifier.regressions_count} (appended to human-review-queue)
+- **Regressions flagged:** skipped (no end-of-sprint verification in mad-max)
 - **Total executor loops:** {stats.total_executor_loops}
 - **Total code review rounds:** {stats.total_code_review_rounds}
 - **Visual coverage:**
@@ -217,4 +219,5 @@ Next step: run /soloflow:sprint to resume human review and merge, or inspect {ru
 - **Smoke baseline must be green.** Mad-max refuses to start on a red baseline because it cannot distinguish pre-existing failures from task-caused regressions. Use `/soloflow:sprint` if you need to run on a known-red baseline.
 - **High-severity deferred items must be resolved first.** Mad-max will not silently override `action_required` entries (Actions or Testing bucket) from prior sprints when their severity is `high`. Medium/low-severity blocking entries are surfaced but do not stop the run.
 - **No auto-merge.** The run branch always stays open. Use `/soloflow:sprint` to merge after human review.
-- **Per-task visual verify follows `limits.max_parallel_tasks`.** Mad-max sets `execution_mode` from config and never prompts — `limits.max_parallel_tasks > 1` skips per-task Maestro / Playwright checks; `limits.max_parallel_tasks: 1` keeps them on. End-of-sprint visual verification always runs.
+- **Visual verification is unconditionally off.** Both per-task and end-of-sprint visual verification are skipped in mad-max — there is no human in the loop to react to the evidence, and parallel worktrees would collide on Maestro device locks / web dev-server ports anyway. After the run, use `/soloflow:sprint` for an interactive triage pass on the open run branch, or `/soloflow:visual-verify` to walk visual checks manually.
+- **Parallelism is forced.** Mad-max overrides `limits.max_parallel_tasks` to a floor of 3 in working memory for the duration of the run (config is not modified). Users who want strictly-serial runs must use `/soloflow:sprint` instead.
