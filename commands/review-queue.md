@@ -513,14 +513,21 @@ Stage only `.soloflow/human-review-queue.md`.
 
 Skip if `pending_refines` is empty.
 
-1. Compute the starting TASK ID via `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/next-ids.js" --kind task`.
-2. Discover existing epics: glob `.soloflow/active/plans/*/EPIC-*.md`.
-3. Assemble a single refinement brief containing a section per `pending_refines` entry:
+Each `pending_refines` entry is a single bug-fix task — no slice decomposition needed. We spawn one `task-refiner` per item, in parallel, using the agent's single-task detail mode (the per-item brief is the skeleton). No `task-decomposer` runs here.
+
+1. Resolve config:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/config/resolve.js" \
+       --key models.task_refiner --key parallelism.task_refiner_parallel \
+       --key limits.context_limit_respawn_max \
+       --fallback opus --fallback true --fallback 3
+   ```
+2. Compute the starting TASK ID via `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/next-ids.js" --kind task`.
+3. Discover existing epics: glob `.soloflow/active/plans/*/EPIC-*.md`.
+4. **Allocate real TASK-NNN IDs sequentially** for the batch — one per `pending_refines` entry, in source order, starting from step 2's counter.
+5. **Build per-item briefs.** Each brief retains the existing template fields:
 
    ```
-   These work items were surfaced by /soloflow:review-queue during the testing pass on {ISO date}. Refine each into an execution-ready task plan.
-
-   ## Item 1
    - Title: {truncated description, ~60 chars}
    - Source task: TASK-{source_task} ({severity}, {surface})
    - Original flow: "{flow}"
@@ -528,29 +535,61 @@ Skip if `pending_refines` is empty.
    - Proposed direction: Investigate root cause in TASK-{source_task}'s owned files; fix without regressing the original flow.
    - Evidence: {evidence}
    - Scope: Bug fix only — do not expand scope.
-
-   ## Item 2
-   ...
    ```
-4. Spawn the **task-refiner** agent. Pass:
-   - The brief above
-   - `starting_task_counter`: `<next id from step 1>`
-   - `existing_epics`: `<list from step 2>`
 
-   Instruction: *"Produce execution-ready task plans for each item above. Use the starting task counter and collision-safe writes. Orphan tasks (no obvious epic) are acceptable — do not force an epic."*
-5. If task-refiner returns **CONTEXT_LIMIT**: read its `### Handoff`, respawn once with remaining un-refined items plus the partial output.
-6. For each plan the task-refiner produced:
-   - Write to `.soloflow/active/plans/TASK-{NNN}-plan.md` (respect epic subfolder if assigned). Use `wx`/noclobber semantics; if the path exists, recompute the next ID and retry.
+6. **Spawn one task-refiner per item in parallel.** Issue **one message containing one `Agent` tool call per `pending_refines` entry** (`subagent_type: "task-refiner"`, `model: <resolved task_refiner>`). When `parallelism.task_refiner_parallel` resolves to `false`, fall back to a single sequential pass per item — same prompt shape, just one Agent call at a time.
+
+   Each call's prompt:
+   ```
+   MODE: detail
+   TASK_ID: TASK-{NNN}
+   TASK_SKELETON:
+     {
+       "slot": "T1",
+       "title": "{title from brief}",
+       "scope_summary": "Bug fix: {description}. Boundary: do not expand scope.",
+       "epic": null,
+       "depends_on": [],
+       "estimated_complexity": "low",
+       "files_owned_hint": [],
+       "files_readonly_hint": [],
+       "is_external_cli_step": false
+     }
+   SIBLING_DAG:
+     (none — single-task batch entry)
+
+   # Brief
+   These work items were surfaced by /soloflow:review-queue during the testing pass on {ISO date}.
+
+   {per-item brief from step 5}
+
+   # Existing epics (for context — do NOT propose new slugs)
+   {slug + EPIC-{slug}.md contents for each}
+   ```
+
+   The detailer is expected to expand `files_owned`/`files_readonly` from the source task's owned files and the per-item evidence; the empty hints are an explicit "decide for yourself" signal in this single-task bug-fix context.
+
+   Wait for all calls to return.
+
+7. **Collate per-item.** For each `pending_refines` entry's detailer output:
+   - On `CONTEXT_LIMIT`: respawn that one item with handoff (cap at resolved `limits.context_limit_respawn_max`). Do not respawn siblings.
+   - Apply parity gates 3a/3b from `commands/planner.md` per plan.
+   - On terminal failure (no parseable plan after respawn cap): drop that item, surface in the final review-queue report under `Refinement failures`, and proceed.
+
+8. **Write plans + backlog.** For each successful plan:
+   - Write to `.soloflow/active/plans/TASK-{NNN}-plan.md` (respect epic subfolder if the detailer assigned one — though in this path orphan tasks are the common case). Use `wx`/noclobber semantics; on collision, recompute the next ID and retry.
    - Add to `.soloflow/active/backlog.json`:
      ```json
      { "id": "TASK-{NNN}", "status": "ready", "depends_on": [], "created": "{ISO}" }
      ```
-   - If the refiner created a new `EPIC-<slug>.md`, write that too.
-7. Set `tasks_created = <count of new plans>`.
-8. Stage only the new plan files + any new `EPIC-*.md` + `.soloflow/active/backlog.json`. Commit:
-   ```
-   feat: review-queue — plan TASK-{first}..TASK-{last} from testing issues
-   ```
+   - If the detailer expanded into an existing epic subfolder, that's fine. New epics are not produced here (review-queue refinements are bug fixes; the detailer should not propose new epics in detail mode anyway).
+
+9. Set `tasks_created = <count of new plans>`.
+
+10. Stage only the new plan files + `.soloflow/active/backlog.json`. Commit:
+    ```
+    feat: review-queue — plan TASK-{first}..TASK-{last} from testing issues
+    ```
 
 ---
 
