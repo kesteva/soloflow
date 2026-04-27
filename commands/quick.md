@@ -29,6 +29,26 @@ Reuse the cached values across all agent spawns and respawns.
 
 If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
 
+## Step 1.5: Investigation-shape check
+
+Before grounding the bug or doing any Grep/Glob work, classify `$ARGUMENTS` as one of:
+
+- **Fix-shape** — the user names a specific file, function, line, value, or describes a mechanical change. Examples: `"fix typo in README line 42"`, `"change FOO_TIMEOUT from 30 to 60 in src/config.ts"`, `"remove unused import in lib/foo.ts"`, `"deps out of date — run npm update"`, `"login is broken because the JWT clock skew exceeds 30s — bump the tolerance to 60s in src/auth/jwt.ts"`. → Proceed to Step 2.
+- **Investigation-shape** — the user describes symptoms, error messages, or unexpected behaviors without identifying the root cause or naming a specific change. Examples: `"login button doesn't work on mobile"`, `"API returns 500 sometimes"`, `"tests are flaky"`, `"dropdown closes too early"`, bare `"login is broken"`. → Stop and redirect (see below).
+- **Ambiguous** — proceed to Step 2. Bias toward proceeding: false positives (blocking a legitimate `/quick` run) hurt the user more than false negatives (running `/quick` on a bug report; Step 3's "too vague to plan" branch will catch most of those before any executor spawn).
+
+**Only redirect when the input is *clearly* investigation-shape** — i.e., it has multiple symptom signals AND zero specifics (no file path, no function name, no error-stack location, no mechanical-change verb like "rename", "change X to Y", "bump", "remove", "add"). The threshold is conservative on purpose; this is the symmetric counterpart to Step 3's existing "if the bug turns out to be bigger than expected, escalate to `/soloflow:idea-extractor` → `/soloflow:planner` → `/soloflow:sprint`" escape hatch.
+
+If investigation-shape, print this single message and stop without grounding or planning:
+
+```
+/quick is the path for fixes you already know. Your description reads as a bug report needing investigation. Run:
+
+  /soloflow:bugfix $ARGUMENTS
+```
+
+Do not spawn any agents or run any Grep/Glob work in this case.
+
 ## Step 2: Ground the Bug
 
 Search the codebase to understand the bug:
