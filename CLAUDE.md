@@ -21,6 +21,20 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the phase workflow, hook 
 - **Subagents** respond to CRITICAL by committing in-progress work and reporting `CONTEXT_LIMIT` status with an inline `### Handoff` section. The orchestrator spawns a fresh agent with the handoff context (up to `context_limit_respawn_max`, default 3).
 - **Orchestrators** respond to CRITICAL by checkpointing and asking the user to compact-and-continue or save-and-exit.
 
+## Release / branch hygiene
+
+Two long-lived branches:
+
+- `main` — public stable channel. `/plugin install soloflow@soloflow` installs from here.
+- `dev` — pre-release channel for maintainer/tester use. `/plugin install soloflow-dev@soloflow` installs from here.
+
+Two files **deliberately differ** between the branches and will conflict on every merge in either direction. Don't collapse the divergence — both values are load-bearing for the parallel-install namespacing.
+
+- `.claude-plugin/plugin.json` — `"name"` is `"soloflow"` on `main` and `"soloflow-dev"` on `dev`. Each branch's value is correct for that branch. On any merge conflict, **keep the destination branch's value** (i.e. the side you're merging *into*). The dev install needs its own `plugin.json.name` so its `/soloflow-dev:*` commands and hooks don't collide with the public install's `/soloflow:*`.
+- `.claude-plugin/marketplace.json` — `main` lists both plugin entries (`soloflow` and `soloflow-dev`); a freshly-branched `dev` has only the `soloflow` entry. Always keep `main`'s two-entry version as canonical; on a `main → dev` resync, take main's version (harmless to have both entries on dev). Once dev has the two-entry version, this file stops conflicting.
+
+When releasing (merging `dev` → `main`), do NOT delete the `dev` branch after merge — it persists for the next cycle. PRs are fine; the branch survives unless GitHub's "delete branch on merge" toggle is on.
+
 ## Reference
 
 - **State layout, ID allocation, findings queue, epics** → [`docs/STATE-LAYER.md`](docs/STATE-LAYER.md)
