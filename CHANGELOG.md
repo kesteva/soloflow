@@ -275,7 +275,6 @@ Delete `.soloflow/counters.json` from your project — it's no longer read or wr
 - `/plugin install soloflow` is now the primary install path. The repo ships as a valid Claude Code plugin with auto-discovery of agents/commands/hooks/skills.
 - `scripts/update.sh` — manifest-diff updater for the script-install fallback. Copies new files, prunes removed ones, leaves `.soloflow/` untouched.
 - `.claude/soloflow-install/manifest.json` and `VERSION` stamp track the installed file set for idempotent reinstall/update/uninstall.
-- `docs/PLUGIN-MIGRATION-PLAN.md` documents the migration from symlink install to plugin distribution.
 
 ### Migration from 0.1.0
 1. Uninstall the old scaffolding: `bash <path-to-soloflow>/scripts/uninstall.sh --scaffolding` (preserves `.soloflow/`).
