@@ -129,3 +129,11 @@ paths:
   archive_dir: .soloflow/archive
   backlog: .soloflow/active/backlog.json
   sprint: .soloflow/active/sprint.json
+
+# Remote-version checking. The SessionStart hook calls check-version.js, which
+# fetches .claude-plugin/plugin.json from main and caches the result at
+# ~/.cache/soloflow/update-check.json. The statusline reads that cache to
+# render an "update available" indicator. Disable to skip both.
+update:
+  enabled: true
+  check_interval_hours: 24
