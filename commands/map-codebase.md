@@ -1,5 +1,6 @@
 ---
 description: Survey the project and create missing CLAUDE.md, ARCHITECTURE.md, and CODE-PATTERNS.md so future agents have shared context to load on entry
+argument-hint: [--skip-claudemd] [--skip-architecture] [--skip-codepatterns]
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion]
 model: sonnet
 ---
@@ -30,6 +31,22 @@ the user to confirm what to generate, and writes the chosen artifacts.
    project is in a git repo (`is_git`). Not being in a repo is fine — the
    command still writes the artifacts, just skips Step 5's commit.
 
+## Step 0.4: Parse flags
+
+Scan `$ARGUMENTS` for the three skip flags and build a `skip_set` (a set of artifact names this run will not generate, even if missing):
+
+- `--skip-claudemd` → add `"CLAUDE.md"` to `skip_set`.
+- `--skip-architecture` → add `"ARCHITECTURE.md"` to `skip_set`.
+- `--skip-codepatterns` → add `"CODE-PATTERNS.md"` to `skip_set`.
+
+Match flags by exact string; treat any token in `$ARGUMENTS` that begins with `--skip-` but is not one of the three above as an error: print `map-codebase: unknown flag "{token}". Recognized flags: --skip-claudemd, --skip-architecture, --skip-codepatterns.` and stop. Order is irrelevant; duplicates are tolerated.
+
+If `skip_set` contains all three names, print `map-codebase: all three artifacts skipped via flags — nothing to do.` and stop.
+
+If `skip_set` is non-empty, print one line summarizing what was excluded: `Skipping (via flag): {comma-joined names from skip_set}.` This makes the suppression visible in the run log.
+
+Carry `skip_set` forward to Steps 1 and 2.
+
 ## Step 1: Detect existing artifacts
 
 Glob for each artifact in its conventional locations. **Treat any match as
@@ -44,23 +61,24 @@ Glob for each artifact in its conventional locations. **Treat any match as
 - **CODE-PATTERNS.md** — first match wins among: `CODE-PATTERNS.md`,
   `docs/CODE-PATTERNS.md`, `docs/code-patterns.md`.
 
-Build a `status` map: each artifact is `present` (with its absolute path) or
-`missing` (with its proposed default path — see Step 4). Report the table:
+Build a `status` map: each artifact is `present` (with its absolute path), `missing` (with its proposed default path — see Step 4), or `skipped` (in `skip_set` from Step 0.4 — even if the file is missing, this run will not generate it). `skipped` takes precedence over `missing` in the status display; `present` always wins (a skip flag never alters an existing file).
+
+Report the table:
 
 ```
 Existing project context:
-  CLAUDE.md            {present at <path> | missing — would create at ./CLAUDE.md}
-  ARCHITECTURE.md      {present at <path> | missing — would create at ./docs/ARCHITECTURE.md (or ./ARCHITECTURE.md if no docs/)}
-  CODE-PATTERNS.md     {present at <path> | missing — would create at ./docs/CODE-PATTERNS.md (or ./CODE-PATTERNS.md if no docs/)}
+  CLAUDE.md            {present at <path> | missing — would create at ./CLAUDE.md | skipped via --skip-claudemd}
+  ARCHITECTURE.md      {present at <path> | missing — would create at ./docs/ARCHITECTURE.md (or ./ARCHITECTURE.md if no docs/) | skipped via --skip-architecture}
+  CODE-PATTERNS.md     {present at <path> | missing — would create at ./docs/CODE-PATTERNS.md (or ./CODE-PATTERNS.md if no docs/) | skipped via --skip-codepatterns}
 
 Nested CLAUDE.md files:
   {one line per nested file, or "(none)"}
 ```
 
-If all three top-level artifacts are `present`, print:
+If every top-level artifact is either `present` or `skipped` (i.e., no artifact has status `missing`), print:
 
 ```
-✓ All three context files are already in place. Nothing to generate.
+✓ Nothing to generate — all unskipped context files are already in place.
   (Use /soloflow:compound to add learnings; use /soloflow:prune to consolidate or trim.)
 ```
 
@@ -73,10 +91,10 @@ Use a single `AskUserQuestion`:
 - **Question:** `"Generate the missing context files? You can drop any of them — only the selected ones will be written."`
 - **Header:** `"Generate"`
 - **multiSelect:** `true`
-- **Options:** one per `missing` artifact from Step 1, e.g. `"CLAUDE.md"`,
+- **Options:** one per artifact whose status is `missing` in Step 1, e.g. `"CLAUDE.md"`,
   `"ARCHITECTURE.md"`, `"CODE-PATTERNS.md"`. Pre-label each option as
-  `(missing)`. Do **not** include `present` artifacts — they're off limits to
-  this command.
+  `(missing)`. Do **not** include `present` artifacts (off limits — never
+  overwritten) or `skipped` artifacts (already excluded by flag in Step 0.4).
 - Always include a final option `"Cancel"`.
 
 If the user picks `"Cancel"` (or selects nothing): print `Aborted — no files written.` and stop.
