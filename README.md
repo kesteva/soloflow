@@ -162,7 +162,7 @@ soloflow/
 └── .claude-plugin/  # Plugin manifest
 ```
 
-State files are created per-project in `.soloflow/` (not tracked in git).
+State files are created per-project in `.soloflow/`. On first init, SoloFlow asks whether to track this directory in git (commits sprint state, plans, and findings) or add it to `.gitignore` (keeps the workflow purely local). The choice is remembered on subsequent runs.
 
 ## Documentation
 
