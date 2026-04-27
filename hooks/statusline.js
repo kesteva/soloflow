@@ -67,6 +67,22 @@ function formatState(s) {
   return parts.join(' · ');
 }
 
+// --- Update-available indicator --------------------------------------------
+// Reads the cache written by scripts/update/check-version.js. Silent on any
+// error — never break the statusline.
+
+function readUpdateBadge() {
+  try {
+    const cachePath = path.join(os.homedir(), '.cache', 'soloflow', 'update-check.json');
+    if (!fs.existsSync(cachePath)) return '';
+    const cache = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+    if (!cache || !cache.update_available || !cache.latest_version) return '';
+    return ` \x1b[2;36m⇑ v${cache.latest_version}\x1b[0m`;
+  } catch (e) {
+    return '';
+  }
+}
+
 // --- stdin ------------------------------------------------------------------
 
 let input = '';
@@ -122,11 +138,12 @@ process.stdin.on('end', () => {
     // SoloFlow state
     const sfState = formatState(readSoloFlowState(dir));
     const dirname = path.basename(dir);
+    const updateBadge = readUpdateBadge();
 
     if (sfState) {
-      process.stdout.write(`\x1b[2m${model}\x1b[0m \u2502 \x1b[2m${sfState}\x1b[0m \u2502 \x1b[2m${dirname}\x1b[0m${ctx}`);
+      process.stdout.write(`\x1b[2m${model}\x1b[0m \u2502 \x1b[2m${sfState}\x1b[0m${updateBadge} \u2502 \x1b[2m${dirname}\x1b[0m${ctx}`);
     } else {
-      process.stdout.write(`\x1b[2m${model}\x1b[0m \u2502 \x1b[2m${dirname}\x1b[0m${ctx}`);
+      process.stdout.write(`\x1b[2m${model}\x1b[0m${updateBadge} \u2502 \x1b[2m${dirname}\x1b[0m${ctx}`);
     }
   } catch (e) {
     // Silent fail — never break statusline
