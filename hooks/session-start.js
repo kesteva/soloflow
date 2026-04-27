@@ -2,21 +2,55 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const { spawnSync } = require('child_process');
 
 const cwd = process.cwd();
 const tasksDir = path.join(cwd, '.soloflow');
+
+// --- Update check (best-effort) --------------------------------------------
+// Refresh the remote-version cache, then read it. Both the spawn and the
+// read are wrapped in try/catch so a failure here can never break the
+// SessionStart additionalContext payload.
+
+function refreshUpdateCheck() {
+  try {
+    const root = process.env.CLAUDE_PLUGIN_ROOT;
+    if (!root) return;
+    const script = path.join(root, 'scripts', 'update', 'check-version.js');
+    if (!fs.existsSync(script)) return;
+    spawnSync('node', [script], { timeout: 3000, stdio: 'ignore' });
+  } catch (e) { /* silent */ }
+}
+
+function readUpdateLine() {
+  try {
+    const cachePath = path.join(os.homedir(), '.cache', 'soloflow', 'update-check.json');
+    if (!fs.existsSync(cachePath)) return null;
+    const cache = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+    if (!cache || !cache.update_available) return null;
+    return `**Update:** SoloFlow v${cache.current_version} → v${cache.latest_version} available — run \`/soloflow:update\``;
+  } catch (e) {
+    return null;
+  }
+}
+
+refreshUpdateCheck();
+const updateLine = readUpdateLine();
 
 // If .soloflow/ doesn't exist, emit a visible prompt asking the user to run
 // /soloflow:init. We intentionally do NOT create files on the user's behalf —
 // explicit consent before writing to their project.
 if (!fs.existsSync(tasksDir)) {
+  let body =
+    '## SoloFlow\n' +
+    'SoloFlow is installed but not initialized in this project. ' +
+    'Run `/soloflow:init` to scaffold `.soloflow/` state, or ignore this notice if you don\'t want SoloFlow here.';
+  if (updateLine) body += '\n\n' + updateLine;
   const promptOutput = {
     hookSpecificOutput: {
       hookEventName: 'SessionStart',
-      additionalContext:
-        '## SoloFlow\n' +
-        'SoloFlow is installed but not initialized in this project. ' +
-        'Run `/soloflow:init` to scaffold `.soloflow/` state, or ignore this notice if you don\'t want SoloFlow here.',
+      additionalContext: body,
     },
   };
   console.log(JSON.stringify(promptOutput));
@@ -159,6 +193,8 @@ if (fs.existsSync(checkpointPath)) {
     // Ignore read errors for optional file
   }
 }
+
+if (updateLine) lines.push(updateLine);
 
 const output = {
   hookSpecificOutput: {
