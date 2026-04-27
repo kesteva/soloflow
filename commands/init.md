@@ -407,18 +407,60 @@ Deliberately excluded (stay prompted each time): `rm`, `mv`, `cp`, `chmod`, `cho
    - If N > 0: print `✓ Allow list updated — added N safe commands` and set `allow_list_status = "added N safe commands"`.
    - If N == 0: print `✓ Allow list already up to date — all 25 safe commands present` and set `allow_list_status = "already up to date"`.
 
-## Step 5: Commit to git (if applicable)
+## Step 5: Decide git tracking, then commit (if applicable)
 
-Run `git rev-parse --is-inside-work-tree` via Bash. If the project is inside
-a git repo AND `.soloflow/` is not gitignored (`git check-ignore -q .soloflow`
-returns non-zero):
+Track `git_tracking_status` for the Step 7 report. Possible values:
+`"not a git repo"`, `"already gitignored"`, `"tracked"`,
+`"tracked (already chosen)"`, `"gitignored"`, `"gitignored (already chosen)"`.
 
-1. `git add .soloflow`
-2. If `git diff --cached --quiet` reports no staged changes, skip the commit
-   (idempotent re-run).
-3. Otherwise `git commit -m "chore: initialize .soloflow state"`.
+1. Run `git rev-parse --is-inside-work-tree` via Bash. If the project is **not**
+   inside a git repo, set `git_tracking_status = "not a git repo"` and skip the
+   rest of this step silently.
 
-If the project isn't a git repo, skip this step silently.
+2. Run `git check-ignore -q .soloflow` via Bash. If it exits 0 (already
+   gitignored), set `git_tracking_status = "already gitignored"` and skip the
+   rest of this step. Nothing to ask, nothing to commit.
+
+3. Run `git ls-files --error-unmatch .soloflow 2>/dev/null | head -1` via Bash.
+   If the output is non-empty, `.soloflow/` already has tracked files in this
+   repo — the user chose tracking on a prior run. Skip the prompt:
+   - Run `git add .soloflow`.
+   - If `git diff --cached --quiet` reports no staged changes, skip the commit
+     (idempotent re-run).
+   - Otherwise `git commit -m "chore: update .soloflow state"`.
+   - Set `git_tracking_status = "tracked (already chosen)"` and continue to
+     Step 6.
+
+4. Otherwise this is the first run in a git repo and the user has not yet
+   chosen. Use `AskUserQuestion`:
+
+   - **Question:** `"Track .soloflow/ in git, or add it to .gitignore? Tracking commits sprint state, plans, and findings so collaborators (and your future self via git history) can see them. Gitignoring keeps the workflow purely local — recommended for solo work or when you don't want sprint files in your repo history."`
+   - **Header:** `".soloflow tracking"`
+   - **Options:**
+     - `"Track in git (commit state files)"`
+     - `"Add to .gitignore (keep local only)"`
+
+5. **On Track in git:**
+   - `git add .soloflow`
+   - If `git diff --cached --quiet` reports no staged changes, skip the commit.
+   - Otherwise `git commit -m "chore: initialize .soloflow state"`.
+   - Set `git_tracking_status = "tracked"`.
+
+6. **On Add to .gitignore:**
+   - Read `.gitignore` if it exists, otherwise treat the contents as empty.
+   - If the file already contains a line equal to `.soloflow/` or `.soloflow`
+     (after trimming whitespace), set
+     `git_tracking_status = "gitignored (already chosen)"` and skip the rest
+     of this step (defensive — `git check-ignore` should have caught this in
+     step 2, but a stray entry under a `!negation` could land here).
+   - Otherwise append `.soloflow/` on its own line. If the existing file does
+     not end with a newline, prepend one to the appended entry so the new
+     line is clean. Use `Write` to overwrite the file with the merged
+     contents (preserving every other line verbatim).
+   - `git add .gitignore`
+   - If `git diff --cached --quiet` reports no staged changes, skip the
+     commit. Otherwise `git commit -m "chore: gitignore .soloflow state"`.
+   - Set `git_tracking_status = "gitignored"`.
 
 ## Step 6: Orphaned file check
 
@@ -482,6 +524,7 @@ Config: .soloflow/config.json {created|updated}
 
 Status line: {configured|already configured|skipped (user kept existing)|not configured}
 Allow list:  {added N safe commands|already up to date|skipped}
+Git tracking: {tracked|gitignored|already gitignored|tracked (already chosen)|gitignored (already chosen)|not a git repo}
 Visual verification agents: {shadowed 2 agents (verifier, sprint-verifier)|not shadowed — visual verification disabled|skipped_no_root}
 Research agents:            {shadowed 2 agents (shadow-researcher, shadow-roadmap-researcher)|skipped_no_root}
 Project context:            {context_status from Step 6.5}
