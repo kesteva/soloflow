@@ -8,6 +8,15 @@
       "name": "soloflow",
       "source": "./",
       "description": "Hooks-based workflow orchestration for solo product development with Claude Code"
+    },
+    {
+      "name": "soloflow-dev",
+      "source": {
+        "source": "github",
+        "repo": "kesteva/soloflow",
+        "ref": "dev"
+      },
+      "description": "SoloFlow dev branch — unstable, for maintainer/tester use only"
     }
   ]
 }
