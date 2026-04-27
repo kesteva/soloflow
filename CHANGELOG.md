@@ -241,9 +241,6 @@ Existing users with `maestro` registered in `claude mcp list` can leave it — S
 - All phase commands (`idea-extractor`, `planner`, `executor`, `quick`, `compound`) compute next IDs by globbing instead of reading/writing a counter file.
 - `commands/executor.md` now writes `sprint.id` into `sprint.json` directly (previously derived from the sprints counter).
 
-### Migration from 0.4.x
-Delete `.soloflow/counters.json` from your project — it's no longer read or written. Everything else keeps working; existing ID sequences are preserved because the filesystem already reflects the highest allocated ID.
-
 ## [0.4.0] - 2026-04-09
 
 ### Added
