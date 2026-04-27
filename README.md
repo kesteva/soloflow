@@ -1,14 +1,27 @@
 # SoloFlow
 
-Hooks-based workflow orchestration for solo product development with Claude Code.
+Soloflow is a hooks-based workflow orchestration for solo product development with Claude Code.
 
-Automates the full product development lifecycle: **idea extraction → refinement → execution → verification → learning**. Built for solo developers shipping real products with AI leverage — not a framework, but a workflow that handles the orchestration so you can focus on taste and direction.
+It's built specifically to address some of the limitations of using Claude Code as a solo developer work on side projects and aims to solve two core problems:
+1) **No time to babysit:** to be useful, Claude needs to be able to run autonomously for long stretches. You're using it for side projects, you don't have time to constantly babysit, approve permissions, and ask it to move along to the next stage
+2) **Limited time to review:** because you might only have a 30 minutes or an hour in a day to make progress. You don't have time to do constant QA, read every line of output, or deal with correcting sloppy work. Your time reviewing should be spent on the things that need actual human input. 
 
-> **This is my personal workflow tool.** I build it for how I ship products, and I made it public so others can learn from it, fork it, or run it on their own projects. I'm happy to review issues and PRs, but I only merge changes that help *my* workflow. If something you want doesn't fit that, fork it — the MIT license makes that easy. See [Contributing](docs/CONTRIBUTING.md) for details.
+To address this, Soloflow automates the product development lifecycle through five stages: **idea extraction → refinement → execution → verification → learning**. Each stage is designed so you provide input at the beginning and then the agent runs autonomously while you walk away. Check in occasionally in your terminal or from your phone to tee up the next stage. 
+
+## Some warnings
+
+- **This is my personal workflow tool.** I build it for how I ship products, and I made it public so others can learn from it, fork it, or run it on their own projects. I'm happy to review issues and PRs, but I only merge changes that help *my* workflow. If something you want doesn't fit that, fork it — the MIT license makes that easy. See [Contributing](docs/CONTRIBUTING.md) for details.
+- **It's still in alpha.** this is still under development and has plenty of rough edges. Use it and experiment with it accordingly. 
+- **It's hungry.** you will trade tokens for time. The system adds a lot of checks and redundancy so *you* don't have to, but it will burn through tokens as a result. You will at a minimum need a max $100 plan and probably be tempted to get a max $200. 
+- **Visual verification is tetchy.** Visual verification is a game changer when it works, but it can be finicky to get set up and working correctly. The workflow will gracefully fall back to standard verification if it's not available so you'll still get the benefits of requirements verification and code review, but it might take some iteration cycles to get it up and running correctly.
+- **It's Claude all the way down.** This plugin was created using Claude by telling Claude how I wanted to work better with Claude. There are no artisanally hand crafted lines of code here. In this house we trust (but verify) the machines. 
+
+With that said, even with the rough edges, it works.
+
 
 ## Quick Start
 
-Install the plugin inside Claude Code (two steps — add the marketplace, then install):
+The fastest way to get started is to install the plugin inside Claude Code (two steps — add the marketplace, then install):
 
 ```
 /plugin marketplace add kesteva/soloflow
@@ -21,21 +34,25 @@ By default this installs at **user scope** — available in every project on you
 claude plugin install soloflow@soloflow --scope project
 ```
 
-Start a Claude Code session in your project and initialize state:
+Alternatively, you install the plugin by opening /plugins within Claude Code, adding the marketplace, and then installing the plugin through there.
+
+Once you've installed the plugin, run `/soloflow:init` to initialize the project. This will create a `.soloflow/` directory which holds all workflow files. 
+
+From there, you can tackle a simple task using `/soloflow:quick`, for example:
 
 ```
-/soloflow:init
-/soloflow:quick "fix the loading indicator showing a question mark"
+/soloflow:quick "fix the loading indicator on the character generation screen which currently shows a question mark"
 ```
 
-For full features, run the pipeline stage by stage:
+This will take a single task through the execution -> verification -> review loop. 
 
-```
-/soloflow:idea-extractor "add retry UI for failed content generation"
-/soloflow:planner IDEA-001
-/soloflow:sprint
-/soloflow:compound
-```
+To test on the full workflow, go through four commands in sequence: 
+- `/soloflow:idea-extractor`: use this to capture an idea that Claude will then refine. It will ask you questions to understand your intent.
+- `/soloflow:planner` this turns the idea into execution ready tasks for Claude. 
+- `/soloflow:sprint` takes tasks through the execution -> verification -> review loop
+- `/soloflow:compound` optional final stage, but extracts learnings from your sprint including clean-up items, tasks to add to the backlog, and improvements to your project documentation.
+
+If you are working in an established project, an optional first step is to run `/soloflow:map-codebase` which will create Architecture and Code Patterns documentation for your project as well as nested claude.md's where applicable. If you don't want it editing or creating your Claude.md then call it with flag `--skip-claudemd`. 
 
 ## Installation
 
@@ -78,21 +95,6 @@ This **copies** (not symlinks) agents, commands, skills, and hook scripts into y
 To update: `bash /tmp/soloflow/scripts/update.sh /path/to/your/project`
 To uninstall: `bash /tmp/soloflow/scripts/uninstall.sh /path/to/your/project`
 
-## Commands
-
-| Command | When to Use |
-|---------|-------------|
-| `/soloflow:init` | One-time setup — scaffold `.soloflow/` state in the current project |
-| `/soloflow:map-codebase` | One-time setup — scaffold missing `CLAUDE.md`, `ARCHITECTURE.md`, and `CODE-PATTERNS.md` so agents have shared context to load |
-| `/soloflow:config` | Interactive walkthrough of every SoloFlow setting; writes `.soloflow/config.json` |
-| `/soloflow:idea-extractor <description>` | Phase 1 — extract a structured idea from raw input, with optional research |
-| `/soloflow:planner <IDEA-NNN>` | Phase 2 — refine an approved idea into execution-ready task plans |
-| `/soloflow:sprint [IDEA-NNN or TASK list]` | Phase 3 — run an execution sprint (executor → verifier → code reviewer) |
-| `/soloflow:compound [SPRINT-NNN]` | Phase 5 — extract reusable learnings from a completed sprint |
-| `/soloflow:quick <bug>` | Fast path for bugfixes — skips idea extraction and refinement |
-| `/soloflow:status` | Check current sprint state, task progress, and review queue |
-| `/soloflow:verify` | Run visual verification standalone (requires Maestro or Playwright) |
-
 ## How It Works
 
 SoloFlow orchestrates 5 phases, each with a specialized agent:
@@ -109,6 +111,22 @@ SoloFlow orchestrates 5 phases, each with a specialized agent:
 
 The main session acts as the orchestrator. All agents run as leaf-node subagents. See [Architecture](docs/ARCHITECTURE.md) for the full design.
 
+## Commands
+
+| Command | When to Use |
+|---------|-------------|
+| `/soloflow:init` | One-time setup — scaffold `.soloflow/` state in the current project |
+| `/soloflow:map-codebase` | One-time setup — scaffold missing `CLAUDE.md`, `ARCHITECTURE.md`, and `CODE-PATTERNS.md` so agents have shared context to load |
+| `/soloflow:config` | Interactive walkthrough of every SoloFlow setting; writes `.soloflow/config.json` |
+| `/soloflow:idea-extractor <description>` | Phase 1 — extract a structured idea from raw input, with optional research |
+| `/soloflow:planner <IDEA-NNN>` | Phase 2 — refine an approved idea into execution-ready task plans |
+| `/soloflow:sprint [IDEA-NNN or TASK list]` | Phase 3 — run an execution sprint (executor → verifier → code reviewer) |
+| `/soloflow:compound [SPRINT-NNN]` | Phase 5 — extract reusable learnings from a completed sprint |
+| `/soloflow:quick <task>` | Fast path for simple changes — skips idea extraction and refinement but still provides the scaffolding of execution and verification|
+| `/soloflow:bugfix <bug>` | Similar to quick but focused specifically on resolving bugs, puts Claude into bughunting mode first before going through the rest of the execution -> verification flow|
+| `/soloflow:status` | Check current sprint state, task progress, and review queue |
+| `/soloflow:verify` | Run visual verification standalone (requires Maestro or Playwright) |
+
 ## Configuration
 
 All configurable values are documented in `config/defaults.yaml`:
@@ -123,10 +141,12 @@ Values are embedded in agent and hook source files. To customize, edit the relev
 ## Visual Verification
 
 SoloFlow can optionally verify work visually using:
-- **Maestro CLI** for mobile apps (React Native, Expo, native)
+- **Maestro MCP** or **Maestro CLI** for mobile apps (React Native, Expo, native)
 - **Playwright MCP** for web apps
 
-Visual verification is disabled by default. See [Visual Verification Setup](docs/VISUAL-VERIFICATION-SETUP.md) for installation and configuration.
+Visual verification is disabled by default because it requires additional third party libraries (Playwright for web and Maestro for mobile) See [Visual Verification Setup](docs/VISUAL-VERIFICATION-SETUP.md) for installation and configuration. 
+
+It can be finicky and because of the way Claude scopes permissions for plugin agents you need to separately install shadow agents into your project `.claude/` directory. For Maestro, if you don't do this there is a CLI fallback but for Playwright there is not. 
 
 ## Project Structure
 
