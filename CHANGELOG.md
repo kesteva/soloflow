@@ -273,11 +273,6 @@ Existing users with `maestro` registered in `claude mcp list` can leave it — S
 - `scripts/update.sh` — manifest-diff updater for the script-install fallback. Copies new files, prunes removed ones, leaves `.soloflow/` untouched.
 - `.claude/soloflow-install/manifest.json` and `VERSION` stamp track the installed file set for idempotent reinstall/update/uninstall.
 
-### Migration from 0.1.0
-1. Uninstall the old scaffolding: `bash <path-to-soloflow>/scripts/uninstall.sh --scaffolding` (preserves `.soloflow/`).
-2. Install the plugin: `/plugin install soloflow` (or re-run the new `scripts/install.sh` for the vendored path).
-3. Update any scripts or docs referencing `/soloflow-<name>` to `/soloflow:<name>`.
-
 ## [0.1.0] - 2026-04-04
 
 ### Added
