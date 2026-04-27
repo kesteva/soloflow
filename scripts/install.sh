@@ -139,7 +139,7 @@ function copyScriptsTree(srcSubdir) {
   return count;
 }
 let scriptCount = 0;
-for (const sub of ['lib', 'config', 'state', 'sprint', 'compound', 'refiner']) {
+for (const sub of ['lib', 'config', 'state', 'sprint', 'compound', 'refiner', 'update']) {
   scriptCount += copyScriptsTree(sub);
 }
 console.log('  [copy] soloflow-install/scripts/ (' + scriptCount + ' scripts)');
