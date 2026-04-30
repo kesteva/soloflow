@@ -117,7 +117,7 @@ function readUpdateBadge() {
     if (!fs.existsSync(cachePath)) return '';
     const cache = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
     if (!cache || !cache.update_available || !cache.latest_version) return '';
-    return ` \x1b[2;36m⇑ v${cache.latest_version}\x1b[0m`;
+    return ` \x1b[36m⇑ v${cache.latest_version} available — upgrade\x1b[0m`;
   } catch (e) {
     return '';
   }
