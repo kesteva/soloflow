@@ -16,6 +16,9 @@
 //                             matching the epic slug
 //   6. malformed_queue      — human-review-queue entries missing required fields
 //   7. completed_in_backlog — done report exists AND task still listed in backlog.json
+//   8. untracked_plan       — plan exists in active/plans but TASK isn't in
+//                             sprint.json or backlog.json, and no done/stuck file
+//                             exists (planner crashed before patching backlog)
 
 const fs = require('fs');
 const path = require('path');
@@ -155,10 +158,26 @@ function main() {
     if (doneByTask.has(id)) completed_in_backlog.push({ task_id: id, done_path: doneByTask.get(id) });
   }
 
+  // Scenario 8 — untracked plan (plan on disk but task not tracked anywhere).
+  const untracked_plan = [];
+  for (const [id, planPath] of planByTask) {
+    if (sprintTasks[id]) continue;
+    if (backlogTasks[id]) continue;
+    if (doneByTask.has(id)) continue;
+    if (stuckByTask.has(id)) continue;
+    const fm = readFm(planPath);
+    untracked_plan.push({
+      task_id: id,
+      plan_path: planPath,
+      epic: fm.epic || null,
+      title: fm.title || null,
+    });
+  }
+
   const total =
     orphan_plan.length + ghost_sprint_entry.length + stale_stuck_file.length +
     mid_commit_settle.length + empty_epic.length + malformed_queue.length +
-    completed_in_backlog.length;
+    completed_in_backlog.length + untracked_plan.length;
 
   process.stdout.write(JSON.stringify({
     total,
@@ -169,6 +188,7 @@ function main() {
     empty_epic,
     malformed_queue,
     completed_in_backlog,
+    untracked_plan,
   }, null, 2) + '\n');
 }
 

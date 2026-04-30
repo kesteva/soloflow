@@ -59,3 +59,64 @@ test('cruft-detect: completed_in_backlog empty when backlog clean', () => {
   const r = JSON.parse(run('state/cruft-detect.js', [], { cwd }).out);
   assert.equal(r.completed_in_backlog.length, 0);
 });
+
+test('cruft-detect: untracked_plan — plan exists but task absent from backlog and sprint', () => {
+  const cwd = scaffold(mktmp());
+  // Plan on disk, with frontmatter carrying epic + title.
+  fs.mkdirSync(path.join(cwd, '.soloflow/active/plans/auth'), { recursive: true });
+  fs.writeFileSync(
+    path.join(cwd, '.soloflow/active/plans/auth/TASK-040-plan.md'),
+    '---\ntitle: Wire login flow\nepic: auth\n---\n\nbody\n',
+  );
+  // backlog.json (from scaffold) is empty; sprint.json (from scaffold) has no tasks; no done/stuck file.
+
+  const r = JSON.parse(run('state/cruft-detect.js', [], { cwd }).out);
+  assert.equal(r.untracked_plan.length, 1);
+  assert.equal(r.untracked_plan[0].task_id, 'TASK-040');
+  assert.equal(r.untracked_plan[0].epic, 'auth');
+  assert.equal(r.untracked_plan[0].title, 'Wire login flow');
+  assert.match(r.untracked_plan[0].plan_path, /TASK-040-plan\.md$/);
+  assert.equal(r.total, 1);
+});
+
+test('cruft-detect: untracked_plan empty when task is in backlog', () => {
+  const cwd = scaffold(mktmp());
+  fs.mkdirSync(path.join(cwd, '.soloflow/active/plans/auth'), { recursive: true });
+  fs.writeFileSync(
+    path.join(cwd, '.soloflow/active/plans/auth/TASK-041-plan.md'),
+    '---\ntitle: Backlog-tracked task\nepic: auth\n---\n',
+  );
+  fs.writeFileSync(
+    path.join(cwd, '.soloflow/active/backlog.json'),
+    JSON.stringify({ version: 2, tasks: { 'TASK-041': { status: 'ready' } } }, null, 2) + '\n',
+  );
+
+  const r = JSON.parse(run('state/cruft-detect.js', [], { cwd }).out);
+  assert.equal(r.untracked_plan.length, 0);
+  assert.equal(r.total, 0);
+});
+
+test('cruft-detect: untracked_plan empty when task is in sprint', () => {
+  const cwd = scaffold(mktmp(), { withSprint: true, sprintTasks: { 'TASK-042': { status: 'in_progress' } } });
+  fs.mkdirSync(path.join(cwd, '.soloflow/active/plans/auth'), { recursive: true });
+  fs.writeFileSync(
+    path.join(cwd, '.soloflow/active/plans/auth/TASK-042-plan.md'),
+    '---\ntitle: Sprint task\nepic: auth\n---\n',
+  );
+
+  const r = JSON.parse(run('state/cruft-detect.js', [], { cwd }).out);
+  assert.equal(r.untracked_plan.length, 0);
+});
+
+test('cruft-detect: untracked_plan defers to orphan_plan when done report exists', () => {
+  const cwd = scaffold(mktmp());
+  fs.mkdirSync(path.join(cwd, '.soloflow/active/plans/auth'), { recursive: true });
+  fs.writeFileSync(path.join(cwd, '.soloflow/active/plans/auth/TASK-043-plan.md'), '---\ntitle: t\nepic: auth\n---\n');
+  fs.mkdirSync(path.join(cwd, '.soloflow/archive/done/auth'), { recursive: true });
+  fs.writeFileSync(path.join(cwd, '.soloflow/archive/done/auth/TASK-043-done.md'), '');
+
+  const r = JSON.parse(run('state/cruft-detect.js', [], { cwd }).out);
+  assert.equal(r.untracked_plan.length, 0);
+  assert.equal(r.orphan_plan.length, 1);
+  assert.equal(r.orphan_plan[0].task_id, 'TASK-043');
+});
