@@ -74,20 +74,13 @@ function nextSprintId(cwd) {
     }
   }
 
-  // Current sprint.json
-  const sprintPath = paths.sprintJsonPath(cwd);
-  if (fs.existsSync(sprintPath)) {
-    try {
-      const state = JSON.parse(fs.readFileSync(sprintPath, 'utf8'));
-      const id = state && state.sprint && state.sprint.id;
-      if (id) {
-        const m = String(id).match(/^SPRINT-(\d+)$/);
-        if (m) {
-          const n = parseInt(m[1], 10);
-          if (n > max) max = n;
-        }
-      }
-    } catch { /* ignore */ }
+  // Active sprints (per-sprint layout: active/sprints/<id>/sprint.json)
+  for (const entry of paths.findActiveSprintIds(cwd)) {
+    const m = String(entry.id).match(/^SPRINT-(\d+)$/);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n > max) max = n;
+    }
   }
 
   const next = max + 1;

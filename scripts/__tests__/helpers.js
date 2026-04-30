@@ -25,21 +25,21 @@ function run(scriptRelative, args, opts = {}) {
   return { ok: code === 0, out, err, code };
 }
 
-function scaffold(root, { withSprint = false, sprintTasks = {} } = {}) {
+function scaffold(root, { withSprint = false, sprintTasks = {}, sprintId = 'SPRINT-001' } = {}) {
   const dirs = [
     'active/ideas', 'active/research', 'active/plans', 'active/stuck',
-    'active/roadmaps', 'active/findings', 'active/compound',
+    'active/sprints', 'active/roadmaps', 'active/findings', 'active/compound',
     'archive/done', 'archive/reviews', 'archive/findings', 'archive/compound', 'archive/roadmaps',
   ];
   for (const d of dirs) fs.mkdirSync(path.join(root, '.soloflow', d), { recursive: true });
   if (withSprint) {
-    fs.writeFileSync(path.join(root, '.soloflow/active/sprint.json'), JSON.stringify({
+    const sprintDir = path.join(root, '.soloflow/active/sprints', sprintId);
+    fs.mkdirSync(sprintDir, { recursive: true });
+    fs.writeFileSync(path.join(sprintDir, 'sprint.json'), JSON.stringify({
       version: 2,
-      sprint: { id: 'SPRINT-001', status: 'active', started: '2026-04-22T00:00:00Z' },
+      sprint: { id: sprintId, status: 'active', started: '2026-04-22T00:00:00Z' },
       tasks: sprintTasks,
     }, null, 2));
-  } else {
-    fs.writeFileSync(path.join(root, '.soloflow/active/sprint.json'), JSON.stringify({ version: 2, sprint: null, tasks: {} }, null, 2));
   }
   fs.writeFileSync(path.join(root, '.soloflow/human-review-queue.md'),
     '---\npending_count: 0\nitems: []\n---\n\n# Human Review Queue\n\nNo items pending review.\n');

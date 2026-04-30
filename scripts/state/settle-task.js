@@ -19,6 +19,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const paths = require('../lib/paths');
 
 const VALID_VERDICTS = new Set(['done', 'stuck', 'blocked', 'human_needed']);
 
@@ -36,12 +37,27 @@ function parseArgs(argv) {
     else if (a === '--stuck-report') opts.stuckReport = argv[++i];
     else if (a === '--touched') opts.touched.push(argv[++i]);
     else if (a === '--commit-sha') opts.commitSha = argv[++i];
+    else if (a === '--sprint') opts.sprint = argv[++i];
     else if (a === '--no-commit') opts.commit = false;
     else if (a.startsWith('--')) die(`unknown flag: ${a}`);
     else positional.push(a);
   }
-  if (positional.length !== 2) die('usage: settle-task.js <TASK-ID> <verdict> [--done-report <path>] [--stuck-report <path>] [--touched <path> ...] [--commit-sha <sha>] [--no-commit]');
+  if (positional.length !== 2) die('usage: settle-task.js <TASK-ID> <verdict> [--sprint SPRINT-NNN] [--done-report <path>] [--stuck-report <path>] [--touched <path> ...] [--commit-sha <sha>] [--no-commit]');
   return { taskId: positional[0], verdict: positional[1], ...opts };
+}
+
+function resolveSprintPath(cwd, explicitSprintId) {
+  if (explicitSprintId) {
+    const p = paths.sprintJsonPath(cwd, explicitSprintId);
+    if (!fs.existsSync(p)) die(`${p} not found`);
+    return { id: explicitSprintId, path: p };
+  }
+  const active = paths.findActiveSprintIds(cwd);
+  if (active.length === 0) die('no active sprint found under .soloflow/active/sprints/');
+  if (active.length > 1) {
+    die(`multiple active sprints found (${active.map((s) => s.id).join(', ')}); pass --sprint to disambiguate`);
+  }
+  return { id: active[0].id, path: active[0].path };
 }
 
 function writeAtomic(filePath, content) {
@@ -64,7 +80,7 @@ function inGitRepo(cwd) {
 }
 
 function main() {
-  const { taskId, verdict, doneReport, stuckReport, touched, commit, commitSha } = parseArgs(process.argv.slice(2));
+  const { taskId, verdict, doneReport, stuckReport, touched, commit, commitSha, sprint } = parseArgs(process.argv.slice(2));
 
   if (!/^TASK-\d{3,}$/.test(taskId)) die(`invalid task ID: ${taskId}`);
   if (!VALID_VERDICTS.has(verdict)) die(`invalid verdict: ${verdict} (expected one of: ${[...VALID_VERDICTS].join(', ')})`);
@@ -73,8 +89,7 @@ function main() {
   if (verdict === 'stuck' && !stuckReport) die('--stuck-report is required when verdict is stuck');
 
   const cwd = process.cwd();
-  const sprintPath = path.join(cwd, '.soloflow', 'active', 'sprint.json');
-  if (!fs.existsSync(sprintPath)) die(`${sprintPath} not found`);
+  const { path: sprintPath } = resolveSprintPath(cwd, sprint);
 
   let state;
   try {

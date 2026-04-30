@@ -43,11 +43,22 @@ function globRecursive(root, matcher) {
   return out;
 }
 
+// Aggregate every active sprint's tasks into a single object keyed by task ID,
+// merging across sprints. Multi-sprint concurrency lands in PR #5; today
+// findActiveSprintIds returns at most one entry, but the aggregation works
+// for either case.
 function readSprint(cwd) {
-  const p = paths.sprintJsonPath(cwd);
-  if (!fs.existsSync(p)) return null;
-  try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
-  catch { return null; }
+  const entries = paths.findActiveSprintIds(cwd);
+  if (entries.length === 0) return null;
+  const out = { tasks: {} };
+  for (const entry of entries) {
+    try {
+      const json = JSON.parse(fs.readFileSync(entry.path, 'utf8'));
+      if (json && json.tasks) Object.assign(out.tasks, json.tasks);
+      if (json && json.sprint && !out.sprint) out.sprint = json.sprint;
+    } catch { /* skip malformed */ }
+  }
+  return out;
 }
 
 const VALID_PLAN_STATUSES = new Set(['ready', 'deferred', 'in-flight', 'done']);

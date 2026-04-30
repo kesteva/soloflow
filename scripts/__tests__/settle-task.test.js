@@ -6,8 +6,8 @@ const fs = require('fs');
 const path = require('path');
 const { mktmp, scaffold, run } = require('./helpers');
 
-function readSprint(cwd) {
-  return JSON.parse(fs.readFileSync(path.join(cwd, '.soloflow/active/sprint.json'), 'utf8'));
+function readSprint(cwd, sprintId = 'SPRINT-001') {
+  return JSON.parse(fs.readFileSync(path.join(cwd, '.soloflow/active/sprints', sprintId, 'sprint.json'), 'utf8'));
 }
 
 function writeDoneReport(cwd, taskId) {
@@ -87,13 +87,13 @@ test('settle-task: double-run on done task fails with not-found', () => {
   assert.match(r2.err || '', /not found in active sprint/);
 });
 
-test('settle-task: missing sprint.json fails fast', () => {
+test('settle-task: missing sprint fails fast', () => {
   const cwd = scaffold(mktmp(), { withSprint: false });
-  fs.unlinkSync(path.join(cwd, '.soloflow/active/sprint.json'));
+  // No sprint dir at all — settle-task can't find any active sprint.
   const donePath = writeDoneReport(cwd, 'TASK-099');
   const r = run('state/settle-task.js', ['TASK-099', 'done', '--done-report', donePath, '--no-commit'], { cwd });
   assert.equal(r.ok, false);
-  assert.match(r.err, /not found/);
+  assert.match(r.err, /no active sprint/);
 });
 
 test('settle-task: --touched paths are staged when committing', () => {

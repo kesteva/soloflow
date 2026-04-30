@@ -80,10 +80,24 @@ function tallyVisualCoverage(doneReports, sprintId) {
   return { mobile, web };
 }
 
+function resolveSprint(cwd, explicitSprintId) {
+  if (explicitSprintId) {
+    const p = paths.sprintJsonPath(cwd, explicitSprintId);
+    if (!fs.existsSync(p)) die(`${p} not found`);
+    return p;
+  }
+  const active = paths.findActiveSprintIds(cwd);
+  if (active.length === 0) die('no active sprint found under .soloflow/active/sprints/');
+  if (active.length > 1) die(`multiple active sprints (${active.map((s) => s.id).join(', ')}); pass --sprint`);
+  return active[0].path;
+}
+
 function main() {
   const cwd = process.cwd();
-  const sprintPath = paths.sprintJsonPath(cwd);
-  if (!fs.existsSync(sprintPath)) die('no active sprint (sprint.json missing)');
+  const argv = process.argv.slice(2);
+  const sprintFlagIdx = argv.indexOf('--sprint');
+  const explicitSprintId = sprintFlagIdx >= 0 ? argv[sprintFlagIdx + 1] : null;
+  const sprintPath = resolveSprint(cwd, explicitSprintId);
 
   let state;
   try { state = JSON.parse(fs.readFileSync(sprintPath, 'utf8')); }
