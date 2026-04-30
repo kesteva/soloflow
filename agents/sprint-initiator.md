@@ -28,11 +28,11 @@ Phase: gather
 
 1. **Sanity check.** Verify `.soloflow/` exists. If not, report `initialized: false` and stop.
 
-2. **Read backlog.** Use the query helper instead of ad-hoc `node -e` — `backlog.json.tasks` is an **object keyed by task ID**, not an array, and hand-written `.filter` calls fail with `TypeError: b.tasks.filter is not a function`.
+2. **Read ready plans.** Plan frontmatter is the queue source of truth — there is no `backlog.json`. Use the query helper instead of hand-rolled globs:
    ```
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/state/backlog-query.js" --status ready
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/state/plan-query.js" --status ready
    ```
-   Add `--epic <slug>`, `--plan-contains <substr>`, `--id TASK-NNN` (repeatable), or `--fields id,status,title,epic,depends_on,plan_path` as needed; `--format ids|count|json` (default json). Returns `status: "ready"` tasks here. If the orchestrator passed argument filters (task IDs or `IDEA-NNN`), note them in the output but still return the full ready set — the orchestrator decides scope.
+   Add `--epic <slug>`, `--plan-contains <substr>`, `--id TASK-NNN` (repeatable), or `--fields id,status,title,epic,depends_on,plan_path` as needed; `--format ids|count|json` (default json). Returns plans whose frontmatter `status: ready`. If the orchestrator passed argument filters (task IDs or `IDEA-NNN`), note them in the output but still return the full ready set — the orchestrator decides scope.
 
 3. **Find natural next epic.** For each ready task, read its plan file (glob `.soloflow/active/plans/**/TASK-{NNN}-plan.md`) and extract the `epic` frontmatter field. The natural next epic is the first epic (by lowest task ID) that has ready tasks.
 
@@ -152,8 +152,12 @@ Decisions:
 2. **Remember branch choice.** If `remember_branch_choice` is true, read `.soloflow/config.json` (or create it). Merge `{"git":{"branch_per_run":"always"}}` into the existing content. Write the file.
 
 3. **Write sprint state.**
-   - Read `.soloflow/active/backlog.json`.
-   - Move the selected tasks from `backlog.json` to a new `sprint.json`. Concretely: **delete each `selected_task_ids` entry from `backlog.json.tasks` and add it to `sprint.json.tasks` with `status: "pending"`**. A task must never be present in both files.
+   - Flip each selected plan's frontmatter `status` from `ready` to `in-flight`:
+     ```
+     node "${CLAUDE_PLUGIN_ROOT}/scripts/state/set-plan-status.js" in-flight {selected_task_id_1} {selected_task_id_2} ...
+     ```
+     The script atomically rewrites each plan's frontmatter (preserving every other field) and emits a JSON summary of `updated` + `skipped`. A "skipped" entry means the plan file was already in-flight (resume path) or missing (data corruption — bubble up).
+   - Write `sprint.json` with the same selected task IDs in `tasks` (each with `status: "pending"`):
      ```json
      {
        "sprint": {
@@ -166,7 +170,7 @@ Decisions:
      }
      ```
      `execution_mode` is persisted so that checkpoint-resume paths (commands/sprint.md Step 0.5) recover the same mode without re-prompting. Downstream steps read it from `sprint.sprint.execution_mode`.
-   - Write `backlog.json` (with the entries removed) and `sprint.json` (with the entries added). Both writes are required — Step 5's commit stages both paths.
+   - Plans are the source of truth; `sprint.json.tasks` mirrors the in-flight set. Step 5's commit stages both `sprint.json` and the modified plan files.
 
 3.5. **Create per-sprint findings file.**
    - Ensure `.soloflow/active/findings/` exists (`mkdir -p`).
@@ -207,13 +211,13 @@ Decisions:
    node "${CLAUDE_PLUGIN_ROOT}/scripts/state/commit-atomic.js" \
        --message "chore({sprint_id}): start sprint" \
        --path .soloflow/active/sprint.json \
-       --path .soloflow/active/backlog.json \
        --path .soloflow/active/findings/{sprint_id}-findings.md \
+       --path {plan_path_for_each_selected_task} \
        [--path .soloflow/active/findings.md]      # only if step 3.5 migrated it
        [--path .soloflow/human-review-queue.md]   # only if step 1 modified it
        [--path .soloflow/config.json]             # only if step 2 modified it
    ```
-   The script skips explicit paths, skips silently if not in a git repo, skips if nothing staged, and never uses `git add -A`.
+   Stage every plan file whose frontmatter status was flipped in Step 3 (one `--path` per plan). The script skips explicit paths, skips silently if not in a git repo, skips if nothing staged, and never uses `git add -A`.
 
 6. **Pre-sprint regression smoke** (skip if `skip_smoke` is true).
    a. **Discover test infrastructure:**
