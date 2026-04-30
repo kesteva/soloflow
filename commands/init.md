@@ -60,16 +60,11 @@ Increment `dirs_created` for every directory you actually created.
 
 For each of these files, run `test -e <path>` first. **Only** write the file
 if it does not already exist. Never overwrite — the file may contain live
-user state (backlog tasks, sprint data, checkpoint notes). Increment
-`files_created` for every file you actually wrote.
+user state (sprint data, checkpoint notes). Increment `files_created` for
+every file you actually wrote.
 
-**`.soloflow/active/backlog.json`**
-```json
-{
-  "version": 2,
-  "tasks": {}
-}
-```
+(There is no `backlog.json`. Plan frontmatter `status` IS the queue —
+plans live under `.soloflow/active/plans/**/TASK-*-plan.md`.)
 
 **`.soloflow/active/sprint.json`**
 ```json

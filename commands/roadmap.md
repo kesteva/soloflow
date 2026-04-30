@@ -239,7 +239,7 @@ it wherever "Cap at 3 respawns" appears below.
 
    c. For each new epic slug emitted by any refiner: write `EPIC-{slug}.md` to `.soloflow/active/plans/{slug}/EPIC-{slug}.md`. Do NOT overwrite existing files — if two parallel refiners independently introduced the same new slug, first-write-wins; tasks from the second land in the same epic folder, which is the desired outcome.
 
-   d. Add each task to `.soloflow/active/backlog.json` with `status: "ready"` and its `depends_on` list.
+   d. Each plan's frontmatter MUST carry `status: ready` and its `depends_on` list — that frontmatter IS the queue entry; no separate queue file to update.
 
 7. Update the roadmap file's frontmatter:
    - Set `status: materialized`
@@ -254,7 +254,7 @@ it wherever "Cap at 3 respawns" appears below.
    - `.soloflow/active/roadmaps/ROADMAP-{NNN}.md`
    - `.soloflow/active/research/ROADMAP-{NNN}-research-*.md`
    - All created idea files (`.soloflow/active/ideas/IDEA-*.md`)
-   - If Path B: all created plan files, EPIC-{slug}.md files, `.soloflow/active/backlog.json`
+   - If Path B: all created plan files, EPIC-{slug}.md files
 
 2. Commit:
    - If materialized as ideas: `chore: generate ROADMAP-{NNN} and materialize as ideas`

@@ -138,7 +138,7 @@ The legacy path ends here too — `Skip ahead to step 3a (parity gates) below.` 
    - If `epic: <slug>` is set → write to `.soloflow/active/plans/{slug}/TASK-{NNN}-plan.md`, creating the folder if missing.
    - If `epic` is absent or `null` → write to `.soloflow/active/plans/TASK-{NNN}-plan.md` (flat, orphan).
 5. For each **new** epic slug the refiner introduced, write its EPIC-{slug}.md body to `.soloflow/active/plans/{slug}/EPIC-{slug}.md`. Do NOT overwrite an existing EPIC-{slug}.md — if one already exists for that slug, leave it alone (optionally append the current idea ID to its `originating_ideas` frontmatter list).
-6. Add each task to `.soloflow/active/backlog.json` with `status: "ready"` and its `depends_on` list. (Do not add `epic` to backlog entries — the JSON state stays epic-unaware; task IDs remain globally unique.) IDs are derived from the filesystem — no counter file to update. Write each plan file with `noclobber` / `wx` semantics; if a collision occurs (another parallel planner raced), recompute the next ID for the remaining plans and retry.
+6. Each plan's frontmatter MUST carry `status: ready` and its `depends_on` list — that frontmatter IS the queue entry; no separate queue file to update. IDs are derived from the filesystem — no counter file to update. Write each plan file with `noclobber` / `wx` semantics; if a collision occurs (another parallel planner raced), recompute the next ID for the remaining plans and retry.
 
 ## Step 3: Human Checkpoint — Plan Review
 
@@ -151,10 +151,10 @@ Present all plans to the user with:
 - Any requirements that were dropped with reasoning
 
 Use the **AskUserQuestion** tool to present the choice. Do not list the options as plain markdown bullets — the user should see a structured picker. Ask "How should we proceed with these plans?" with these options:
-- **Approve all** — leave all tasks `status: "ready"` in backlog.json
-- **Approve subset** — mark unapproved plans as `status: "deferred"` in backlog.json
+- **Approve all** — leave all plans with frontmatter `status: ready`
+- **Approve subset** — flip unapproved plans to `status: deferred` via `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/set-plan-status.js" deferred TASK-{NNN} ...`
 - **Request changes** — re-run the refiner with the user's feedback
-- **Reject** — delete the plan files and remove their backlog entries
+- **Reject** — `git rm` the plan files (plans ARE the queue entries; deleting them removes them from the queue)
 
 The tool call blocks until the user responds — do not proceed until it returns.
 
@@ -162,7 +162,7 @@ The tool call blocks until the user responds — do not proceed until it returns
 
 After the user responds (approval, subset, or rejection), commit the resulting state via Bash. Stage only the specific paths touched in this run — never `git add .` / `git add -A`.
 
-1. `git add` each plan file written (or removed) plus `.soloflow/active/backlog.json` plus any new/modified `EPIC-{slug}.md` files. For rejections, `git rm` the deleted plans.
+1. `git add` each plan file written (or whose frontmatter changed) plus any new/modified `EPIC-{slug}.md` files. For rejections, `git rm` the deleted plans.
 2. If `git diff --cached --quiet` reports no staged changes, skip (idempotent re-run).
 3. Otherwise commit with a message of the form `chore: queue TASK-{NNN}..TASK-{MMM} from IDEA-{NNN}` (adjust for single-task runs or rejection: `chore: reject plans for IDEA-{NNN}`).
 

@@ -192,27 +192,15 @@ estimated_complexity: low
 - [ ] {item text}
 ```
 
-### Update backlog
+### Plans are the queue
 
-If any TASKs were created, read `.soloflow/active/backlog.json`, add each new task:
-
-```json
-{
-  "id": "TASK-{NNN}",
-  "status": "ready",
-  "depends_on": [],
-  "created": "{ISO timestamp}"
-}
-```
-
-Write the updated backlog.json back.
+Each TASK plan written above already carries `status: ready` in its frontmatter, so it's immediately discoverable by `plan-query.js --status ready`. No separate queue file to update.
 
 ## Step 6: Commit
 
 1. Stage only the specific files created:
    - Each `.soloflow/active/ideas/IDEA-{NNN}.md`
    - Each `.soloflow/active/plans/TASK-{NNN}-plan.md`
-   - `.soloflow/active/backlog.json` (if any TASKs were created)
 2. Never `git add .` / `git add -A`.
 3. If `git diff --cached --quiet` reports no staged changes, skip.
 4. Otherwise commit: `chore: braindump — {idea_count} ideas, {task_count} tasks`
@@ -227,7 +215,7 @@ Print a summary:
 
 Created:
   Ideas: IDEA-{first}..IDEA-{last} ({count})
-  Tasks: TASK-{first}..TASK-{last} ({count}) — added to backlog
+  Tasks: TASK-{first}..TASK-{last} ({count}) — status: ready in plan frontmatter
 
 Next steps:
   /soloflow:idea-extractor IDEA-{NNN}   — full extraction with codebase grounding
@@ -297,22 +285,22 @@ Lines: parallelism toggle / task-decomposer model / task-refiner model / respawn
    - Apply parity gates 3a (`test_strategy` ↔ `files_owned`) and 3b (`acceptance_criteria` ↔ `files_owned`/`files_readonly`) per `commands/planner.md`. Record auto-corrections per-plan and per-IDEA.
    - Generate `EPIC-{slug}.md` bodies for entries in this IDEA's decomposer `new_epics[]`.
 
-7. **Write all plans + EPIC files.** For each IDEA, write its plans to `.soloflow/active/plans/{epic}/TASK-{NNN}-plan.md` (or flat for orphans) using `wx`/noclobber semantics. On collision, recompute the next ID for the remaining unwritten plans and retry. Add each task to `.soloflow/active/backlog.json` with `status: "ready"` + remapped `depends_on`. Write each new EPIC body if not already present.
+7. **Write all plans + EPIC files.** For each IDEA, write its plans to `.soloflow/active/plans/{epic}/TASK-{NNN}-plan.md` (or flat for orphans) using `wx`/noclobber semantics. On collision, recompute the next ID for the remaining unwritten plans and retry. Each plan's frontmatter MUST carry `status: ready` and the remapped `depends_on` — that frontmatter IS the queue entry; no separate queue file to update. Write each new EPIC body if not already present.
 
 8. **Single combined human checkpoint.** Print a per-IDEA summary block first (count, dep graph, epic groupings, parity-gate auto-corrections, dropped slots, scope_drops) then use **AskUserQuestion** (single question, single-select):
    - `question`: `"How should we proceed with the {N} refined IDEAs?"`
    - `options`:
      1. `label: "Approve all (Recommended)"` — leave every task `status: "ready"`.
-     2. `label: "Approve subset"` — follow up with a free-form `AskUserQuestion` asking which IDEA IDs (or specific TASK IDs) to defer; mark those as `status: "deferred"` in `backlog.json`.
-     3. `label: "Reject all"` — delete every plan file written in this batch and remove their backlog entries.
+     2. `label: "Approve subset"` — follow up with a free-form `AskUserQuestion` asking which IDEA IDs (or specific TASK IDs) to defer; flip those plans' frontmatter via `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/set-plan-status.js" deferred TASK-{NNN} ...`.
+     3. `label: "Reject all"` — `git rm` every plan file written in this batch (the plan files ARE the queue entries; deleting them removes them from the queue).
      4. `label: "Cancel"` — leave plan files on disk and backlog entries `ready` but stop here without committing or archiving.
 
    The tool call blocks until the user responds.
 
-9. **Commit state.** Stage only the specific paths touched (each plan file written, every modified EPIC-{slug}.md, `.soloflow/active/backlog.json`). Never `git add .`. If `git diff --cached --quiet` reports no staged changes, skip. Otherwise:
+9. **Commit state.** Stage only the specific paths touched (each plan file written or whose frontmatter changed, every modified EPIC-{slug}.md). Never `git add .`. If `git diff --cached --quiet` reports no staged changes, skip. Otherwise:
    - **Approve all** → commit `chore: queue TASK-{first}..TASK-{last} from braindump batch` (cite the IDEA range too if useful).
    - **Approve subset** → same commit message, plus a "deferred: TASK-X, TASK-Y" line in the body.
-   - **Reject all** → `git rm` the deleted plans + revert the backlog entries; commit `chore: reject braindump-batch plans`.
+   - **Reject all** → commit `chore: reject braindump-batch plans` (the `git rm`s from Step 8 are already staged).
    - **Cancel** → no commit. Stop.
 
 10. **Archive source IDEAs.** For every IDEA in the batch whose plans were not "Reject all"-deleted:

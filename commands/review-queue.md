@@ -576,17 +576,14 @@ Each `pending_refines` entry is a single bug-fix task — no slice decomposition
    - Apply parity gates 3a/3b from `commands/planner.md` per plan.
    - On terminal failure (no parseable plan after respawn cap): drop that item, surface in the final review-queue report under `Refinement failures`, and proceed.
 
-8. **Write plans + backlog.** For each successful plan:
+8. **Write plans.** For each successful plan:
    - Write to `.soloflow/active/plans/TASK-{NNN}-plan.md` (respect epic subfolder if the detailer assigned one — though in this path orphan tasks are the common case). Use `wx`/noclobber semantics; on collision, recompute the next ID and retry.
-   - Add to `.soloflow/active/backlog.json`:
-     ```json
-     { "id": "TASK-{NNN}", "status": "ready", "depends_on": [], "created": "{ISO}" }
-     ```
+   - The plan's frontmatter MUST carry `status: ready` — that frontmatter IS the queue entry; no separate queue file to update.
    - If the detailer expanded into an existing epic subfolder, that's fine. New epics are not produced here (review-queue refinements are bug fixes; the detailer should not propose new epics in detail mode anyway).
 
 9. Set `tasks_created = <count of new plans>`.
 
-10. Stage only the new plan files + `.soloflow/active/backlog.json`. Commit:
+10. Stage only the new plan files. Commit:
     ```
     feat: review-queue — plan TASK-{first}..TASK-{last} from testing issues
     ```
