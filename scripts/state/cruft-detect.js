@@ -15,10 +15,9 @@
 //   5. empty_epic           — epic folder with no TASK plans AND no tasks in sprint.json
 //                             matching the epic slug
 //   6. malformed_queue      — human-review-queue entries missing required fields
-//   7. completed_in_backlog — done report exists AND task still listed in backlog.json
-//   8. untracked_plan       — plan exists in active/plans but TASK isn't in
-//                             sprint.json or backlog.json, and no done/stuck file
-//                             exists (planner crashed before patching backlog)
+//   8. untracked_plan       — plan exists in active/plans but its frontmatter
+//                             `status` is missing or unrecognized (planner crashed
+//                             before writing status, or hand-edit broke it)
 
 const fs = require('fs');
 const path = require('path');
@@ -51,12 +50,7 @@ function readSprint(cwd) {
   catch { return null; }
 }
 
-function readBacklog(cwd) {
-  const p = paths.backlogJsonPath(cwd);
-  if (!fs.existsSync(p)) return null;
-  try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
-  catch { return null; }
-}
+const VALID_PLAN_STATUSES = new Set(['ready', 'deferred', 'in-flight', 'done']);
 
 function readFm(p) {
   try { return yaml.splitFrontmatter(fs.readFileSync(p, 'utf8')).frontmatter || {}; }
@@ -72,8 +66,6 @@ function main() {
   const cwd = process.cwd();
   const state = readSprint(cwd);
   const sprintTasks = (state && state.tasks) || {};
-  const backlog = readBacklog(cwd);
-  const backlogTasks = (backlog && backlog.tasks) || {};
 
   const planFiles = globRecursive(path.join(paths.activeDir(cwd), 'plans'), (n) => /^TASK-\d+-plan\.md$/.test(n));
   const doneFiles = globRecursive(path.join(paths.archiveDir(cwd), 'done'), (n) => /^TASK-\d+-done\.md$/.test(n));
@@ -152,23 +144,20 @@ function main() {
     malformed_queue.push({ entry: null, reason: `queue_parse_error: ${err.message}` });
   }
 
-  // Scenario 7 — completed task still in backlog.
-  const completed_in_backlog = [];
-  for (const id of Object.keys(backlogTasks)) {
-    if (doneByTask.has(id)) completed_in_backlog.push({ task_id: id, done_path: doneByTask.get(id) });
-  }
-
-  // Scenario 8 — untracked plan (plan on disk but task not tracked anywhere).
+  // Scenario 8 — untracked plan: frontmatter status missing or unrecognized.
+  // Plans with a recognized status (ready / deferred / in-flight / done) are
+  // legitimate queue entries; only plans with broken frontmatter signal a
+  // crashed-mid-write planner or hand-edit corruption.
   const untracked_plan = [];
   for (const [id, planPath] of planByTask) {
-    if (sprintTasks[id]) continue;
-    if (backlogTasks[id]) continue;
-    if (doneByTask.has(id)) continue;
-    if (stuckByTask.has(id)) continue;
+    if (doneByTask.has(id)) continue;   // covered by Scenario 1 (orphan_plan)
+    if (stuckByTask.has(id)) continue;  // covered by Scenario 3 (stale_stuck_file) when relevant
     const fm = readFm(planPath);
+    if (VALID_PLAN_STATUSES.has(fm.status)) continue;
     untracked_plan.push({
       task_id: id,
       plan_path: planPath,
+      status: fm.status || null,
       epic: fm.epic || null,
       title: fm.title || null,
     });
@@ -177,7 +166,7 @@ function main() {
   const total =
     orphan_plan.length + ghost_sprint_entry.length + stale_stuck_file.length +
     mid_commit_settle.length + empty_epic.length + malformed_queue.length +
-    completed_in_backlog.length + untracked_plan.length;
+    untracked_plan.length;
 
   process.stdout.write(JSON.stringify({
     total,
@@ -187,7 +176,6 @@ function main() {
     mid_commit_settle,
     empty_epic,
     malformed_queue,
-    completed_in_backlog,
     untracked_plan,
   }, null, 2) + '\n');
 }
