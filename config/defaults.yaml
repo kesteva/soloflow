@@ -45,6 +45,12 @@ limits:
 #                           whole-IDEA flow.
 parallelism:
   task_refiner_parallel: true
+  # Phase-level worktrees + settle-phase integrator. When true, the four phases
+  # (clarify, planning, execution, compound) run in their own git worktrees at
+  # .soloflow-worktrees/<phase>-<id>/ and merge back via settle-phase.js.
+  # Default false during rollout; flip to true once the phase-worktree
+  # machinery is exercised in your project.
+  phase_worktrees: false
 
 code_review:
   enabled: true
@@ -127,8 +133,13 @@ paths:
   state_dir: .soloflow
   active_dir: .soloflow/active
   archive_dir: .soloflow/archive
-  backlog: .soloflow/active/backlog.json
-  sprint: .soloflow/active/sprint.json
+  sprints_dir: .soloflow/active/sprints   # per-sprint layout (PR #3)
+
+# Cruft-detect knobs. stale_idea_days controls Scenario 9: an IDEA in
+# active/ideas/ whose `created` frontmatter timestamp is older than this
+# many days is surfaced for archive-or-re-clarify. Default 60 days.
+cruft:
+  stale_idea_days: 60
 
 # Remote-version checking. The SessionStart hook calls check-version.js, which
 # fetches .claude-plugin/plugin.json from main and caches the result at

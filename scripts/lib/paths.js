@@ -59,6 +59,16 @@ function findingsFilePath(sprintId, cwd = process.cwd()) {
 function worktreesDir(cwd = process.cwd()) { return path.join(stateRoot(cwd), 'worktrees'); }
 function taskWorktreePath(cwd, taskId) { return path.join(worktreesDir(cwd), taskId); }
 
+// Phase worktrees live OUTSIDE .soloflow/ to avoid recursion (a worktree
+// rooted at the same repo would contain its own .soloflow/, which contains
+// its own worktrees/, ad infinitum). Sibling at repo root, gitignored.
+function phaseWorktreesDir(cwd = process.cwd()) {
+  return path.join(cwd, '.soloflow-worktrees');
+}
+function phaseWorktreePath(cwd, phase, id) {
+  return path.join(phaseWorktreesDir(cwd), `${phase}-${id}`);
+}
+
 // Common gitdir — single shared location even when called from a linked
 // worktree. Used to anchor cross-worktree locks (claim-file, ID allocator).
 // Falls back to <cwd>/.soloflow if not in a git repo, so tests that run
@@ -88,5 +98,6 @@ module.exports = {
   checkpointPath, reviewQueuePath,
   findingsFilePath,
   worktreesDir, taskWorktreePath,
+  phaseWorktreesDir, phaseWorktreePath,
   commonGitDir, claimsLockPath, idAllocatorLockPath,
 };

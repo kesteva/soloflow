@@ -18,12 +18,16 @@
 //   8. untracked_plan       — plan exists in active/plans but its frontmatter
 //                             `status` is missing or unrecognized (planner crashed
 //                             before writing status, or hand-edit broke it)
+//   9. stale_idea           — IDEA in active/ideas/ whose `created` frontmatter
+//                             is older than cruft.stale_idea_days (default 60).
+//                             First time-based scenario.
 
 const fs = require('fs');
 const path = require('path');
 const yaml = require('../lib/yaml');
 const paths = require('../lib/paths');
 const rq = require('../lib/review-queue');
+const config = require('../lib/config');
 
 function globRecursive(root, matcher) {
   const out = [];
@@ -174,10 +178,39 @@ function main() {
     });
   }
 
+  // Scenario 9 — stale idea: IDEA file with `created` frontmatter older than
+  // cruft.stale_idea_days. First time-based scenario; older IDEAs likely
+  // need re-clarification before refinement (project may have moved on).
+  const stale_idea = [];
+  const staleDays = config.resolve('cruft.stale_idea_days', 60);
+  const staleThresholdMs = staleDays * 24 * 60 * 60 * 1000;
+  const ideasDir = path.join(paths.activeDir(cwd), 'ideas');
+  if (fs.existsSync(ideasDir)) {
+    const now = Date.now();
+    for (const entry of fs.readdirSync(ideasDir)) {
+      if (!/^IDEA-\d+\.md$/.test(entry)) continue;
+      const ideaPath = path.join(ideasDir, entry);
+      const fm = readFm(ideaPath);
+      if (!fm.created) continue; // skip un-stamped (handled by migrate-004)
+      const createdMs = Date.parse(fm.created);
+      if (Number.isNaN(createdMs)) continue;
+      const ageMs = now - createdMs;
+      if (ageMs > staleThresholdMs) {
+        stale_idea.push({
+          idea_id: entry.replace(/\.md$/, ''),
+          idea_path: ideaPath,
+          created: fm.created,
+          age_days: Math.floor(ageMs / (24 * 60 * 60 * 1000)),
+          threshold_days: staleDays,
+        });
+      }
+    }
+  }
+
   const total =
     orphan_plan.length + ghost_sprint_entry.length + stale_stuck_file.length +
     mid_commit_settle.length + empty_epic.length + malformed_queue.length +
-    untracked_plan.length;
+    untracked_plan.length + stale_idea.length;
 
   process.stdout.write(JSON.stringify({
     total,
@@ -188,6 +221,7 @@ function main() {
     empty_epic,
     malformed_queue,
     untracked_plan,
+    stale_idea,
   }, null, 2) + '\n');
 }
 

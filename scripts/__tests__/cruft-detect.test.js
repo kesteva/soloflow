@@ -92,3 +92,37 @@ test('cruft-detect: completed_in_backlog field is removed from output', () => {
   const r = JSON.parse(run('state/cruft-detect.js', [], { cwd }).out);
   assert.equal('completed_in_backlog' in r, false);
 });
+
+test('cruft-detect: stale_idea — IDEA older than threshold is flagged', () => {
+  const cwd = scaffold(mktmp());
+  const oldDate = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString();
+  fs.writeFileSync(
+    path.join(cwd, '.soloflow/active/ideas/IDEA-001.md'),
+    `---\nid: IDEA-001\ncreated: ${oldDate}\nstatus: deferred\n---\n\n# old idea\n`,
+  );
+  const r = JSON.parse(run('state/cruft-detect.js', [], { cwd }).out);
+  assert.equal(r.stale_idea.length, 1);
+  assert.equal(r.stale_idea[0].idea_id, 'IDEA-001');
+  assert.ok(r.stale_idea[0].age_days >= 100);
+});
+
+test('cruft-detect: stale_idea — fresh IDEA is not flagged', () => {
+  const cwd = scaffold(mktmp());
+  const recent = new Date().toISOString();
+  fs.writeFileSync(
+    path.join(cwd, '.soloflow/active/ideas/IDEA-002.md'),
+    `---\nid: IDEA-002\ncreated: ${recent}\nstatus: deferred\n---\n\n# new idea\n`,
+  );
+  const r = JSON.parse(run('state/cruft-detect.js', [], { cwd }).out);
+  assert.equal(r.stale_idea.length, 0);
+});
+
+test('cruft-detect: stale_idea — IDEA without created frontmatter is skipped (migrate-004 backfills)', () => {
+  const cwd = scaffold(mktmp());
+  fs.writeFileSync(
+    path.join(cwd, '.soloflow/active/ideas/IDEA-003.md'),
+    '---\nid: IDEA-003\nstatus: deferred\n---\n\n# unstamped idea\n',
+  );
+  const r = JSON.parse(run('state/cruft-detect.js', [], { cwd }).out);
+  assert.equal(r.stale_idea.length, 0);
+});
