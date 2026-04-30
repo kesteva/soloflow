@@ -18,20 +18,37 @@ function readSoloFlowState(dir) {
 
   const state = {};
 
-  // Read sprint.json
-  const sprintPath = path.join(soloflowDir, 'active', 'sprint.json');
-  if (fs.existsSync(sprintPath)) {
+  // Aggregate every active per-sprint sprint.json under active/sprints/.
+  const sprintsDir = path.join(soloflowDir, 'active', 'sprints');
+  if (fs.existsSync(sprintsDir)) {
+    let inProgress = [];
+    let stuck = 0;
+    let humanNeeded = 0;
+    let primarySprint = null;
     try {
-      const sprint = JSON.parse(fs.readFileSync(sprintPath, 'utf8'));
-      if (sprint.sprint) {
-        state.sprintId = sprint.sprint.id;
-        state.sprintStatus = sprint.sprint.status;
+      for (const entry of fs.readdirSync(sprintsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const sprintPath = path.join(sprintsDir, entry.name, 'sprint.json');
+        if (!fs.existsSync(sprintPath)) continue;
+        try {
+          const sprint = JSON.parse(fs.readFileSync(sprintPath, 'utf8'));
+          if (sprint.sprint && !primarySprint) {
+            primarySprint = { id: sprint.sprint.id, status: sprint.sprint.status };
+          }
+          const tasks = Object.entries(sprint.tasks || {});
+          inProgress = inProgress.concat(tasks.filter(([, t]) => t.status === 'in_progress').map(([id]) => id));
+          stuck += tasks.filter(([, t]) => t.status === 'stuck').length;
+          humanNeeded += tasks.filter(([, t]) => t.status === 'human_needed').length;
+        } catch { /* skip malformed */ }
       }
-      const tasks = Object.entries(sprint.tasks || {});
-      state.inProgress = tasks.filter(([, t]) => t.status === 'in_progress').map(([id]) => id);
-      state.stuck = tasks.filter(([, t]) => t.status === 'stuck').length;
-      state.humanNeeded = tasks.filter(([, t]) => t.status === 'human_needed').length;
-    } catch (e) { /* ignore parse errors */ }
+    } catch { /* skip directory read errors */ }
+    if (primarySprint) {
+      state.sprintId = primarySprint.id;
+      state.sprintStatus = primarySprint.status;
+    }
+    state.inProgress = inProgress;
+    state.stuck = stuck;
+    state.humanNeeded = humanNeeded;
   }
 
   // Count plans with frontmatter status: ready

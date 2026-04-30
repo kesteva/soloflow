@@ -57,7 +57,8 @@ if (!fs.existsSync(tasksDir)) {
   process.exit(0);
 }
 
-const sprintPath = path.join(tasksDir, 'active', 'sprint.json');
+const sprintsDir = path.join(tasksDir, 'active', 'sprints');
+const legacySprintPath = path.join(tasksDir, 'active', 'sprint.json');
 const plansDir = path.join(tasksDir, 'active', 'plans');
 const checkpointPath = path.join(tasksDir, 'checkpoint.md');
 const reviewQueuePath = path.join(tasksDir, 'human-review-queue.md');
@@ -104,16 +105,36 @@ function countPlansByStatus(root) {
   return { byStatus, total };
 }
 
-if (fs.existsSync(sprintPath) || fs.existsSync(plansDir)) {
+// Discover all active sprints (per-sprint layout). Banner the legacy
+// active/sprint.json if it still exists — user needs to run the migrator.
+function readActiveSprints() {
+  const out = [];
+  if (fs.existsSync(sprintsDir)) {
+    try {
+      for (const entry of fs.readdirSync(sprintsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const p = path.join(sprintsDir, entry.name, 'sprint.json');
+        if (!fs.existsSync(p)) continue;
+        try { out.push({ id: entry.name, ...JSON.parse(fs.readFileSync(p, 'utf8')) }); }
+        catch { /* skip malformed */ }
+      }
+    } catch { /* skip directory errors */ }
+  }
+  return out;
+}
+const activeSprints = readActiveSprints();
+const legacySprintExists = fs.existsSync(legacySprintPath);
+
+if (activeSprints.length > 0 || fs.existsSync(plansDir) || legacySprintExists) {
   try {
-    const sprint = fs.existsSync(sprintPath)
-      ? JSON.parse(fs.readFileSync(sprintPath, 'utf8'))
-      : { sprint: null, tasks: {} };
-    const sprintTasks = Object.entries(sprint.tasks || {});
+    const sprintTasks = activeSprints.flatMap((s) => Object.entries(s.tasks || {}));
     const { byStatus: planByStatus, total: planTotal } = countPlansByStatus(plansDir);
 
-    if (sprint.sprint) {
-      lines.push(`Sprint: ${sprint.sprint.id} (${sprint.sprint.status})`);
+    for (const s of activeSprints) {
+      if (s.sprint) lines.push(`Sprint: ${s.sprint.id} (${s.sprint.status})`);
+    }
+    if (legacySprintExists) {
+      lines.push('⚠ Legacy active/sprint.json detected — run the per-sprint migrator: `node scripts/migrations/migrate-002-per-sprint-sprint-json.js --apply`');
     }
 
     // Count archived completions (recursive — tasks may live under epic subfolders).
@@ -134,8 +155,9 @@ if (fs.existsSync(sprintPath) || fs.existsSync(plansDir)) {
     sprintTasks.forEach(([_, t]) => {
       if (t && t.status) sprintByStatus[t.status] = (sprintByStatus[t.status] || 0) + 1;
     });
+    const sprintTotalLength = sprintTasks.length;
 
-    if (planTotal > 0 || sprintTasks.length > 0 || doneCount > 0) {
+    if (planTotal > 0 || sprintTotalLength > 0 || doneCount > 0) {
       const parts = [];
       if (sprintByStatus.in_progress) parts.push(`${sprintByStatus.in_progress} in progress`);
       if (planByStatus.ready) parts.push(`${planByStatus.ready} ready`);
@@ -145,7 +167,7 @@ if (fs.existsSync(sprintPath) || fs.existsSync(plansDir)) {
       if (sprintByStatus.human_needed) parts.push(`${sprintByStatus.human_needed} awaiting human`);
       if (doneCount) parts.push(`${doneCount} completed`);
 
-      lines.push(`Plans: ${planTotal} | Sprint: ${sprintTasks.length}`);
+      lines.push(`Plans: ${planTotal} | Sprint: ${sprintTotalLength}`);
       if (parts.length > 0) lines.push(`Tasks: ${parts.join(', ')}`);
     } else {
       lines.push('No active tasks.');

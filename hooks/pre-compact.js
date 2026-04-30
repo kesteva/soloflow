@@ -15,13 +15,32 @@ if (!fs.existsSync(soloflowDir)) {
   process.exit(0);
 }
 
-const sprintPath = path.join(soloflowDir, 'active', 'sprint.json');
+const sprintsDir = path.join(soloflowDir, 'active', 'sprints');
 const plansDir = path.join(soloflowDir, 'active', 'plans');
 const checkpointPath = path.join(soloflowDir, 'checkpoint.md');
 
-if (!fs.existsSync(sprintPath)) {
-  process.exit(0);
+// Pick a single primary sprint to anchor the checkpoint. Multi-sprint flow
+// lands in PR #5; today there is at most one active sprint.
+function readPrimarySprint() {
+  if (!fs.existsSync(sprintsDir)) return null;
+  let primary = null;
+  try {
+    for (const entry of fs.readdirSync(sprintsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const p = path.join(sprintsDir, entry.name, 'sprint.json');
+      if (!fs.existsSync(p)) continue;
+      try {
+        const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+        if (!primary) primary = { id: entry.name, path: p, ...data };
+      } catch { /* skip */ }
+    }
+  } catch { /* skip */ }
+  return primary;
 }
+
+const primary = readPrimarySprint();
+if (!primary) process.exit(0);
+const sprintPath = primary.path;
 
 // Glob plans/ and pick out IDs whose frontmatter status is `ready`.
 function readyTaskIdsFromPlans(root) {

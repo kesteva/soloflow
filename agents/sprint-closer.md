@@ -34,7 +34,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/close-gather.js"
 
 The script performs all the bookkeeping this phase used to encode in prose:
 
-- Reads `.soloflow/active/sprint.json` (or exits ERROR if missing).
+- Reads the per-sprint `sprint.json` from `.soloflow/active/sprints/{sprint_id}/sprint.json` (close-gather auto-discovers when only one sprint is active; pass `--sprint SPRINT-NNN` to disambiguate).
 - Tallies completed / stuck / blocked / human_needed tasks by reading done-report + stuck-report frontmatter filtered to this sprint.
 - Sums `executor_loops` and `code_review_rounds` across the sprint's reports.
 - Rolls up per-task visual-coverage enums and sprint-level visual-coverage from `.soloflow/active/sprint-verification.md`.
@@ -184,7 +184,7 @@ Decisions:
 
 ### Steps
 
-1. **Mark sprint complete.** Read `.soloflow/active/sprint.json`. If `sprint.status != "complete"`, set it to `"complete"` and write back. (Idempotent.)
+1. **Mark sprint complete.** Read `.soloflow/active/sprints/{sprint_id}/sprint.json`. If `sprint.status != "complete"`, set it to `"complete"` and write back. (Idempotent.)
 
 2. **Archive stale compound proposal drafts.** For each entry in `compound_drafts` from Phase 1:
    a. Re-read the file's YAML frontmatter to avoid stale data. Normalize membership identically to Phase 1 step 5: prefer `sprints:` (array), fall back to `sprint:` (scalar) as a single-element list.
@@ -223,7 +223,7 @@ Decisions:
    ```
    node "${CLAUDE_PLUGIN_ROOT}/scripts/state/commit-atomic.js" \
        --message "chore({sprint_id}): close sprint" \
-       --path .soloflow/active/sprint.json \
+       --path .soloflow/active/sprints/{sprint_id}/sprint.json \
        --path .soloflow/checkpoint.md \
        [--path .soloflow/human-review-queue.md]          # if it exists
        [--path .soloflow/active/findings/{sprint.id}-findings.md]  # only if 2d patched

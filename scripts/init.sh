@@ -27,16 +27,16 @@ write_if_missing() {
 }
 
 # Active state — read during execution
-mkdir -p "$TASKS_DIR"/active/{ideas,research,plans,stuck,roadmaps,findings,compound}
+mkdir -p "$TASKS_DIR"/active/{ideas,research,plans,stuck,sprints,roadmaps,findings,compound}
 
 # Archive — never read during execution
-mkdir -p "$TASKS_DIR"/archive/{done,reviews,findings,compound,roadmaps}
+mkdir -p "$TASKS_DIR"/archive/{done,reviews,findings,compound,roadmaps,legacy}
 
 # .gitkeep files so empty subdirs get tracked by git
-for sub in active/ideas active/research active/plans active/stuck active/roadmaps \
+for sub in active/ideas active/research active/plans active/stuck active/sprints active/roadmaps \
            active/findings active/compound \
            archive/done archive/reviews \
-           archive/findings archive/compound archive/roadmaps; do
+           archive/findings archive/compound archive/roadmaps archive/legacy; do
   [ -e "$TASKS_DIR/$sub/.gitkeep" ] || touch "$TASKS_DIR/$sub/.gitkeep"
 done
 
@@ -44,14 +44,10 @@ done
 # `status: ready|deferred|in-flight|done` in its frontmatter. There is no
 # separate backlog.json; nothing to scaffold for the queue itself.
 
-# Sprint — active sprint state and in-flight tasks (written/read by execution)
-write_if_missing "$TASKS_DIR/active/sprint.json" << 'EOF'
-{
-  "version": 2,
-  "sprint": null,
-  "tasks": {}
-}
-EOF
+# Sprint — per-sprint layout. Each active sprint lives at
+# active/sprints/<SPRINT-NNN>/sprint.json, created on demand by
+# /soloflow:sprint or /soloflow:quick. Init does not scaffold a default
+# sprint.json (multi-sprint flow lives behind sprint-initiator).
 
 # Context restoration after compaction
 write_if_missing "$TASKS_DIR/checkpoint.md" << 'EOF'

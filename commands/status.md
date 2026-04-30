@@ -13,7 +13,7 @@ Display the current SoloFlow workflow state for this project.
 
 2. **Read state files:**
    - Plans under `.soloflow/active/plans/**/TASK-*-plan.md` — frontmatter `status` is the queue source of truth (use `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/plan-query.js" --status ready` for ready count, etc.)
-   - `.soloflow/active/sprint.json` for active sprint and in-flight tasks
+   - `.soloflow/active/sprints/*/sprint.json` (per-sprint layout; glob across all active sprints)
    - `.soloflow/checkpoint.md` for last checkpoint info
    - `.soloflow/human-review-queue.md` for pending reviews
 

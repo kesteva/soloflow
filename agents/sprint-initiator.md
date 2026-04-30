@@ -64,7 +64,7 @@ Phase: gather
    ```
    node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/probe-dev-server.js"
    ```
-   Parse the JSON. If `enabled: false`, set `dev_server: null` in gather output. Otherwise pass through `name`, `online`, and `managed_by_sprint` (the orchestrator drives the start/restart prompt from these three fields). The script also reads `.soloflow/active/sprint.json` to detect a sprint-managed task_id; you do NOT need to read sprint.json yourself.
+   Parse the JSON. If `enabled: false`, set `dev_server: null` in gather output. Otherwise pass through `name`, `online`, and `managed_by_sprint` (the orchestrator drives the start/restart prompt from these three fields). The script auto-discovers active sprints under `.soloflow/active/sprints/` to detect a sprint-managed task_id; you do NOT need to read sprint.json yourself.
 
 ### Output
 
@@ -157,7 +157,8 @@ Decisions:
      node "${CLAUDE_PLUGIN_ROOT}/scripts/state/set-plan-status.js" in-flight {selected_task_id_1} {selected_task_id_2} ...
      ```
      The script atomically rewrites each plan's frontmatter (preserving every other field) and emits a JSON summary of `updated` + `skipped`. A "skipped" entry means the plan file was already in-flight (resume path) or missing (data corruption — bubble up).
-   - Write `sprint.json` with the same selected task IDs in `tasks` (each with `status: "pending"`):
+   - Create the per-sprint directory: `mkdir -p .soloflow/active/sprints/{sprint_id}/`.
+   - Write `.soloflow/active/sprints/{sprint_id}/sprint.json` with the same selected task IDs in `tasks` (each with `status: "pending"`):
      ```json
      {
        "sprint": {
@@ -170,7 +171,7 @@ Decisions:
      }
      ```
      `execution_mode` is persisted so that checkpoint-resume paths (commands/sprint.md Step 0.5) recover the same mode without re-prompting. Downstream steps read it from `sprint.sprint.execution_mode`.
-   - Plans are the source of truth; `sprint.json.tasks` mirrors the in-flight set. Step 5's commit stages both `sprint.json` and the modified plan files.
+   - Plans are the source of truth; `sprint.json.tasks` mirrors the in-flight set. Step 5's commit stages both the per-sprint `sprint.json` and the modified plan files.
 
 3.5. **Create per-sprint findings file.**
    - Ensure `.soloflow/active/findings/` exists (`mkdir -p`).
@@ -195,7 +196,7 @@ Decisions:
    - `base_sha=$(git rev-parse HEAD)`
    - Generate branch name from `branch_name_format` config: replace `{timestamp}` → `date +%Y%m%d-%H%M%S`, `{sprint_id}` → sprint ID.
    - `git checkout -b <branch_name>` — if this fails, report ERROR immediately. Do NOT fall back to current branch.
-   - Add `run` object to `sprint.json`:
+   - Add `run` object to `.soloflow/active/sprints/{sprint_id}/sprint.json`:
      ```json
      "run": {
        "branch": "<branch_name>",
@@ -204,13 +205,13 @@ Decisions:
        "created_at": "<ISO timestamp>"
      }
      ```
-   - Write `sprint.json` again with the run object.
+   - Write the per-sprint `sprint.json` again with the run object.
 
 5. **Commit sprint start.** Run:
    ```
    node "${CLAUDE_PLUGIN_ROOT}/scripts/state/commit-atomic.js" \
        --message "chore({sprint_id}): start sprint" \
-       --path .soloflow/active/sprint.json \
+       --path .soloflow/active/sprints/{sprint_id}/sprint.json \
        --path .soloflow/active/findings/{sprint_id}-findings.md \
        --path {plan_path_for_each_selected_task} \
        [--path .soloflow/active/findings.md]      # only if step 3.5 migrated it

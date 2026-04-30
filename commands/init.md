@@ -66,7 +66,11 @@ every file you actually wrote.
 (There is no `backlog.json`. Plan frontmatter `status` IS the queue —
 plans live under `.soloflow/active/plans/**/TASK-*-plan.md`.)
 
-**`.soloflow/active/sprint.json`**
+**`.soloflow/active/sprints/`** — per-sprint layout. Each active sprint lives at `.soloflow/active/sprints/<SPRINT-NNN>/sprint.json` (created by `/soloflow:sprint` or `/soloflow:quick` on demand). Init does not scaffold any sprint.json — the directory is created when the first sprint starts.
+
+(For backward-compat documentation: pre-PR-3 projects had a single `.soloflow/active/sprint.json`. Run `node scripts/migrations/migrate-002-per-sprint-sprint-json.js --apply` to move it.)
+
+**Legacy `.soloflow/active/sprint.json` block (kept for reference, no longer scaffolded):**
 ```json
 {
   "version": 2,

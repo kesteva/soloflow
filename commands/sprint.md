@@ -93,7 +93,7 @@ These checks happen in the orchestrator before any agent spawn — they may skip
 1. Read `.soloflow/checkpoint.md` — if it indicates an active sprint mid-execution, use **AskUserQuestion** (question: "Sprint {SPRINT-NNN} is in progress. Resume it or start fresh?", options: **Resume** / **Start fresh**). Do not print the choice as prose.
    - If resume: load `sprint.json` and skip directly to Step 3.
    - If fresh: archive the stale sprint and continue.
-2. **Run branch resume check:** if `.soloflow/active/sprint.json` exists and contains a `run` object, verify `git rev-parse --abbrev-ref HEAD` matches `run.branch`. If it doesn't match, do NOT silently reattach — use **AskUserQuestion**: **Checkout the run branch** / **Clear the run record and continue on current branch** / **Abort**. Act on the answer before proceeding.
+2. **Run branch resume check:** if `.soloflow/active/sprints/{sprint_id}/sprint.json` exists and contains a `run` object, verify `git rev-parse --abbrev-ref HEAD` matches `run.branch`. If it doesn't match, do NOT silently reattach — use **AskUserQuestion**: **Checkout the run branch** / **Clear the run record and continue on current branch** / **Abort**. Act on the answer before proceeding.
 
 ## Step 1: Gather sprint context
 
@@ -255,7 +255,7 @@ If `dev_server_action == "restart"`:
 If `dev_server_action == "start"` (or fell through from restart):
 1. Call **Bash with `run_in_background: true`** invoking `{start_command}` from the repo root. Capture the bash result — extract `task_id` and the output file path that the harness assigns. Do NOT use `Bash` without `run_in_background: true` here; the process must outlive the tool call.
 2. Poll readiness: every 1s up to `startup_timeout_seconds`, run `node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/probe-dev-server.js" --probe-only` via Bash and read the JSON `online` field. Stop polling on the first `true`. Track `final_online`.
-3. Update `.soloflow/active/sprint.json` to add a `dev_server` block:
+3. Update `.soloflow/active/sprints/{sprint_id}/sprint.json` to add a `dev_server` block:
    ```json
    "dev_server": {
      "name": "{name}",
@@ -680,5 +680,5 @@ When you receive a **SOLOFLOW CONTEXT CRITICAL**:
 1. Finish the current subagent interaction if one is running.
 2. Write a detailed checkpoint to `.soloflow/checkpoint.md`.
 3. Use **AskUserQuestion** with options:
-   - **Compact and continue** — let compaction happen, then resume from checkpoint by re-reading `.soloflow/checkpoint.md` and `.soloflow/active/sprint.json`.
+   - **Compact and continue** — let compaction happen, then resume from checkpoint by re-reading `.soloflow/checkpoint.md` and `.soloflow/active/sprints/{sprint_id}/sprint.json`.
    - **Save and exit** — stop execution. The user can resume later with `/soloflow:sprint` which handles checkpoint resume (Step 1.2).

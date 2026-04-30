@@ -144,9 +144,9 @@ Add the task entry to `sprint.json` and create the per-sprint findings file. Use
 node "${CLAUDE_PLUGIN_ROOT}/scripts/state/update-task-status.js" TASK-{NNN} in_progress --create --plan .soloflow/active/plans/TASK-{NNN}-plan.md
 ```
 
-`--create` scaffolds `sprint.json` with a `SPRINT-bugfix-<timestamp>` id if it doesn't exist yet. (The `bugfix` prefix mirrors `/quick`'s `SPRINT-quick-<timestamp>` so downstream tooling can tell at a glance how a sprint was created.)
+`--create` scaffolds a per-sprint `.soloflow/active/sprints/SPRINT-quick-<timestamp>/sprint.json` (using the `quick` prefix; the `--create` path uses one shared scaffold across `/quick` and `/bugfix`) if no active sprint exists. Future cleanup may distinguish bugfix-created sprints; today they share the prefix.
 
-After `--create` completes, read `.soloflow/sprint.json` (or `.soloflow/active/sprint.json` — check both) to get `sprint.id`. Call this value `{sprint_id}` for the rest of the command. Ensure `.soloflow/active/findings/` exists. If `.soloflow/active/findings/{sprint_id}-findings.md` does not exist, create it with `wx`/`noclobber` semantics:
+After `--create` completes, glob `.soloflow/active/sprints/*/sprint.json` to find the active sprint and read `sprint.id`. Call this value `{sprint_id}` for the rest of the command. Ensure `.soloflow/active/findings/` exists. If `.soloflow/active/findings/{sprint_id}-findings.md` does not exist, create it with `wx`/`noclobber` semantics:
 
 ```
 ---

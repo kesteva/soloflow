@@ -35,7 +35,7 @@ Run these three checks in the orchestrator before spawning anything. Any failure
 
 1. **Not initialized.** If `.soloflow/` does not exist, print: `mad-max: SoloFlow not initialized. Run /soloflow:init first.` and stop.
 
-2. **Active sprint.** Read `.soloflow/checkpoint.md` (if present) and `.soloflow/active/sprint.json`. If either indicates an active sprint (checkpoint says mid-execution, or `sprint.json` has `sprint.status: "active"`), print: `mad-max: active sprint {SPRINT-NNN} detected. Run /soloflow:sprint to resume or close it first.` and stop.
+2. **Active sprint.** Read `.soloflow/checkpoint.md` (if present) and glob `.soloflow/active/sprints/*/sprint.json`. If either indicates an active sprint (checkpoint says mid-execution, or any per-sprint sprint.json has `sprint.status: "active"`), print: `mad-max: active sprint {SPRINT-NNN} detected. Run /soloflow:sprint to resume or close it first.` and stop.
 
 3. **Dirty worktree.** Run `git status --porcelain`. If non-empty, print: `mad-max: working tree dirty. Commit or stash before starting an unattended run.` and stop.
 

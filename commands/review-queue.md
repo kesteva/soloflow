@@ -41,7 +41,7 @@ Mapping used in this command:
 
 1. If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
 2. If `.soloflow/human-review-queue.md` does not exist, report: "Human review queue file missing. Run `/soloflow:init` to repair state." and stop.
-3. `.soloflow/active/sprint.json` may be absent — that's OK. Cruft Scenarios 2 and 4 (which need it) are skipped gracefully.
+3. `.soloflow/active/sprints/*/sprint.json` may be absent — that's OK. Cruft Scenarios 2 and 4 (which need at least one active sprint) are skipped gracefully.
 4. Initialize in-memory counters to 0:
    - `cruft_resolved`
    - `decisions_resolved`, `decisions_deferred`, `decisions_dismissed`

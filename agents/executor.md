@@ -147,7 +147,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/state/findings.js" append \
     --fields-json '{"source":"{task_id} (executor)","type":"bug|cleanup|improvement|claude-md|anti-pattern","severity":"low|medium|high","status":"open","location":"path/to/file.ext:line","description":"what you noticed, in one paragraph","suggested_action":"(optional)","resolved_by":""}'
 ```
 
-The script allocates the next FIND ID for the sprint, appends the entry, bumps `pending_count`, and refreshes `last_updated`. Read `sprint.id` from `.soloflow/active/sprint.json`.
+The script allocates the next FIND ID for the sprint, appends the entry, bumps `pending_count`, and refreshes `last_updated`. The orchestrator injects `{sprint.id}` into your prompt context — use that, not a direct read of sprint.json.
 
 Do NOT commit the findings file. Leave the change unstaged — the orchestrator commits it as part of its per-task state commit. Note the count in your status report as `findings_logged: N`. Never block or expand scope because of a finding — that is what the compounder is for.
 
