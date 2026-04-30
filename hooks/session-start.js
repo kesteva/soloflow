@@ -57,8 +57,8 @@ if (!fs.existsSync(tasksDir)) {
   process.exit(0);
 }
 
-const backlogPath = path.join(tasksDir, 'active', 'backlog.json');
 const sprintPath = path.join(tasksDir, 'active', 'sprint.json');
+const plansDir = path.join(tasksDir, 'active', 'plans');
 const checkpointPath = path.join(tasksDir, 'checkpoint.md');
 const reviewQueuePath = path.join(tasksDir, 'human-review-queue.md');
 const findingsDir = path.join(tasksDir, 'active', 'findings');
@@ -67,60 +67,94 @@ const doneDir = path.join(tasksDir, 'archive', 'done');
 
 let lines = ['## SoloFlow Status'];
 
-// Read state from split files
-if (fs.existsSync(backlogPath) && fs.existsSync(sprintPath)) {
+// Plan frontmatter is the queue source of truth. Glob plans/ and group by
+// status field; merge with sprint.json for in-flight verdict states
+// (in_progress / blocked / stuck / human_needed).
+function readPlanStatus(file) {
   try {
-    const backlog = JSON.parse(fs.readFileSync(backlogPath, 'utf8'));
-    const sprint = JSON.parse(fs.readFileSync(sprintPath, 'utf8'));
-    const backlogTasks = Object.entries(backlog.tasks);
-    const sprintTasks = Object.entries(sprint.tasks);
+    const fd = fs.openSync(file, 'r');
+    const buf = Buffer.alloc(1024);
+    const n = fs.readSync(fd, buf, 0, buf.length, 0);
+    fs.closeSync(fd);
+    const head = buf.slice(0, n).toString('utf8');
+    const m = head.match(/(?:^|\n)status:\s*(\S+)/);
+    return m ? m[1].trim() : null;
+  } catch { return null; }
+}
+
+function countPlansByStatus(root) {
+  const byStatus = {};
+  let total = 0;
+  if (!fs.existsSync(root)) return { byStatus, total };
+  const stack = [root];
+  while (stack.length) {
+    const dir = stack.pop();
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+    catch { continue; }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { stack.push(full); continue; }
+      if (!/^TASK-\d+-plan\.md$/.test(entry.name)) continue;
+      total++;
+      const status = readPlanStatus(full) || 'unknown';
+      byStatus[status] = (byStatus[status] || 0) + 1;
+    }
+  }
+  return { byStatus, total };
+}
+
+if (fs.existsSync(sprintPath) || fs.existsSync(plansDir)) {
+  try {
+    const sprint = fs.existsSync(sprintPath)
+      ? JSON.parse(fs.readFileSync(sprintPath, 'utf8'))
+      : { sprint: null, tasks: {} };
+    const sprintTasks = Object.entries(sprint.tasks || {});
+    const { byStatus: planByStatus, total: planTotal } = countPlansByStatus(plansDir);
 
     if (sprint.sprint) {
       lines.push(`Sprint: ${sprint.sprint.id} (${sprint.sprint.status})`);
     }
 
-    const allTasks = [...backlogTasks, ...sprintTasks];
-    if (allTasks.length > 0) {
-      const byStatus = {};
-      allTasks.forEach(([_, t]) => {
-        byStatus[t.status] = (byStatus[t.status] || 0) + 1;
-      });
+    // Count archived completions (recursive — tasks may live under epic subfolders).
+    // Only count TASK-*.md files so EPIC-*.md manifests don't inflate the total.
+    let doneCount = 0;
+    if (fs.existsSync(doneDir)) {
+      const walk = (dir) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) walk(full);
+          else if (entry.isFile() && /^TASK-.*\.md$/.test(entry.name)) doneCount++;
+        }
+      };
+      walk(doneDir);
+    }
 
-      // Count archived completions (recursive — tasks may live under epic subfolders).
-      // Only count TASK-*.md files so EPIC-*.md manifests don't inflate the total.
-      let doneCount = 0;
-      if (fs.existsSync(doneDir)) {
-        const walk = (dir) => {
-          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-            const full = path.join(dir, entry.name);
-            if (entry.isDirectory()) {
-              walk(full);
-            } else if (entry.isFile() && /^TASK-.*\.md$/.test(entry.name)) {
-              doneCount++;
-            }
-          }
-        };
-        walk(doneDir);
-      }
+    const sprintByStatus = {};
+    sprintTasks.forEach(([_, t]) => {
+      if (t && t.status) sprintByStatus[t.status] = (sprintByStatus[t.status] || 0) + 1;
+    });
 
+    if (planTotal > 0 || sprintTasks.length > 0 || doneCount > 0) {
       const parts = [];
-      if (byStatus.in_progress) parts.push(`${byStatus.in_progress} in progress`);
-      if (byStatus.ready) parts.push(`${byStatus.ready} ready`);
-      if (byStatus.blocked) parts.push(`${byStatus.blocked} blocked`);
-      if (byStatus.stuck) parts.push(`${byStatus.stuck} stuck`);
-      if (byStatus.human_needed) parts.push(`${byStatus.human_needed} awaiting human`);
+      if (sprintByStatus.in_progress) parts.push(`${sprintByStatus.in_progress} in progress`);
+      if (planByStatus.ready) parts.push(`${planByStatus.ready} ready`);
+      if (planByStatus.deferred) parts.push(`${planByStatus.deferred} deferred`);
+      if (sprintByStatus.blocked) parts.push(`${sprintByStatus.blocked} blocked`);
+      if (sprintByStatus.stuck) parts.push(`${sprintByStatus.stuck} stuck`);
+      if (sprintByStatus.human_needed) parts.push(`${sprintByStatus.human_needed} awaiting human`);
       if (doneCount) parts.push(`${doneCount} completed`);
 
-      lines.push(`Backlog: ${backlogTasks.length} | Sprint: ${sprintTasks.length}`);
-      lines.push(`Tasks: ${parts.join(', ')}`);
+      lines.push(`Plans: ${planTotal} | Sprint: ${sprintTasks.length}`);
+      if (parts.length > 0) lines.push(`Tasks: ${parts.join(', ')}`);
     } else {
       lines.push('No active tasks.');
     }
   } catch (e) {
-    lines.push('Error reading state files: ' + e.message);
+    lines.push('Error reading state: ' + e.message);
   }
 } else {
-  lines.push('State files not found. Run init.sh to set up.');
+  lines.push('State files not found. Run /soloflow:init to set up.');
 }
 
 // Check for pending human reviews

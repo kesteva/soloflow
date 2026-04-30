@@ -34,16 +34,39 @@ function readSoloFlowState(dir) {
     } catch (e) { /* ignore parse errors */ }
   }
 
-  // Read backlog.json for ready count
-  const backlogPath = path.join(soloflowDir, 'active', 'backlog.json');
-  if (fs.existsSync(backlogPath)) {
-    try {
-      const backlog = JSON.parse(fs.readFileSync(backlogPath, 'utf8'));
-      state.ready = Object.values(backlog.tasks || {}).filter(t => t.status === 'ready').length;
-    } catch (e) { /* ignore */ }
-  }
+  // Count plans with frontmatter status: ready
+  state.ready = countReadyPlans(path.join(soloflowDir, 'active', 'plans'));
 
   return state;
+}
+
+// Count plans with frontmatter `status: ready`. Stays cheap (recursive
+// readdir + a tiny regex on each file's first 1KB) so the statusline
+// doesn't pay a real parser cost on every render.
+function countReadyPlans(plansRoot) {
+  if (!fs.existsSync(plansRoot)) return 0;
+  let count = 0;
+  const stack = [plansRoot];
+  while (stack.length) {
+    const dir = stack.pop();
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+    catch { continue; }
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { stack.push(p); continue; }
+      if (!/^TASK-\d+-plan\.md$/.test(e.name)) continue;
+      try {
+        const fd = fs.openSync(p, 'r');
+        const buf = Buffer.alloc(1024);
+        const n = fs.readSync(fd, buf, 0, buf.length, 0);
+        fs.closeSync(fd);
+        const head = buf.slice(0, n).toString('utf8');
+        if (/\nstatus:\s*ready\b/.test(head) || /^status:\s*ready\b/m.test(head)) count++;
+      } catch { /* skip unreadable */ }
+    }
+  }
+  return count;
 }
 
 function formatState(s) {
