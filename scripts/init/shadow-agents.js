@@ -103,6 +103,17 @@ function readStamp(filePath) {
   return { version: stamp[1], synced_at: stamp[2] || null };
 }
 
+// Substitute literal `${CLAUDE_PLUGIN_ROOT}` occurrences with the resolved
+// plugin root. Shadow agents live in the consumer repo's .claude/agents/, so
+// Claude Code does not interpolate `${CLAUDE_PLUGIN_ROOT}` for them and the
+// var is not exported to Bash. Without this rewrite the shadow agents would
+// shell out to `node "${CLAUDE_PLUGIN_ROOT}/scripts/.../foo.js"` and fail
+// because the placeholder reaches Bash literally — which sent the verifier
+// into a global `find /` to locate resolve.js.
+function substitutePluginRoot(source, root) {
+  return source.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, root);
+}
+
 // Inject (or replace) the soloflow-shadow comment at the top of the
 // frontmatter. Preserves all other frontmatter lines and the body verbatim.
 function injectStamp(source, version, syncedAt) {
@@ -176,7 +187,8 @@ function sync(opts) {
     }
     try {
       const sourceText = fs.readFileSync(src, 'utf8');
-      const stamped = injectStamp(sourceText, version, syncedAt);
+      const substituted = substitutePluginRoot(sourceText, root);
+      const stamped = injectStamp(substituted, version, syncedAt);
       fs.mkdirSync(path.dirname(dst), { recursive: true });
       fs.writeFileSync(dst, stamped);
       synced.push(name);
