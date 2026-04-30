@@ -40,13 +40,9 @@ for sub in active/ideas active/research active/plans active/stuck active/roadmap
   [ -e "$TASKS_DIR/$sub/.gitkeep" ] || touch "$TASKS_DIR/$sub/.gitkeep"
 done
 
-# Backlog — tasks awaiting execution (written by refinement, read by execution)
-write_if_missing "$TASKS_DIR/active/backlog.json" << 'EOF'
-{
-  "version": 2,
-  "tasks": {}
-}
-EOF
+# Plans are the queue: each plan file under active/plans/ carries
+# `status: ready|deferred|in-flight|done` in its frontmatter. There is no
+# separate backlog.json; nothing to scaffold for the queue itself.
 
 # Sprint — active sprint state and in-flight tasks (written/read by execution)
 write_if_missing "$TASKS_DIR/active/sprint.json" << 'EOF'
