@@ -37,9 +37,9 @@ You receive a task plan file with YAML frontmatter containing:
 
 ## Scope Boundaries
 
-- **`files_owned`**: You may read and modify these files. This is your workspace.
+- **`files_owned`**: You may read and modify these files. This is your workspace. It is a *soft* contract — if you discover you need a file outside it, follow the Tier 4 claim protocol below.
 - **`files_readonly`**: You may read these for context. Do NOT modify them.
-- **Everything else**: Off-limits. If you need a file not listed, report BLOCKED with what you need and why.
+- **Everything else**: Off-limits unless you successfully claim it via `claim-file.js` (see Tier 4 below). Never edit a file outside `files_owned` silently.
 
 Never create new files unless the plan explicitly instructs you to. Never delete files unless the plan explicitly instructs you to.
 
@@ -63,20 +63,33 @@ Do not spin reading files endlessly. You have the plan — execute it.
 | 1 | Bug in your own code, typo, off-by-one | Fix immediately, no need to report |
 | 2 | Missing import, missing type annotation needed for compilation | Add it, note in your status report |
 | 3 | Tests need updating to match your changes | Update them (only if test files are in `files_owned`) |
-| 4 | Architecture change, new dependency, file outside `files_owned` | **STOP.** Report BLOCKED with what you need |
-| 4b | File outside `files_owned` but required to meet acceptance criteria | Log a `scope_deviation` finding **before** making the edit (see below), then make the edit and note it prominently in your status report |
+| 4 | Architecture change, new dependency, or you need a file outside `files_owned` | **Try to claim the file via `claim-file.js` (see Tier 4 below). On grant, proceed and log a `scope_deviation` finding. On denial, STOP and report BLOCKED with the conflicting task ID.** |
 
 When in doubt, choose the lower tier. If you're not sure whether something is Tier 3 or Tier 4, it's Tier 4.
 
-### Tier 4b — Scope Deviations
+### Tier 4 — Claiming a file outside `files_owned`
 
-Sometimes meeting acceptance criteria requires touching a file outside `files_owned`. When this happens:
+`files_owned` is a soft contract. Sometimes meeting acceptance criteria requires touching a file outside it (a refactor exposes a deeper interface, a bug straddles two modules, etc.). Use the claim protocol — never edit silently:
 
-1. **Before making the edit**, append a finding via `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/findings.js" append --sprint {sprint.id} --fields-json '{"type":"scope_deviation","source":"{task_id} (executor)","severity":"low","status":"open","location":"path/to/file","description":"required to meet AC: <brief justification>"}'`.
-2. Make the edit.
-3. In your status report, add a `Scope deviations:` line listing each out-of-scope file and the finding ID.
+1. **Try to claim the file.** Run:
+   ```bash
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/state/claim-file.js" add {task_id} {path/to/file}
+   ```
+   The script consults the canonical `.soloflow/` (across all worktrees), checks for `files_owned` overlap with every other in-flight task, and returns JSON:
+   - `{ "ok": true, "files_owned": [...] }` — granted; the path is now in your plan's `files_owned`. Proceed to step 2.
+   - `{ "ok": false, "conflict_with": "TASK-NNN", "path": "..." }` — denied; another in-flight task already owns this path. **STOP.** Report BLOCKED with `conflict_with: TASK-NNN` so the orchestrator can serialize or rebalance.
 
-Do NOT make out-of-scope edits silently — the verifier and orchestrator need an explicit audit trail.
+2. **On grant — log a `scope_deviation` finding** as the audit trail (the claim by itself doesn't say *why*):
+   ```bash
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/state/findings.js" append --sprint {sprint.id} \
+     --fields-json '{"type":"scope_deviation","source":"{task_id} (executor)","severity":"low","status":"open","location":"path/to/file","description":"required to meet AC: <brief justification>"}'
+   ```
+
+3. **Make the edit.**
+
+4. **In your status report**, add a `Scope deviations:` line listing each newly-claimed file and its finding ID.
+
+Architecture changes and new dependencies are still BLOCKED outright — those need plan adjustments, not a claim.
 
 ### Documented Conventions Are Binding
 
