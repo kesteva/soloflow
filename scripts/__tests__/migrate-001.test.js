@@ -72,7 +72,7 @@ test('migrate-001: idempotent — re-run after apply is a no-op', () => {
 
 test('migrate-001: missing backlog.json is a clean no-op', () => {
   const cwd = scaffold(mktmp());
-  fs.unlinkSync(path.join(cwd, '.soloflow/active/backlog.json'));
+  // scaffold no longer creates backlog.json — already absent.
   const r = run('migrations/migrate-001-backlog-to-frontmatter.js', ['--apply'], { cwd });
   assert.equal(r.ok, true);
   assert.match(r.out, /not present/);

@@ -24,6 +24,12 @@ const { writeAtomic } = require('../lib/fs-atomic');
 
 const MIGRATION_ID = '001-backlog-to-frontmatter';
 
+// Inlined here (not in lib/paths) so the legacy reference is localized
+// to the migrator that needs it.
+function legacyBacklogJsonPath(cwd) {
+  return path.join(paths.activeDir(cwd), 'backlog.json');
+}
+
 function die(msg, code = 1) {
   process.stderr.write(`migrate-${MIGRATION_ID}: ${msg}\n`);
   process.exit(code);
@@ -67,7 +73,7 @@ function writeStateVersion(cwd, version) {
 }
 
 function archiveBacklog(cwd) {
-  const src = paths.backlogJsonPath(cwd);
+  const src = legacyBacklogJsonPath(cwd);
   const dstDir = path.join(paths.archiveDir(cwd), 'legacy');
   fs.mkdirSync(dstDir, { recursive: true });
   const dst = path.join(dstDir, 'backlog.json');
@@ -80,7 +86,7 @@ function main() {
   const apply = args.includes('--apply');
   const cwd = process.cwd();
 
-  const backlogPath = paths.backlogJsonPath(cwd);
+  const backlogPath = legacyBacklogJsonPath(cwd);
   if (!fs.existsSync(backlogPath)) {
     process.stdout.write(`migrate-${MIGRATION_ID}: backlog.json not present; nothing to migrate\n`);
     return;

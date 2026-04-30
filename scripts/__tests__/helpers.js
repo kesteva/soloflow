@@ -32,7 +32,6 @@ function scaffold(root, { withSprint = false, sprintTasks = {} } = {}) {
     'archive/done', 'archive/reviews', 'archive/findings', 'archive/compound', 'archive/roadmaps',
   ];
   for (const d of dirs) fs.mkdirSync(path.join(root, '.soloflow', d), { recursive: true });
-  fs.writeFileSync(path.join(root, '.soloflow/active/backlog.json'), JSON.stringify({ version: 2, tasks: {} }, null, 2));
   if (withSprint) {
     fs.writeFileSync(path.join(root, '.soloflow/active/sprint.json'), JSON.stringify({
       version: 2,

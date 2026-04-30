@@ -7,7 +7,6 @@ function activeDir(cwd = process.cwd()) { return path.join(stateRoot(cwd), 'acti
 function archiveDir(cwd = process.cwd()) { return path.join(stateRoot(cwd), 'archive'); }
 
 function sprintJsonPath(cwd = process.cwd()) { return path.join(activeDir(cwd), 'sprint.json'); }
-function backlogJsonPath(cwd = process.cwd()) { return path.join(activeDir(cwd), 'backlog.json'); }
 function checkpointPath(cwd = process.cwd()) { return path.join(stateRoot(cwd), 'checkpoint.md'); }
 function reviewQueuePath(cwd = process.cwd()) { return path.join(stateRoot(cwd), 'human-review-queue.md'); }
 
@@ -20,7 +19,7 @@ function taskWorktreePath(cwd, taskId) { return path.join(worktreesDir(cwd), tas
 
 module.exports = {
   stateRoot, activeDir, archiveDir,
-  sprintJsonPath, backlogJsonPath, checkpointPath, reviewQueuePath,
+  sprintJsonPath, checkpointPath, reviewQueuePath,
   findingsFilePath,
   worktreesDir, taskWorktreePath,
 };
