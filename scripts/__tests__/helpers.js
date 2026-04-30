@@ -47,4 +47,19 @@ function scaffold(root, { withSprint = false, sprintTasks = {} } = {}) {
   return root;
 }
 
-module.exports = { mktmp, run, scaffold };
+function writePlan(cwd, taskId, fm = {}, opts = {}) {
+  const yaml = require(path.resolve(__dirname, '..', 'lib', 'yaml'));
+  const epic = opts.epic !== undefined ? opts.epic : (fm && fm.epic) || null;
+  const dir = epic
+    ? path.join(cwd, '.soloflow/active/plans', epic)
+    : path.join(cwd, '.soloflow/active/plans');
+  fs.mkdirSync(dir, { recursive: true });
+  const planPath = path.join(dir, `${taskId}-plan.md`);
+  const merged = { id: taskId, ...fm };
+  if (epic && merged.epic === undefined) merged.epic = epic;
+  const body = opts.body || `# ${taskId}\n\nplan body\n`;
+  fs.writeFileSync(planPath, yaml.joinFrontmatter(merged, body));
+  return planPath;
+}
+
+module.exports = { mktmp, run, scaffold, writePlan };
