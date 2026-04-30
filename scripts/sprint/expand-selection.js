@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 'use strict';
 
-// Transitively expand a sprint-scope selection over backlog.json's depends_on
-// graph so the sprint pulls in:
-//   - backward: ready-in-backlog deps that the selected tasks need
-//   - forward:  ready-in-backlog tasks that become unblocked once the
-//               selected tasks complete
+// Transitively expand a sprint-scope selection over plan frontmatter
+// `depends_on` so the sprint pulls in:
+//   - backward: ready plans that the selected tasks need
+//   - forward:  ready plans that become unblocked once the selected tasks
+//               complete
+//
+// "Ready" here means a plan file under .soloflow/active/plans/ whose
+// frontmatter `status` is `ready` (status: deferred is excluded).
 //
 // Usage:
 //   node expand-selection.js --initial TASK-001,TASK-002,...
@@ -22,33 +25,49 @@
 //   }
 //
 // Semantics:
-//   - "ready" tasks are tasks in backlog.json with status === "ready".
-//     status: "deferred" tasks are excluded (matches `--status ready` filter).
-//   - Backward: for each selected T, every dep D where backlog_ready has D
-//     gets pulled in.
-//   - Forward: a backlog-ready T (not selected, depends_on non-empty) is added
+//   - Backward: for each selected T, every dep D where the plan exists with
+//     status:ready gets pulled in.
+//   - Forward: a ready plan T (not selected, depends_on non-empty) is added
 //     iff every dep is either (a) currently in the expanded selection or
-//     (b) absent from backlog_ready (treated as external/done — same heuristic
+//     (b) absent from ready plans (treated as external/done — same heuristic
 //     as scripts/sprint/ready-tasks.js for sprint-internal scheduling).
 //   - Forward never adds an independent task (depends_on === [] / missing) —
 //     that would defeat the user's explicit scope choice.
-//   - Cycles among ready backlog tasks abort with a non-zero exit + JSON error.
+//   - Cycles among ready plans abort with a non-zero exit + JSON error.
 
 const fs = require('fs');
+const path = require('path');
 const { parse, die } = require('../lib/args');
+const yaml = require('../lib/yaml');
 const paths = require('../lib/paths');
 
-function loadBacklog(cwd) {
-  const p = paths.backlogJsonPath(cwd);
-  if (!fs.existsSync(p)) die('expand-selection', `${p} not found`);
-  let state;
-  try { state = JSON.parse(fs.readFileSync(p, 'utf8')); }
-  catch (e) { die('expand-selection', `${p} is not valid JSON: ${e.message}`); }
-  const tasks = state && state.tasks;
-  if (!tasks || typeof tasks !== 'object' || Array.isArray(tasks)) {
-    die('expand-selection', `${p} missing tasks object (expected { tasks: { "TASK-NNN": {...} } })`);
+function loadReadyPlans(cwd) {
+  const plansRoot = path.join(paths.activeDir(cwd), 'plans');
+  const ready = new Map(); // id -> depends_on[]
+  if (!fs.existsSync(plansRoot)) return ready;
+  const stack = [plansRoot];
+  while (stack.length) {
+    const dir = stack.pop();
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+    catch { continue; }
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { stack.push(p); continue; }
+      const m = e.name.match(/^TASK-(\d+)-plan\.md$/);
+      if (!m) continue;
+      const id = `TASK-${m[1]}`;
+      let fm;
+      try {
+        const text = fs.readFileSync(p, 'utf8');
+        fm = yaml.splitFrontmatter(text).frontmatter || {};
+      } catch { continue; }
+      if (fm.status !== 'ready') continue;
+      const deps = Array.isArray(fm.depends_on) ? fm.depends_on.slice() : [];
+      ready.set(id, deps);
+    }
   }
-  return tasks;
+  return ready;
 }
 
 function main() {
@@ -57,19 +76,11 @@ function main() {
   const initial = initialArg.split(',').map((s) => s.trim()).filter(Boolean);
   if (initial.length === 0) die('expand-selection', '--initial is required (comma-separated task IDs)');
 
-  const tasks = loadBacklog(process.cwd());
-
-  const backlogReady = new Map();
-  for (const [id, t] of Object.entries(tasks)) {
-    if (t && t.status === 'ready') {
-      const deps = Array.isArray(t.depends_on) ? t.depends_on.slice() : [];
-      backlogReady.set(id, deps);
-    }
-  }
+  const ready = loadReadyPlans(process.cwd());
 
   for (const id of initial) {
-    if (!backlogReady.has(id)) {
-      die('expand-selection', `initial task ${id} not found in backlog with status: ready`);
+    if (!ready.has(id)) {
+      die('expand-selection', `initial task ${id} not found among ready plans (status: ready)`);
     }
   }
 
@@ -78,12 +89,12 @@ function main() {
   const addedBackward = new Set();
   const addedForward = new Set();
 
-  const maxRounds = backlogReady.size + 1;
+  const maxRounds = ready.size + 1;
   let rounds = 0;
   let changed = true;
   while (changed) {
     if (rounds++ > maxRounds) {
-      const stuck = Array.from(backlogReady.keys()).filter((id) => !selected.has(id));
+      const stuck = Array.from(ready.keys()).filter((id) => !selected.has(id));
       process.stderr.write(JSON.stringify({
         error: 'cycle or fixed-point not reached',
         offending: stuck,
@@ -93,9 +104,9 @@ function main() {
     changed = false;
 
     for (const T of Array.from(selected)) {
-      const deps = backlogReady.get(T) || [];
+      const deps = ready.get(T) || [];
       for (const D of deps) {
-        if (!backlogReady.has(D)) continue;
+        if (!ready.has(D)) continue;
         if (selected.has(D)) continue;
         selected.add(D);
         addedBackward.add(D);
@@ -104,13 +115,13 @@ function main() {
       }
     }
 
-    for (const [T, deps] of backlogReady) {
+    for (const [T, deps] of ready) {
       if (selected.has(T)) continue;
       if (deps.length === 0) continue;
       const inScopeDeps = [];
       let unresolved = false;
       for (const D of deps) {
-        if (!backlogReady.has(D)) continue;
+        if (!ready.has(D)) continue;
         if (selected.has(D)) { inScopeDeps.push(D); continue; }
         unresolved = true;
         break;
