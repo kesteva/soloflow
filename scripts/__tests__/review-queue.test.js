@@ -4,6 +4,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
+const { spawn } = require('child_process');
 const { mktmp, scaffold, run } = require('./helpers');
 
 function queuePath(cwd) { return path.join(cwd, '.soloflow/human-review-queue.md'); }
@@ -162,4 +163,35 @@ test('review-queue: --bucket filter on remove', () => {
   assert.equal(g.pending_count, 1);
   assert.equal(g.buckets.actions, 1);
   assert.equal(g.buckets.decisions, 0);
+});
+
+test('review-queue: concurrent appends serialize through the lock (no entries lost)', async () => {
+  const cwd = scaffold(mktmp());
+  const root = path.resolve(__dirname, '..', '..');
+  const script = path.join(root, 'scripts', 'state', 'review-queue.js');
+
+  function spawnAppend(taskId) {
+    return new Promise((resolve) => {
+      const child = spawn('node', [script, 'append', '--entry-json',
+        JSON.stringify({ task: taskId, type: 'HUMAN_NEEDED', bucket: 'decisions', severity: 'low' })
+      ], { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+      let out = '', err = '';
+      child.stdout.on('data', (b) => { out += b.toString(); });
+      child.stderr.on('data', (b) => { err += b.toString(); });
+      child.on('close', (code) => resolve({ code, out, err }));
+    });
+  }
+
+  const results = await Promise.all([
+    spawnAppend('TASK-001'),
+    spawnAppend('TASK-002'),
+    spawnAppend('TASK-003'),
+    spawnAppend('TASK-004'),
+    spawnAppend('TASK-005'),
+  ]);
+  for (const r of results) assert.equal(r.code, 0);
+
+  const gather = JSON.parse(run('state/review-queue.js', ['gather'], { cwd }).out);
+  assert.equal(gather.pending_count, 5, `expected 5 entries after 5 concurrent appends, got ${gather.pending_count}`);
+  assert.equal(gather.decisions.length, 5);
 });
