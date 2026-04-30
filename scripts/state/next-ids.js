@@ -12,6 +12,7 @@ const fs = require('fs');
 const path = require('path');
 const { parse, die } = require('../lib/args');
 const paths = require('../lib/paths');
+const { withFileLock } = require('../lib/lock');
 
 function globAll(root, re) {
   const out = [];
@@ -93,7 +94,7 @@ function nextSprintId(cwd) {
   return 'SPRINT-' + String(next).padStart(3, '0');
 }
 
-function nextTaskId(cwd) {
+function nextTaskIdSync(cwd) {
   const re = /^TASK-(\d+)-(?:plan|stuck|done)\.md$/;
   const roots = [
     path.join(paths.activeDir(cwd), 'plans'),
@@ -105,6 +106,14 @@ function nextTaskId(cwd) {
   for (const r of roots) files = files.concat(globAll(r, re));
   const max = extractMaxNumericSuffix(files, re);
   return 'TASK-' + String(max + 1).padStart(3, '0');
+}
+
+// Locked variant: serializes the read-and-suggest window so concurrent
+// allocators don't compute the same "next" id at the same instant. The
+// final write-time uniqueness guarantee still relies on the caller's
+// wx/noclobber semantics — the lock just narrows the race window.
+async function nextTaskId(cwd) {
+  return withFileLock(paths.idAllocatorLockPath(cwd), () => nextTaskIdSync(cwd));
 }
 
 function nextFindingId(sprintId, cwd) {
@@ -122,14 +131,14 @@ function nextFindingId(sprintId, cwd) {
   return `FIND-${sprintId}-${max + 1}`;
 }
 
-function main() {
+async function main() {
   const { opts } = parse(process.argv.slice(2));
   const kind = opts.kind;
   if (!kind) die('next-ids', 'usage: next-ids.js --kind {sprint|task|finding [--sprint SPRINT-NNN]}');
   const cwd = process.cwd();
   let result;
   if (kind === 'sprint') result = nextSprintId(cwd);
-  else if (kind === 'task') result = nextTaskId(cwd);
+  else if (kind === 'task') result = await nextTaskId(cwd);
   else if (kind === 'finding') {
     if (!opts.sprint) die('next-ids', '--kind finding requires --sprint SPRINT-NNN');
     result = nextFindingId(opts.sprint, cwd);
@@ -137,4 +146,4 @@ function main() {
   process.stdout.write(result + '\n');
 }
 
-main();
+main().catch((e) => die('next-ids', e.message || String(e)));
