@@ -28,13 +28,11 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/config/resolve.js" \
     --key limits.context_limit_respawn_max \
     --key parallelism.task_refiner_parallel \
     --key phases.clarify --key phases.research \
-    --key parallelism.phase_worktrees \
     --fallback opus --fallback sonnet --fallback sonnet --fallback sonnet \
-    --fallback 3 --fallback true --fallback true --fallback true \
-    --fallback false
+    --fallback 3 --fallback true --fallback true --fallback true
 ```
 
-Lines: 1=task_refiner model · 2=task_decomposer model · 3=idea_extractor model · 4=researcher model · 5=respawn cap · 6=task-refiner parallelism toggle · 7=clarify-phase toggle · 8=research-phase toggle · 9=phase-worktrees toggle.
+Lines: 1=task_refiner model · 2=task_decomposer model · 3=idea_extractor model · 4=researcher model · 5=respawn cap · 6=task-refiner parallelism toggle · 7=clarify-phase toggle · 8=research-phase toggle.
 
 ## Step 0: Initialize
 
@@ -65,56 +63,6 @@ Inspect `$ARGUMENTS` and route into one of three modes (`single-idea`, `multi-id
    - **Refine an existing idea** → Glob `.soloflow/active/ideas/IDEA-*.md` and surface each ID as one option in a follow-up single-select `AskUserQuestion` (`"Which idea?"`, header `"Idea"`). Set `mode = refine`, `target_id = <picked>`. Skip Phase 1; jump to Phase 2.
 
 If the user types `/soloflow:planner --mode=foo` with an unknown mode token, ignore it and fall through to the open prompt above.
-
----
-
-## Step 0.6: Phase worktree setup
-
-Read the resolved `parallelism.phase_worktrees` value (line 9 of the config block above). Default `false`.
-
-Record `MAIN_CWD` = the project root (the orchestrator's current working directory before any chdir below — capture it now via `pwd` so Phase 3 can return here).
-
-**If `phase_worktrees` is `false`** (legacy direct-write flow): set `WORKTREE_ROOT = MAIN_CWD`, set `PHASE_ID = null`, skip the worktree creation. All subsequent `cd "$WORKTREE_ROOT"` directives become no-ops; the directive paragraph below is still safe to follow.
-
-**If `phase_worktrees` is `true`:**
-
-1. Compute the phase id: a UTC timestamp in the form `YYYYMMDDTHHMMSS` (e.g. `20260430T143000`). Filename-safe and unique-per-second across concurrent runs. Capture as `PHASE_ID`.
-
-2. Create the phase worktree via Bash (run from `MAIN_CWD`):
-
-   ```bash
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/state/phase-worktree-setup.js" --phase planning --id "$PHASE_ID"
-   ```
-
-   Parse the JSON output. Capture `worktree` (absolute path) as `WORKTREE_ROOT` and `branch` as `PHASE_BRANCH`.
-
-3. **On setup failure** (non-zero exit, or any `git worktree add` error): print the stderr, then print:
-
-   ```
-   Phase worktree setup failed. Falling back to direct-write flow on the main checkout.
-   ```
-
-   Set `WORKTREE_ROOT = MAIN_CWD`, `PHASE_ID = null`, `PHASE_BRANCH = null`. Continue to Phase 1.
-
-### Working directory directive (applies to all subsequent steps)
-
-Until Phase 3, every Bash command, file write, and subagent spawn MUST operate against `$WORKTREE_ROOT`:
-
-- Shell commands: prefix with `cd "$WORKTREE_ROOT" && ...` or use absolute paths under `$WORKTREE_ROOT`.
-- Git ops: `git -C "$WORKTREE_ROOT" add ...`, `git -C "$WORKTREE_ROOT" commit ...`, etc.
-- Helper scripts: pass `--cwd "$WORKTREE_ROOT"` if the script accepts it; otherwise wrap in `(cd "$WORKTREE_ROOT" && node ... )`.
-- Read/Write/Edit tools: use absolute paths rooted at `$WORKTREE_ROOT/.soloflow/...`, never project-relative `.soloflow/...`.
-
-### Subagent WORKTREE_ROOT directive (applies to every Agent spawn below)
-
-Every Agent tool prompt below MUST prepend this block to its prompt body:
-
-```
-WORKTREE_ROOT: <abs path = $WORKTREE_ROOT>
-All `.soloflow/` reads, greps, and (if you write files) writes MUST use absolute paths under WORKTREE_ROOT, NOT project-relative `.soloflow/...`. Do not chdir; the absolute path is your reference. This holds even when WORKTREE_ROOT == project root (then it is a no-op).
-```
-
-This is required even when `phase_worktrees=false` so the prompt shape stays uniform; in the no-op case `WORKTREE_ROOT` equals the project root and the directive imposes no behavior change.
 
 ---
 
@@ -230,7 +178,7 @@ Use **AskUserQuestion** (single-select):
 
 The tool blocks until the user responds.
 
-- On **Not yet** (or any free-form deferral): print `"Run /soloflow:planner IDEA-{NNN} when you're ready to refine."`, then run **Phase 3** with `cancel = false` and stop.
+- On **Not yet** (or any free-form deferral): print `"Run /soloflow:planner IDEA-{NNN} when you're ready to refine."` and stop.
 - On **Refine now**: set `to_refine = [IDEA-{NNN}]`, `target_id = IDEA-{NNN}`. Continue to Phase 2.
 
 ---
@@ -456,9 +404,9 @@ The tool blocks until the user responds.
     /soloflow:planner IDEA-{first}
     /soloflow:planner IDEA-{...}
   ```
-  Then run **Phase 3** with `cancel = false` and stop.
+  Then stop.
 - **Refine all** → set `to_refine = [every newly created IDEA-{NNN}]`. Continue to Phase 2.
-- **Refine some** → use a follow-up free-form `AskUserQuestion` (`"Which IDEA IDs? (e.g., 'IDEA-007, IDEA-009')"`). Parse the response into a list of IDs intersected with the IDs created in this run; that becomes `to_refine`. If empty, print the deferred-commands hint, then run **Phase 3** with `cancel = false`, then stop. Otherwise continue to Phase 2.
+- **Refine some** → use a follow-up free-form `AskUserQuestion` (`"Which IDEA IDs? (e.g., 'IDEA-007, IDEA-009')"`). Parse the response into a list of IDs intersected with the IDs created in this run; that becomes `to_refine`. If empty, print the deferred-commands hint and stop. Otherwise continue to Phase 2.
 
 ---
 
@@ -638,9 +586,11 @@ Skip silently if not in a git repo or `.soloflow/` is gitignored.
 Planning complete for {target_id}.
 - Tasks created: {count} (TASK-{NNN}..TASK-{NNN})
 - Ready: {count} | Deferred: {count}
+
+Next step: /soloflow:sprint
 ```
 
-Then run **Phase 3** with `cancel = false`. After Phase 3 returns, print `Next step: /soloflow:sprint` and stop.
+Stop.
 
 ## Phase 2 — multi-IDEA parallel path
 
@@ -681,7 +631,7 @@ Runs only when `to_refine.length >= 2` AND `parallelism.task_refiner_parallel ==
    - **Approve all** → `chore: queue TASK-{first}..TASK-{last} from refinement batch` (cite IDEA range too if useful).
    - **Approve subset** → same, plus a `deferred: TASK-X, TASK-Y` line in the body.
    - **Reject all** → `chore: reject batch plans` (the `git rm`s are already staged).
-   - **Cancel** → no commit. Run **Phase 3** with `cancel = true`, then stop.
+   - **Cancel** → no commit. Stop.
 
 10. **Archive source IDEAs.** For every IDEA in the batch whose plans were not "Reject all"-deleted:
     - `mkdir -p .soloflow/archive/ideas`.
@@ -695,102 +645,9 @@ Runs only when `to_refine.length >= 2` AND `parallelism.task_refiner_parallel ==
     Refined {N} IDEAs in parallel.
     - Tasks created: {count} (TASK-{first}..TASK-{last})
     - Approved: {ready_count} | Deferred: {deferred_count} | Rejected: {rejected_count}
+
+    Next step: /soloflow:sprint
     ```
-
-    Then run **Phase 3** with `cancel = (user picked "Cancel" at Step 8)`. After Phase 3 returns, print `Next step: /soloflow:sprint` and stop.
-
----
-
-# Phase 3 — Merge phase branch (or park on cancel)
-
-Skip this entire phase if `PHASE_ID` is `null` (i.e. `phase_worktrees=false` or Phase 0 setup failed). The work already landed on the main checkout.
-
-Otherwise, takes one input: `cancel` (boolean). Exit points that route here:
-
-- Phase 1a Step 1a.6 "Not yet" → `cancel = false`.
-- Phase 1b Step 1b.7 "Don't refine now", or "Refine some" with empty selection → `cancel = false`.
-- Phase 2 single-IDEA Step 2.6 (Approve all / Approve subset / Reject) → `cancel = false`.
-- Phase 2 multi-IDEA Step 11 → `cancel = (Step 8 answer === "Cancel")`.
-
-Operate from `MAIN_CWD` for this entire phase (chdir back from `WORKTREE_ROOT`).
-
-### Step 3.1: Cancel path (park branch, preserve worktree)
-
-If `cancel === true`:
-
-1. Rename the phase branch so the next `settle-phase.js` sweep won't try to merge it:
-
-   ```bash
-   git -C "$MAIN_CWD" branch -m "$PHASE_BRANCH" "phase-cancelled/planning-$PHASE_ID"
-   ```
-
-2. Print:
-
-   ```
-   Phase worktree preserved at .soloflow-worktrees/planning-{PHASE_ID}/.
-   Branch parked at phase-cancelled/planning-{PHASE_ID}.
-   Inspect or resume manually; remove with:
-       git -C . worktree remove --force .soloflow-worktrees/planning-{PHASE_ID}
-       git -C . branch -D phase-cancelled/planning-{PHASE_ID}
-   ```
-
-3. Stop. Do NOT run the merge step.
-
-### Step 3.2: Merge path
-
-If `cancel === false`:
-
-1. Verify the main checkout is on the base branch (it should be — we never chdir'd it). Run via Bash:
-
-   ```bash
-   git -C "$MAIN_CWD" symbolic-ref --quiet --short HEAD
-   ```
-
-   Capture as `CURRENT_BRANCH`. Compare against the `base_branch` Phase 0 captured (or, if not captured, the branch that was current when Phase 0 ran). If they differ, do NOT attempt the merge — print:
-
-   ```
-   Cannot merge phase branch: main checkout is now on {CURRENT_BRANCH} but the phase
-   branched from {BASE_BRANCH}. Phase worktree and branch preserved.
-   To merge manually: git checkout {BASE_BRANCH} && git merge phase-ready/planning-{PHASE_ID}
-   ```
-
-   Then stop.
-
-2. Run the merge:
-
-   ```bash
-   (cd "$MAIN_CWD" && node "${CLAUDE_PLUGIN_ROOT}/scripts/state/phase-worktree-merge.js" --phase planning --id "$PHASE_ID")
-   ```
-
-   Parse the JSON output.
-
-3. **On success** (`merge: "ff"` or `merge: "non-ff"`): print one line:
-
-   ```
-   Phase planning-{PHASE_ID} merged into {base_branch} ({head_sha}).
-   ```
-
-4. **On conflict** (exit code 2, `merge: "conflict"`): the merge script has already parked the branch under `phase-conflicted/planning-{PHASE_ID}` and preserved the worktree. File a `human-review-queue.md` actions item via the `append` subcommand:
-
-   ```bash
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" append --entry-json "$(jq -n \
-     --arg id "$PHASE_ID" \
-     '{bucket:"actions", type:"planning_phase_merge_conflict", level:"high", \
-       action:("Resolve merge conflict on phase-conflicted/planning-" + $id + "; then run: git -C . worktree remove --force .soloflow-worktrees/planning-" + $id + " && git -C . branch -D phase-conflicted/planning-" + $id), \
-       context:("Planner phase " + $id + " could not auto-merge into the base branch. Worktree preserved at .soloflow-worktrees/planning-" + $id + "/ for inspection.")}')"
-   ```
-
-   If `jq` is not available, build the JSON inline with the orchestrator's string interpolation and pass it via `--entry-json '{...}'` directly.
-
-   Print:
-
-   ```
-   Phase planning-{PHASE_ID} could not auto-merge. Branch parked at
-   phase-conflicted/planning-{PHASE_ID}; worktree preserved for inspection.
-   Filed actions item in human-review-queue.md.
-   ```
-
-5. **On any other failure** (exit code 1, removeWorktree failure, etc.): print the captured error and the worktree path; stop without further action.
 
 ---
 
