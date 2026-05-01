@@ -177,8 +177,6 @@ The list of existing epic slugs is also provided so you can read EPIC bodies for
 
    AC and implementation template must be co-authored — do not write the AC, then the template, then ship without re-checking the AC against the template. Trigger conservatively: this rule applies only when the grep's literal pattern would plausibly appear in code/tests/fixtures the executor writes, not when it targets a flag/import/legacy symbol the template is removing.
 
-   This rule exists because two consecutive sprints shipped structurally impossible ACs of this exact shape — FIND-SPRINT-030-7 (line-budget wording vs plan-prescribed growth) and FIND-SPRINT-032-5 (TASK-164 verifier: AC1 expected 0 matches for "coming soon" while the template prescribed `assertNotVisible: text: "coming soon"`). 5g/5i did not catch them because both rules look at the tree as it is, not as it will be after execution. If a third AC-vs-template mismatch surfaces in a different family, escalate to a structural planner contract (e.g. emit AC + template as a single co-authored unit with a script-enforced consistency check).
-
 6. **Answer three critical questions per plan:**
    - Hardest decision and why this approach was chosen
    - Rejected alternatives and what would change your mind
