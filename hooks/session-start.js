@@ -29,7 +29,8 @@ function readUpdateLine() {
     if (!fs.existsSync(cachePath)) return null;
     const cache = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
     if (!cache || !cache.update_available) return null;
-    return `**Update:** SoloFlow v${cache.current_version} → v${cache.latest_version} available — run \`/soloflow:update\``;
+    const cmd = cache.channel === 'dev' ? '/soloflow-dev:update' : '/soloflow:update';
+    return `**Update:** SoloFlow v${cache.current_version} → v${cache.latest_version} available — run \`${cmd}\``;
   } catch (e) {
     return null;
   }

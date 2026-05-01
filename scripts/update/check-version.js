@@ -1,15 +1,17 @@
 #!/usr/bin/env node
 'use strict';
 
-// Check whether a newer SoloFlow version is published on main.
+// Check whether a newer SoloFlow version is published on the install's channel.
 //
-// Reads the locally-installed version from the plugin manifest (or the
-// VERSION stamp left by scripts/install.sh), fetches the same field from
-// `main` on GitHub, and writes the comparison to a global cache so the
-// statusline and SessionStart hook can render an "update available" hint.
+// Reads the locally-installed manifest (or the VERSION stamp left by
+// scripts/install.sh), determines the channel from the manifest `name`
+// field (`soloflow-dev` → dev branch, else → main), fetches the same
+// field from that branch on GitHub, and writes the comparison to a global
+// cache so the statusline and SessionStart hook can render an "update
+// available" hint.
 //
 // Cache: ~/.cache/soloflow/update-check.json
-// Schema: { checked_at, current_version, latest_version, update_available, source }
+// Schema: { checked_at, current_version, latest_version, update_available, channel, source }
 //
 // Usage:
 //   node check-version.js               # cache-aware (no fetch if fresh)
@@ -25,31 +27,40 @@ const path = require('path');
 const os = require('os');
 const https = require('https');
 
-const REMOTE_URL = 'https://raw.githubusercontent.com/kesteva/soloflow/main/.claude-plugin/plugin.json';
+const REMOTE_URL_BASE = 'https://raw.githubusercontent.com/kesteva/soloflow';
+const REMOTE_URL_SUFFIX = '/.claude-plugin/plugin.json';
 const CACHE_DIR = path.join(os.homedir(), '.cache', 'soloflow');
 const CACHE_PATH = path.join(CACHE_DIR, 'update-check.json');
 const FETCH_TIMEOUT_MS = 2000;
 const DEFAULT_INTERVAL_HOURS = 24;
 
+function channelForName(name) {
+  return name === 'soloflow-dev' ? 'dev' : 'main';
+}
+
+function remoteUrlForChannel(channel) {
+  return `${REMOTE_URL_BASE}/${channel}${REMOTE_URL_SUFFIX}`;
+}
+
 function readJson(p) {
   try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) { return null; }
 }
 
-function readLocalVersion() {
+function readLocalManifest() {
   const root = process.env.CLAUDE_PLUGIN_ROOT;
   if (root) {
     const manifest = readJson(path.join(root, '.claude-plugin', 'plugin.json'));
-    if (manifest && manifest.version) return manifest.version;
+    if (manifest && manifest.version) return { version: manifest.version, name: manifest.name || null };
     try {
       const stamp = fs.readFileSync(path.join(root, 'VERSION'), 'utf8').trim();
-      if (stamp) return stamp;
+      if (stamp) return { version: stamp, name: null };
     } catch (e) { /* fall through */ }
   }
   // Repo-local fallback (running from a checkout / dev path).
   let dir = path.resolve(__dirname, '..');
   for (let i = 0; i < 5; i++) {
     const m = readJson(path.join(dir, '.claude-plugin', 'plugin.json'));
-    if (m && m.version) return m.version;
+    if (m && m.version) return { version: m.version, name: m.name || null };
     dir = path.dirname(dir);
   }
   return null;
@@ -96,9 +107,9 @@ function compareSemver(a, b) {
   return 0;
 }
 
-function fetchRemoteVersion() {
+function fetchRemoteVersion(remoteUrl) {
   return new Promise((resolve) => {
-    const req = https.get(REMOTE_URL, {
+    const req = https.get(remoteUrl, {
       headers: { 'User-Agent': 'soloflow-update-check' },
       timeout: FETCH_TIMEOUT_MS,
     }, (res) => {
@@ -140,23 +151,27 @@ async function main() {
   }
   const intervalHours = resolveIntervalHours(intervalOverride);
 
-  const current = readLocalVersion();
-  if (!current) { process.stdout.write('{}\n'); return; }
+  const local = readLocalManifest();
+  if (!local) { process.stdout.write('{}\n'); return; }
+  const current = local.version;
+  const channel = channelForName(local.name);
+  const remoteUrl = remoteUrlForChannel(channel);
 
   const cached = readJson(CACHE_PATH);
   const fresh = cached && typeof cached.checked_at === 'number'
     && (Date.now() - cached.checked_at * 1000) < intervalHours * 3600 * 1000;
 
-  if (!force && fresh && cached.current_version === current) {
+  if (!force && fresh && cached.current_version === current && cached.channel === channel) {
     process.stdout.write(JSON.stringify(cached) + '\n');
     return;
   }
 
-  const latest = await fetchRemoteVersion();
+  const latest = await fetchRemoteVersion(remoteUrl);
   if (!latest) {
     // Network failed — preserve prior cache, but if a cache exists for the
-    // same current version, surface it so callers still get a useful answer.
-    if (cached && cached.current_version === current) {
+    // same current version + channel, surface it so callers still get a
+    // useful answer.
+    if (cached && cached.current_version === current && cached.channel === channel) {
       process.stdout.write(JSON.stringify(cached) + '\n');
     } else {
       process.stdout.write('{}\n');
@@ -169,7 +184,8 @@ async function main() {
     current_version: current,
     latest_version: latest,
     update_available: compareSemver(latest, current) > 0,
-    source: REMOTE_URL,
+    channel,
+    source: remoteUrl,
   };
   writeCache(payload);
   process.stdout.write(JSON.stringify(payload) + '\n');

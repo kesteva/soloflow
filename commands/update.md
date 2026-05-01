@@ -28,6 +28,7 @@ Parse the JSON line on stdout. Fields you care about:
 - `current_version`
 - `latest_version`
 - `update_available`
+- `channel` — `"dev"` (this install is on the `soloflow-dev` channel) or `"main"` (the public `soloflow` channel). Drives the install command in Step 5.
 
 If stdout is empty (`{}`) or missing fields, treat it as "could not check"
 and remember a single warning line:
@@ -126,7 +127,7 @@ SoloFlow v<current_version> → v<latest_version> is available.
 Then, **best-effort**, fetch a CHANGELOG snippet for the new version:
 
 ```bash
-curl -fsS --max-time 3 https://raw.githubusercontent.com/kesteva/soloflow/main/CHANGELOG.md \
+curl -fsS --max-time 3 "https://raw.githubusercontent.com/kesteva/soloflow/${channel:-main}/CHANGELOG.md" \
   | awk -v v="<latest_version>" '
       $0 ~ "^## \\[" v "\\]" { p=1; print; next }
       p && /^## \[/ { exit }
@@ -139,12 +140,18 @@ the curl fails or the snippet is empty, skip this section silently.
 
 ## Step 5: Show the right install command
 
-**Plugin install** (no `.claude/soloflow-install/VERSION` present):
+**Plugin install** (no `.claude/soloflow-install/VERSION` present): use the
+`channel` field from Step 1 to pick the right install identifier:
+
+- `channel === "dev"` → `/plugin update soloflow-dev@soloflow`
+- otherwise → `/plugin update soloflow@soloflow`
+
+Print:
 
 ```
 To update, run inside Claude Code:
 
-    /plugin update soloflow@soloflow
+    /plugin update <soloflow|soloflow-dev>@soloflow
 
 (Claude can't invoke `/plugin` commands for you — please type the command
 yourself.)
