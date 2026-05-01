@@ -4,10 +4,23 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-function stateRoot(cwd = process.cwd()) { return path.join(cwd, '.soloflow'); }
-function activeDir(cwd = process.cwd()) { return path.join(stateRoot(cwd), 'active'); }
-function archiveDir(cwd = process.cwd()) { return path.join(stateRoot(cwd), 'archive'); }
-function sprintsDir(cwd = process.cwd()) { return path.join(activeDir(cwd), 'sprints'); }
+// SOLOFLOW_ROOT lets a parent process redirect every state read/write to a
+// different repo root — used by the planner orchestrator to point all
+// helpers at a phase worktree instead of the main checkout. When unset (the
+// common case) we fall back to process.cwd() and behavior is unchanged.
+//
+// Phase-worktree machinery (phaseWorktreesDir, phaseWorktreePath) and
+// shared lock paths (commonGitDir, claimsLockPath, idAllocatorLockPath) are
+// deliberately NOT routed through this — they must anchor at the main repo
+// (worktrees-of-worktrees would recurse) or auto-resolve via git
+// (rev-parse --git-common-dir already returns the right shared path from
+// inside any linked worktree).
+function stateRootCwd() { return process.env.SOLOFLOW_ROOT || process.cwd(); }
+
+function stateRoot(cwd = stateRootCwd()) { return path.join(cwd, '.soloflow'); }
+function activeDir(cwd = stateRootCwd()) { return path.join(stateRoot(cwd), 'active'); }
+function archiveDir(cwd = stateRootCwd()) { return path.join(stateRoot(cwd), 'archive'); }
+function sprintsDir(cwd = stateRootCwd()) { return path.join(activeDir(cwd), 'sprints'); }
 
 function sprintDirPath(cwd, sprintId) {
   if (!sprintId) throw new Error('sprintDirPath requires a sprintId');
@@ -19,7 +32,7 @@ function sprintJsonPath(cwd, sprintId) {
 }
 
 // Pre-PR-3 layout. Used only by migrator-002 and the session-start banner.
-function legacySprintJsonPath(cwd = process.cwd()) {
+function legacySprintJsonPath(cwd = stateRootCwd()) {
   return path.join(activeDir(cwd), 'sprint.json');
 }
 
@@ -28,7 +41,7 @@ function legacySprintJsonPath(cwd = process.cwd()) {
 // the most recently-numbered sprint is first. Each entry's id is taken
 // from the directory name (canonical) — sprint.json's `sprint.id` is
 // expected to match but the directory name wins on disagreement.
-function findActiveSprintIds(cwd = process.cwd()) {
+function findActiveSprintIds(cwd = stateRootCwd()) {
   const root = sprintsDir(cwd);
   if (!fs.existsSync(root)) return [];
   const out = [];
@@ -49,14 +62,14 @@ function findActiveSprintIds(cwd = process.cwd()) {
   return out;
 }
 
-function checkpointPath(cwd = process.cwd()) { return path.join(stateRoot(cwd), 'checkpoint.md'); }
-function reviewQueuePath(cwd = process.cwd()) { return path.join(stateRoot(cwd), 'human-review-queue.md'); }
+function checkpointPath(cwd = stateRootCwd()) { return path.join(stateRoot(cwd), 'checkpoint.md'); }
+function reviewQueuePath(cwd = stateRootCwd()) { return path.join(stateRoot(cwd), 'human-review-queue.md'); }
 
-function findingsFilePath(sprintId, cwd = process.cwd()) {
+function findingsFilePath(sprintId, cwd = stateRootCwd()) {
   return path.join(activeDir(cwd), 'findings', `${sprintId}-findings.md`);
 }
 
-function worktreesDir(cwd = process.cwd()) { return path.join(stateRoot(cwd), 'worktrees'); }
+function worktreesDir(cwd = stateRootCwd()) { return path.join(stateRoot(cwd), 'worktrees'); }
 function taskWorktreePath(cwd, taskId) { return path.join(worktreesDir(cwd), taskId); }
 
 // Phase worktrees live OUTSIDE .soloflow/ to avoid recursion (a worktree
@@ -93,6 +106,7 @@ function idAllocatorLockPath(cwd = process.cwd()) {
 }
 
 module.exports = {
+  stateRootCwd,
   stateRoot, activeDir, archiveDir,
   sprintsDir, sprintDirPath, sprintJsonPath, legacySprintJsonPath, findActiveSprintIds,
   checkpointPath, reviewQueuePath,
