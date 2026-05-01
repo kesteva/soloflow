@@ -55,9 +55,28 @@ Mapping used in this command:
 
 ## Step 1: Cruft detection + resolution
 
-Skip this step entirely if `$ARGUMENTS` contains `--skip-cruft` or any of the bucket-scope flags.
+Skip this step entirely (no prompt, no question) if `$ARGUMENTS` contains `--skip-cruft` or any of the bucket-scope flags. The flag IS the answer.
 
-Read `docs/CRUFT-CLEANUP.md` via the Read tool and follow its procedure to completion. Use `review-queue` as the commit-message `<command>` label. The procedure updates the `cruft_resolved` counter initialized in Step 0.
+Otherwise, before running the cruft procedure, ask the user whether they want to run it:
+
+1. Detect in-flight phases. Run via Bash:
+
+   ```bash
+   ls .soloflow-worktrees 2>/dev/null | grep -E '^(execution|planning|compound|clarify)-' || true
+   ```
+
+   Parse the output into a list of `<phase>-<id>` strings. If empty, no phases are in flight.
+
+2. Use **AskUserQuestion** with one question:
+   - **Question:** `"Run cruft cleanup as Step 1? It sweeps .soloflow/ for orphan plans, ghost sprint entries, stale stuck files, mid-commit settles, empty epics, malformed queue entries, completed-in-backlog, untracked plans, and stale ideas. Most items are auto-resolvable."` — if the in-flight list is non-empty, append a second sentence: `"<N> phase worktree(s) in flight: <comma-separated list>. Cruft may transiently flag in-progress state from these phases (mid-commit settle, untracked plans being written) — skipping is safer until they complete."`
+   - **Header:** `"Run cruft?"`
+   - **Options:**
+     1. `"Yes — run cruft"` *(label `(Recommended)` when no phases are in flight)*
+     2. `"Skip cruft"` *(label `(Recommended)` when one or more phases ARE in flight)*
+
+3. On **Skip cruft**: leave `cruft_resolved = 0`, print `"Skipping cruft cleanup."`, and proceed to Step 2.
+
+4. On **Yes — run cruft**: read `docs/CRUFT-CLEANUP.md` via the Read tool and follow its procedure to completion. Use `review-queue` as the commit-message `<command>` label. The procedure updates the `cruft_resolved` counter initialized in Step 0.
 
 For the same cruft sweep without the rest of this command's triage, see `/soloflow:housekeeping`.
 
