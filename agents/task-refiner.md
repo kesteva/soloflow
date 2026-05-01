@@ -37,7 +37,7 @@ The list of existing epic slugs is also provided so you can read EPIC bodies for
 - Skip step 5a (epic assignment) — the skeleton's `epic` is fixed.
 - Inherit `depends_on` from `TASK_SKELETON.depends_on` verbatim. Do not add or remove dependencies.
 - Inherit `files_owned_hint` / `files_readonly_hint` as your starting `files_owned` / `files_readonly` lists. You MAY *expand* them per rules 5d (sweep grep) and 5g (grep-preflight) when those rules trigger; you may NOT remove a hint, swap it across the boundary in a way that overlaps a sibling's hints, or claim a path another sibling hints as `files_owned`.
-- Run rules 5b (test strategy), 5c (test_strategy ↔ files_owned parity), 5d (sweep grep), 5e (acceptance_criteria ↔ files_owned parity), 5f (prerequisites — the skeleton's `is_external_cli_step` flag is your trigger), 5g (grep-preflight), 5h (path existence), 5i (probe-and-reconcile file-content claims) on your single slot only.
+- Run rules 5b (test strategy), 5c (test_strategy ↔ files_owned parity), 5d (sweep grep), 5e (acceptance_criteria ↔ files_owned parity), 5f (prerequisites — the skeleton's `is_external_cli_step` flag is your trigger), 5g (grep-preflight), 5h (path existence), 5i (probe-and-reconcile file-content claims), 5j (AC ↔ implementation-template self-consistency) on your single slot only.
 - Run step 6 (three critical questions per plan) on your single slot.
 - Skip step 7 (scope-reduction check) — that is the decomposer's job; you only see one slot, so you cannot evaluate IDEA-wide coverage.
 - Output ONE TASK-NNN-plan.md block. Do NOT emit `EPIC-{slug}.md` blocks — the orchestrator generates those from the decomposer's `new_epics`.
@@ -166,6 +166,18 @@ The list of existing epic slugs is also provided so you can read EPIC bodies for
    Trigger conservatively. Generic statements like "tests still pass", "the build is green", or "lint is clean" are runtime assertions, not file-content claims, and don't require pre-flight. This rule applies in both whole-IDEA and detail mode.
 
    This rule exists because stale plan-time claims have shipped repeatedly (5 cases in SPRINT-029, 3 of which were the same recurring false-negative class — a project's test-file convention that the planner mis-asserted). The cost is paid once during refinement; the alternative is the executor either silently no-op'ing a satisfied AC or chasing a false claim. Embedding verbatim probe output was considered and rejected to keep plan bodies lean.
+
+5j. **AC ↔ implementation-template self-consistency.** Rules 5g and 5i probe the *current* tree. This rule probes the *post-execution* tree, proxied by the plan body you are about to emit. For every AC whose `verification` is a grep — a literal pattern, a `grep -rn '<pattern>'`, or any "0 matches", "no occurrences", "matches outside" phrasing — apply the same grep to the **plan body you're about to write**: the rendered Implementation Steps and any inline code blocks, snippets, file diffs, or assertion strings (e.g. `assertNotVisible: text: "X"`, `expect(...).toBe("X")`, `// "X"` comments) the executor will faithfully reproduce on disk.
+
+   If the grep matches content the executor will write, the AC is structurally unsatisfiable as written. Resolve before emitting the plan via one of:
+
+   - **(a) Scope the AC.** Add `--exclude`, `--include`, restrict to a directory, or exclude the file the assertion lives in (e.g. `grep -rn 'coming soon' src/ --exclude='*.test.tsx' --exclude-dir='maestro'`).
+   - **(b) Rewrite the template to avoid the literal.** Use a constant, rename, or move the literal to a fixture/data file the AC excludes.
+   - **(c) Drop the AC.** If the implementation template already encodes the same invariant in a stronger form (e.g. a Maestro `assertNotVisible` is already a runtime check), the grep AC is redundant.
+
+   AC and implementation template must be co-authored — do not write the AC, then the template, then ship without re-checking the AC against the template. Trigger conservatively: this rule applies only when the grep's literal pattern would plausibly appear in code/tests/fixtures the executor writes, not when it targets a flag/import/legacy symbol the template is removing.
+
+   This rule exists because two consecutive sprints shipped structurally impossible ACs of this exact shape — FIND-SPRINT-030-7 (line-budget wording vs plan-prescribed growth) and FIND-SPRINT-032-5 (TASK-164 verifier: AC1 expected 0 matches for "coming soon" while the template prescribed `assertNotVisible: text: "coming soon"`). 5g/5i did not catch them because both rules look at the tree as it is, not as it will be after execution. If a third AC-vs-template mismatch surfaces in a different family, escalate to a structural planner contract (e.g. emit AC + template as a single co-authored unit with a script-enforced consistency check).
 
 6. **Answer three critical questions per plan:**
    - Hardest decision and why this approach was chosen
