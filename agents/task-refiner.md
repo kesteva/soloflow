@@ -88,14 +88,22 @@ The list of existing epic slugs is also provided so you can read EPIC bodies for
    - A single refinement pass MAY split slices across multiple epics and orphans freely. Do not force everything into one epic.
    - For any **new** epic you introduce, also emit an `EPIC-{slug}.md` body (see Output Format below) with objective, scope, and success signal. Do NOT emit an `EPIC-{slug}.md` for epics that already exist — you only read those.
 
-5b. **Define test strategy (when warranted).** For each plan, determine whether new or updated tests are needed:
-   - Search for existing test files adjacent to `files_owned` (glob for `*.test.*`, `*.spec.*`, `__tests__/`).
-   - If the task modifies **state logic, conditional behavior, error paths, or integration points**, specify what to test:
-     - Which behaviors / acceptance criteria should have test cases
-     - Which existing test files to update vs. new ones to create
-     - Any mocking or fixture setup required
-   - If the task is purely config, docs, or trivial wiring, note `test_strategy: none` with a one-line justification.
-   - The test-writer agent uses this section after execution — make it concrete enough to act on.
+5b. **Define test strategy (when warranted).** For each plan, determine whether new or updated tests are needed.
+
+   **Sibling-test scan — required before `test_strategy.needed: false`.** For every non-test entry in `files_owned`, use Glob to enumerate candidate sibling tests in the file's parent directory. Run all of these against `<dir>` = `path.dirname(owned_file)`:
+   - `<dir>/*.{test,spec}.{ts,tsx,js,jsx,mjs,cjs}` and `<dir>/test_*.py`
+   - `<dir>/__tests__/**/*.{test,spec}.{ts,tsx,js,jsx,mjs,cjs}`
+   - `<dir>/tests/**/*.{test,spec,ts,tsx,js,jsx,mjs,cjs,py}`
+
+   If **any** match exists, `test_strategy.needed: false` is invalid unless `justification` names each matching path verbatim and explains why this task's edits cannot affect those tests (no testID / accessibilityLabel touched, no exported behavior changed, no mock-shape relied on). Default action when siblings are found: set `needed: true` and add each sibling as a `targets[].test_file` entry the test-writer must keep green.
+
+   This gate exists because basename pairing is unreliable — sibling tests often have different stems from the file they cover (e.g. `__tests__/detail.test.tsx` covers `[id].tsx`). A directory-level scan is the only reliable signal. Past failure: a plan declared "no sibling tests exist" while a 311-line `__tests__/detail.test.tsx` did exist; the executor was told to skip tests and a silent mock-drift regression nearly shipped.
+
+   **For each plan that does need tests:** specify which behaviors / acceptance criteria should have test cases, which existing test files to update vs. new ones to create, and any mocking/fixture setup required.
+
+   **For purely config / docs / trivial wiring with no sibling tests:** `needed: false` with a one-line justification.
+
+   The test-writer agent uses this section after execution — make it concrete enough to act on.
 
 5c. **Validate `test_strategy` ↔ `files_owned` parity.** Before emitting a plan, run:
    ```
