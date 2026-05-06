@@ -341,7 +341,7 @@ slices:
 open_questions: []
 assumptions: []
 research_recommendation: not_needed
-research_rationale: "Braindump capture — run /soloflow:planner IDEA-{NNN} for full extraction"
+research_rationale: "Braindump capture — research can be requested before refinement"
 ---
 
 # {item text}
@@ -452,7 +452,49 @@ The tool blocks until the user responds.
   ```
   Then run **Phase 3** with `cancel = false` and stop.
 - **Refine all** → set `to_refine = [every newly created IDEA-{NNN}]`. Continue to Phase 2.
-- **Refine some** → use a follow-up free-form `AskUserQuestion` (`"Which IDEA IDs? (e.g., 'IDEA-007, IDEA-009')"`). Parse the response into a list of IDs intersected with the IDs created in this run; that becomes `to_refine`. If empty, print the deferred-commands hint, then run **Phase 3** with `cancel = false`, then stop. Otherwise continue to Phase 2.
+- **Refine some** → use a follow-up free-form `AskUserQuestion` (`"Which IDEA IDs? (e.g., 'IDEA-007, IDEA-009')"`). Parse the response into a list of IDs intersected with the IDs created in this run; that becomes `to_refine`. If empty, print the deferred-commands hint, then run **Phase 3** with `cancel = false`, then stop. Otherwise continue to Step 1b.8.
+
+## Step 1b.8: Offer research before refinement (optional)
+
+Mirrors Phase 1a Step 1a.3's research opt-in for the braindump batch: now that `to_refine` is known, ask whether to run the `shadow-researcher` agent on those IDEAs before Phase 2 picks them up. Phase 2's per-IDEA setup already auto-detects `.soloflow/active/research/{ID}-research.md` and threads it into the decomposer (single-IDEA Step 2.1 step 3 / multi-IDEA step 1), so writing the report is sufficient — no other wiring is required.
+
+**Skip this entire step** (fall straight through to Phase 2) if either:
+- `to_refine` is empty (the user picked `Not yet`, or `Refine some` with an empty selection — those branches already routed to Phase 3 / stop above).
+- The resolved `phases.research` value (line 8 of the config block at the top of this command) is `false`. Matches Step 1a.3's behavior of omitting `Approve + Research` when research is globally disabled.
+
+Otherwise:
+
+1. Use **AskUserQuestion** (single-select):
+   - `question`: `"Research the {N} IDEA(s) about to be refined? Research runs the shadow-researcher agent per IDEA and writes a report Phase 2 will consume."`
+   - `header`: `"Research"`
+   - `options`:
+     1. `"Skip research (Recommended)"` — proceed straight to Phase 2 with no research files. Braindump items are typically too thin to benefit from external research; this matches the historical default.
+     2. `"Research all"` — run shadow-researcher on every IDEA in `to_refine`.
+     3. `"Research some"` — pick a subset.
+
+   The tool blocks until the user responds.
+
+2. Resolve `to_research`:
+   - **Skip research** → `to_research = []`.
+   - **Research all** → `to_research = to_refine`.
+   - **Research some** → follow-up free-form `AskUserQuestion` (`"Which IDEA IDs? (e.g., 'IDEA-007, IDEA-009')"`). Parse the response into a list of IDs intersected with `to_refine`. Empty → `to_research = []`. Otherwise → `to_research = <parsed set>`.
+
+3. If `to_research` is empty, print `"Research skipped."` and continue to Phase 2.
+
+4. Otherwise, **run research in parallel.** Issue **one message containing one `Agent` tool call per IDEA** in `to_research` (mirrors the parallel fan-out pattern used by Phase 2). Each call:
+   - `subagent_type: "shadow-researcher"`
+   - `model: <resolved researcher>` (line 4 of the config block)
+   - Prompt body, identical to the Step 1a.4 contract:
+     - The full IDEA file content for that ID (read from `.soloflow/active/ideas/{ID}.md`, prefixed with `WORKTREE_ROOT/` per the working-directory directive in Step 0.6).
+     - Instruction: `"Research this idea. For each slice, search for existing libraries, best practices, API docs, and prior art. For each open question, attempt to find an external answer. For each low/medium-confidence assumption, search for evidence. Output a structured research report."`
+
+   Wait for all calls to return.
+
+5. **Write reports.** For each agent output, write to `.soloflow/active/research/{IDEA_ID}-research.md` (creating the `research/` directory if missing). Use the worktree-prefixed path.
+
+6. **Commit reports.** Stage only the research file paths written. If `git diff --cached --quiet` reports no staged changes, skip. Otherwise commit `chore: research {first-id}..{last-id} from braindump` (single id form when only one IDEA was researched). Skip silently if not in a git repo or `.soloflow/` is gitignored.
+
+7. Print `"Research complete: IDEA-{NNN}{, IDEA-{MMM}...}"` and continue to Phase 2.
 
 ---
 
