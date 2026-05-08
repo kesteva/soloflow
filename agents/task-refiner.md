@@ -105,15 +105,11 @@ The list of existing epic slugs is also provided so you can read EPIC bodies for
 
    The test-writer agent uses this section after execution — make it concrete enough to act on.
 
-5c. **Validate `test_strategy` ↔ `files_owned` parity.** Before emitting a plan, run:
-   ```
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/refiner/ac-parity.js" --plan <plan-path>
-   ```
-   The script reports `test_targets_missing` — any `test_strategy.targets[].test_file` not in `files_owned`. For each:
+5c. **Validate `test_strategy` ↔ `files_owned` parity (visual).** Before emitting the plan, walk every `test_strategy.targets[].test_file` and confirm it appears in `files_owned`. For each that doesn't:
    - If the strategy requires **modifying** the test file → add it to `files_owned` (or add the new path the executor must create).
    - If the test file only needs to be **executed** (not modified) → reframe the strategy step as "run `<command>`, confirm exit 0" and keep it out of `files_owned`.
 
-   Any file a plan's `test_strategy` instructs the executor to modify MUST appear in `files_owned`. This check must pass before emitting the plan — do not rely on executor-time scope-deviation recovery.
+   Any file a plan's `test_strategy` instructs the executor to modify MUST appear in `files_owned`. The orchestrator runs `scripts/refiner/apply-parity.js` after writing the plan as a deterministic backstop, but author plans correct on first emit — do not rely on the backstop.
 
 5d. **Sweep detection for string-literal renames.** If the task renames, re-cases, or re-types a value that appears as a **string literal** in the codebase (error codes, enum names, feature flags, copy strings, config keys), you MUST:
    1. Run `grep -rn '<old_value>'` across the repo — explicitly include writable trees outside the primary source path (e.g. `scripts/`, `tools/`, top-level smoke/e2e files). List the exact grep command(s) in the plan.
@@ -122,11 +118,12 @@ The list of existing epic slugs is also provided so you can read EPIC bodies for
 
    This rule exists because sweep tasks have repeatedly left assertion files (especially under `scripts/`) with stale values that no automated gate catches — `files_owned` + the primary test suite alone are not sufficient for rename sweeps.
 
-5e. **Validate `acceptance_criteria` ↔ `files_owned` parity.** Before emitting a plan, run the same `ac-parity.js` invocation as 5c and consume its `move_to_owned` and `insert_to_owned` arrays:
-   - Every path in `move_to_owned` (currently in `files_readonly`): move it to `files_owned`. AC verification that grep-asserts the file's contents implies the executor wrote it.
-   - Every path in `insert_to_owned` (absent from both lists): insert into `files_owned`.
+5e. **Validate `acceptance_criteria` ↔ `files_owned` parity (visual).** Before emitting the plan, walk every `acceptance_criteria[].verification` string and extract any file path it references (typical shapes: `grep ... <path>`, `cat <path>`, `test -e <path>`, `open("<path>")`). For each extracted path:
+   - In `files_owned` → ✓ proceed.
+   - In `files_readonly` → move it to `files_owned`. AC verification that grep-asserts the file's contents implies the executor wrote it.
+   - Absent from both → insert into `files_owned`.
 
-   Self-contradictory plans (AC verification says the file contains X after the task, plan says readonly) produce a guaranteed `scope_deviation` finding at execution time. This check must pass before emitting the plan — do not rely on executor-time recovery.
+   Self-contradictory plans (AC verification says the file contains X after the task, plan says readonly) produce a guaranteed `scope_deviation` finding at execution time. The orchestrator's `apply-parity.js` backstop will catch these too, but author plans correct on first emit.
 
 5f. **Prerequisite enumeration for external-CLI steps.** If any Implementation Step invokes an external CLI whose success depends on package-level or config-level state — examples include `eas build`, `expo run:*`, `xcodebuild`, `docker build/run`, `gcloud deploy`, `supabase db push`, `firebase deploy`, `terraform apply`, `kubectl apply` — enumerate the relevant probes in a `prerequisites` frontmatter list. For each prereq, emit one entry with:
    - `check`: a cheap, deterministic bash command (exit 0 = pass; exit non-0 = fail). Prefer `grep -q 'pattern' <config>`, `test -f <path>`, or `test -n "$VAR"`.
