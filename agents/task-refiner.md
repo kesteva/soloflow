@@ -167,11 +167,12 @@ The list of existing epic slugs is also provided so you can read EPIC bodies for
 
    This check exists because prior sprints have repeatedly shipped plans with mis-typed paths that the executor silently corrected, masking a plan-quality issue. The script output is advisory — it will not block — but treat every `missing` entry as a required correction before emitting the plan.
 
-5i. **Probe-and-reconcile file-content claims.** Before emitting the plan, scan every `acceptance_criteria[].verification`, `test_strategy.targets[].behavior`, and `Implementation Step` entry for **file-content claims** in any of these three shapes:
+5i. **Probe-and-reconcile file-content claims.** Before emitting the plan, scan every `acceptance_criteria[].verification`, `test_strategy.targets[].behavior`, and `Implementation Step` entry for **file-content claims** in any of these four shapes:
 
    - **(a) Existence/absence claim.** "File X exists", "File X does not yet exist", "Test file Y has not been created."
    - **(b) Literal-content claim.** "Line N of file X contains literal Y", "File X currently uses hex `#ABCDEF` on line N."
    - **(c) Non-trivial grep claim.** A verification whose claim depends on a specific match count or specific match text — "grep -n 'oldValue' src/X.ts returns 0 matches", "no occurrences of FOO in src/", a quoted match expected from a grep.
+   - **(d) Prescriptive imperative.** A step phrased as "Add X to file F", "Remove X from file F", "Replace X with Y in F", "Introduce X in F" implies a current-state claim that F does NOT currently have X (or DOES currently have the value being replaced). Probe F to confirm — past failure: a plan said "Add a hero illustration to welcome.tsx" while welcome.tsx already had one, costing executor + verifier reconciliation rounds.
 
    For each match, run the underlying probe NOW (`ls`, `grep -n`, `cat`, `test -e`) and reconcile against the claim:
 
