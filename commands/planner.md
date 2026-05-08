@@ -545,7 +545,7 @@ Skip this whole subsection if `parallelism.task_refiner_parallel === true`. When
    ```
    node "${CLAUDE_PLUGIN_ROOT}/scripts/refiner/sanitize-plan.js" --task-id TASK-{NNN} --input <raw-plan-tmpfile>
    ```
-   Use the returned `body` as the plan content. If `stripped_bytes > 0`, record the count and surface it in Step 2.3 as an advisory: `"Sanitized N bytes of post-fence debug output from TASK-{NNN}'s plan."` Non-blocking; proceed regardless. Skip ahead to Step 2.2c (parity gates).
+   Use the returned `body` as the plan content. If `stripped_bytes > 0`, record the count and surface it in Step 2.3 as an advisory: `"Sanitized N bytes of post-fence debug output from TASK-{NNN}'s plan."` Non-blocking; proceed regardless. Skip ahead to Step 2.2c (write + parity gate).
 
 #### Step 2.2 — parallel path (default)
 
@@ -591,38 +591,34 @@ Skip this whole subsection if `parallelism.task_refiner_parallel === true`. When
    - If a detailer fails entirely (no parseable plan after respawn cap): drop that slot, surface in Step 2.3 as `Detailer failed for TASK-{NNN}: <slug>`, proceed.
 8. **Materialize new EPIC files.** For each entry in the decomposer's `new_epics[]`, generate its `EPIC-{slug}.md` body using the schema from `agents/task-refiner.md` Output Format (`originating_ideas: [{target_id}]`, status `active`, the decomposer's title/objective/scope/success_signal). Detailers do NOT emit EPIC blocks in this path.
 
-After step 7 (or step 5's short-circuit), parsed plans + EPIC blocks are ready for parity gates.
+After step 7 (or step 5's short-circuit), parsed plans + EPIC blocks are ready for the write + parity gate.
 
-#### Step 2.2c — parity gates and write (both paths)
+#### Step 2.2c — write and deterministic parity gate (both paths)
 
-The legacy path lands here too — the gates and write logic apply identically.
+The legacy path lands here too — the write + parity logic applies identically.
 
-1. **Validate `test_strategy` ↔ `files_owned` parity.** For each parsed plan, cross-check every `test_strategy.targets[].test_file` against that plan's `files_owned`:
-   - If a target `test_file` is missing from `files_owned`, auto-insert it before writing.
-   - Record each auto-correction; surface in Step 2.3.
-   - If more than 3 plans required auto-correction in a single refinement run, flag it prominently and offer "Request changes" proactively.
-
-2. **Validate `acceptance_criteria` ↔ `files_owned`/`files_readonly` parity.** For each parsed plan, scan every `acceptance_criteria[].verification` string for file-path references. Match these patterns (case-sensitive; extract the path argument):
-   - `grep ... <path>` (ripgrep or GNU grep; any flags)
-   - `cat <path>` / `head <path>` / `tail <path>`
-   - `test -e <path>` / `test -f <path>`
-   - `python3 -c '...'` invocations that reference `open("<path>")` or `Path("<path>")`
-   - a bare path token followed by a contains-check (e.g. `| grep 'X' <path>`, `assert 'Y' in open("<path>").read()`)
-
-   Ignore paths that are clearly command flags (`-e`, `--file`) or shell metacharacters. For each extracted path:
-   - In `files_owned` → ✓ proceed.
-   - In `files_readonly` → move it to `files_owned` (swap); record the move.
-   - Absent from both → insert into `files_owned`; record the insert.
-
-   Record every auto-correction (task ID + path + `readonly→owned` | `inserted`). Surface in Step 2.3 with the test-strategy auto-corrections. If 3a + 3b together required auto-correction on more than 3 plans in a single run, flag prominently and offer "Request changes" proactively.
-
-3. Write each plan based on its `epic` frontmatter field:
+1. Write each plan based on its `epic` frontmatter field:
    - If `epic: <slug>` is set → `.soloflow/active/plans/{slug}/TASK-{NNN}-plan.md`, creating the folder if missing.
    - If `epic` absent or `null` → `.soloflow/active/plans/TASK-{NNN}-plan.md` (flat).
 
-4. For each **new** epic slug introduced, write its `EPIC-{slug}.md` body to `.soloflow/active/plans/{slug}/EPIC-{slug}.md`. Do NOT overwrite an existing EPIC; if one exists for that slug, leave it alone (optionally append `target_id` to its `originating_ideas` frontmatter list).
+   Each plan's frontmatter MUST carry `status: ready` and its `depends_on` list — that frontmatter IS the queue entry. IDs are derived from the filesystem; no counter file to update. Use `wx`/noclobber semantics on write; on collision, recompute next ID for remaining plans and retry.
 
-5. Each plan's frontmatter MUST carry `status: ready` and its `depends_on` list — that frontmatter IS the queue entry. IDs are derived from the filesystem; no counter file to update. Use `wx`/noclobber semantics on write; on collision, recompute next ID for remaining plans and retry.
+2. **Run the deterministic parity gate.** For each plan written in step 1, invoke:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/refiner/apply-parity.js" --plan <plan-path>
+   ```
+   The script wraps `ac-parity.js` and rewrites the plan's frontmatter in-place to fix any of the three parity violations:
+   - `test_strategy.targets[].test_file` missing from `files_owned` → appended.
+   - AC verification references a path in `files_readonly` → moved to `files_owned`.
+   - AC verification references a path absent from both lists → appended to `files_owned`.
+
+   The script emits `{ plan, corrections: [{path, action}] }` (action ∈ `test_target_added` | `readonly_to_owned` | `inserted`). It is idempotent: a plan with no violations is left byte-identical and reports zero corrections.
+
+   Aggregate per-plan correction counts. Surface them in Step 2.3 alongside sanitizer reports. **If more than 3 plans had at least one correction in a single refinement run, flag it prominently and offer "Request changes" proactively** — that volume signals systemic refiner drift, not isolated misses.
+
+   This gate is the structural fix for the recurring `test_file ↔ files_owned` omission class (FIND-SPRINT-008-3/4, 010-3, 012-3..8, 040-6). Earlier prose-instruction parity steps depended on agent attention and were silently skipped under load. Do NOT replace this Bash call with an in-prompt cross-check — the determinism is the point.
+
+3. For each **new** epic slug introduced, write its `EPIC-{slug}.md` body to `.soloflow/active/plans/{slug}/EPIC-{slug}.md`. Do NOT overwrite an existing EPIC; if one exists for that slug, leave it alone (optionally append `target_id` to its `originating_ideas` frontmatter list).
 
 ### Step 2.3: Human Checkpoint — Plan Review
 
@@ -633,7 +629,7 @@ Present all plans to the user with:
 - Decisions made and tradeoffs resolved.
 - Open questions requiring human input (if any were escalated).
 - Any requirements that were dropped with reasoning.
-- Any auto-corrections from the parity gates (Step 2.2c.1 / 2.2c.2).
+- Any parity-gate corrections (Step 2.2c.2 — `apply-parity.js`).
 - Any sanitizer reports from Step 2.2.
 
 Use **AskUserQuestion**: `"How should we proceed with these plans?"` with options:
@@ -695,13 +691,12 @@ Runs only when `to_refine.length >= 2` AND `parallelism.task_refiner_parallel ==
 
 5. **Detailer fan-out.** Build the prompt for each task across all IDEAs in the same shape as Phase 2 single-IDEA parallel step 6 (`MODE: detail`, `TASK_ID:`, `TASK_SKELETON:` with remapped depends_on, `SIBLING_DAG:` covering only that IDEA's siblings, IDEA body, research if present, existing-epics list). Issue **one message containing one `Agent` tool call per task across the entire batch** (`subagent_type: "task-refiner"`, `model: <resolved task_refiner>`). Wait for all calls to return.
 
-6. **Collate per-IDEA, parity gates, materialize EPIC files.** For each IDEA in the batch:
+6. **Collate per-IDEA and materialize EPIC files.** For each IDEA in the batch:
    - Collect its detailer outputs (sanitize each via `scripts/refiner/sanitize-plan.js`).
    - On `CONTEXT_LIMIT` from any detailer, respawn that one slot only with handoff (cap at resolved `limits.context_limit_respawn_max`); on terminal failure drop the slot.
-   - Apply parity gates (Step 2.2c.1, Step 2.2c.2). Record auto-corrections per-plan and per-IDEA.
    - Generate `EPIC-{slug}.md` bodies for entries in this IDEA's decomposer `new_epics[]`.
 
-7. **Write all plans + EPIC files.** For each IDEA, write its plans to `.soloflow/active/plans/{epic}/TASK-{NNN}-plan.md` (or flat for orphans) using `wx`/noclobber. On collision, recompute next ID for remaining plans and retry. Each plan's frontmatter MUST carry `status: ready` and the remapped `depends_on`. Write each new EPIC body if not already present.
+7. **Write all plans + EPIC files, then run the deterministic parity gate.** For each IDEA, write its plans to `.soloflow/active/plans/{epic}/TASK-{NNN}-plan.md` (or flat for orphans) using `wx`/noclobber. On collision, recompute next ID for remaining plans and retry. Each plan's frontmatter MUST carry `status: ready` and the remapped `depends_on`. Write each new EPIC body if not already present. Then for every written plan run `node "${CLAUDE_PLUGIN_ROOT}/scripts/refiner/apply-parity.js" --plan <path>` (Step 2.2c.2 semantics) and aggregate corrections per-plan and per-IDEA for the combined checkpoint. If more than 3 plans across the batch had at least one correction, flag prominently in step 8.
 
 8. **Single combined human checkpoint.** Print a per-IDEA summary block first (count, dep graph, epic groupings, parity-gate auto-corrections, dropped slots, scope_drops) then use **AskUserQuestion** (single question, single-select):
    - `question`: `"How should we proceed with the {N} refined IDEAs?"`
