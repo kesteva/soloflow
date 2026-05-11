@@ -4,6 +4,19 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.9.13] - 2026-05-11
+
+### Added
+- **`verification.visual_auth_fixture`** — optional Maestro flow run once per verifier session to authenticate the simulator before visual flows. Convention: `.maestro/fixtures/sign-in.yaml`. When unset and the simulator is signed-out, multiple affected tasks collapse to a single deduped queue entry (`dedup_key: simulator_unauthenticated`) instead of one row per task.
+- **Review-queue `dedup_key`** — `appendEntry` now collapses entries sharing a non-empty `dedup_key`: tasks accumulate in `affected_tasks`, severity promotes to max, `blocked_checks` unions. Conventional keys used by `shadow-verifier`: `simulator_unauthenticated`, `visual_mobile_unavailable`, `visual_web_unavailable`, `metro_offline`. Behavior is unchanged when `dedup_key` is absent.
+- **`infra_check.advisories`** in sprint-initiator output — inform-only signals surfaced at orchestrator Step 2.8. First advisory: `no_auth_fixture` when `verification.visual_mobile=true` but `visual_auth_fixture` is unset.
+
+### Changed
+- **`shadow-verifier` / `shadow-sprint-verifier`** add a mobile auth-state pre-flight sub-step and document the `dedup_key` conventions in the Config-gap escalation block.
+
+### Migration
+After upgrading, run `/soloflow:sync-agents` to sync the updated shadow agents into `.claude/agents/`, then restart Claude Code so the new auth pre-flight logic takes effect in subagent sessions. No config changes are required — `visual_auth_fixture` defaults to `null` and the dedup behavior activates only for entries that opt in via `dedup_key`.
+
 ## [0.9.8] - 2026-04-24
 
 ### Added
