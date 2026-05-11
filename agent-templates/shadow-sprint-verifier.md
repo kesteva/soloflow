@@ -33,7 +33,9 @@ Apply the gates in this order for each platform:
 
 3. **De-duplicate.** Multiple tasks often touch the same flow. Collapse into a unique flow list.
 
-4. **Run each flow manually.** For each unique flow:
+4. **Auth state pre-flight (mobile only, once per pass).** If the mobile settings gate passed and any deduplicated flow targets mobile, resolve `verification.visual_auth_fixture` via `node "${CLAUDE_PLUGIN_ROOT}/scripts/config/resolve.js" --key verification.visual_auth_fixture --fallback null`. If set, run the fixture once on the chosen Maestro path (MCP `mcp__maestro__run_flow_files` or CLI `maestro test`) before iterating flows. On failure → set `visual_mobile: skipped_unable`, append a queue entry with `dedup_key: simulator_unauthenticated` (see `agents/shadow-verifier.md` → **Config-gap escalation** for the payload shape and conventional keys), skip mobile flows, continue to web/Pass 2. If null and a flow later hits a sign-in screen, classify `skipped_unable` with the same `dedup_key`.
+
+5. **Run each flow manually.** For each unique flow:
    - Pick a mobile path **once** at the start of the sprint verification, per the **Path Selection** recipe in `skills/visual-verify/SKILL.md`: probe `mcp__maestro__list_devices`; if reachable use Maestro MCP for all flows, else fall back to `maestro test`/`maestro hierarchy` via Bash. Do not mix paths across flows — both use port 7001.
    - **MCP path (preferred):** call `mcp__maestro__run_flow_files` for existing flows or `mcp__maestro__run_flow` for ad-hoc. Use `mcp__maestro__inspect_view_hierarchy` (CSV, ~50 tokens) for layout/element checks.
    - **CLI path (fallback):** `maestro test <flow>` for existing flows, ephemeral-flow pattern for ad-hoc. Use `maestro hierarchy` (~200–600 tokens plain text) for layout/element checks.
@@ -44,9 +46,9 @@ Apply the gates in this order for each platform:
 
    If all flows for a platform pass, emit `pass`. If any flow fails, emit `fail` (the Regressions section captures details).
 
-5. **Defer flows requiring human action.** If a flow cannot be tested because it requires a prerequisite human action (migration, deploy, seed data, etc.), append an `action_required` entry to `.soloflow/human-review-queue.md` with the action needed, the blocked flow, and a `severity` field (`low | medium | high`) — see the verifier's Deferred Checks Protocol for the rubric (default `medium` for visual flow gaps; `high` if the flow guards a foundational invariant). Set `bucket: actions` when the human performs operational work (migrate/deploy/seed) and the verifier will re-run after; set `bucket: testing` when the human runs the visual flow themselves. Then continue to the next flow. Deferred flows do not themselves change the platform outcome — classify based on the flows that did run.
+6. **Defer flows requiring human action.** If a flow cannot be tested because it requires a prerequisite human action (migration, deploy, seed data, etc.), append an `action_required` entry to `.soloflow/human-review-queue.md` with the action needed, the blocked flow, and a `severity` field (`low | medium | high`) — see the verifier's Deferred Checks Protocol for the rubric (default `medium` for visual flow gaps; `high` if the flow guards a foundational invariant). Set `bucket: actions` when the human performs operational work (migrate/deploy/seed) and the verifier will re-run after; set `bucket: testing` when the human runs the visual flow themselves. Then continue to the next flow. Deferred flows do not themselves change the platform outcome — classify based on the flows that did run.
 
-6. **Report findings.** For each visual failure:
+7. **Report findings.** For each visual failure:
    - Which flow and which step failed
    - Screenshot or hierarchy evidence
    - The most likely responsible task(s)
