@@ -101,6 +101,47 @@ The verifier agent checks these toggles before attempting visual verification. E
 
 `visual_mobile_app_id` is optional. If unset, the verifier grep-detects `appId:` from existing Maestro flows. Set it explicitly for greenfield projects that don't have flows yet.
 
+## Authenticating the simulator
+
+If your app requires sign-in before any visual flow makes sense (most apps with chat, profile, or session-bound features), the simulator must be authenticated before the verifier runs. There are three paths:
+
+### Manual sign-in
+
+Sign in to the app on the simulator once before invoking `/soloflow:sprint`. This is the simplest path but easy to forget — workspace resets, parallel sprints touching different simulators, and cold-booted devices all drop the session. If the verifier hits a sign-in screen mid-flow, every mobile task in the sprint will emit `visual_mobile: skipped_unable`.
+
+### Fixture-driven sign-in (recommended)
+
+Drop a Maestro flow at `.maestro/fixtures/sign-in.yaml` (or any path you prefer) that signs the test account into your app. Then point `verification.visual_auth_fixture` at it in `.soloflow/config.json` (or `config/defaults.yaml`):
+
+```json
+{
+  "verification": {
+    "visual_mobile": true,
+    "visual_auth_fixture": ".maestro/fixtures/sign-in.yaml"
+  }
+}
+```
+
+Skeleton (adapt selectors to your app):
+
+```yaml
+appId: com.example.myapp
+---
+- launchApp
+- tapOn: "Email"
+- inputText: "test@example.com"
+- tapOn: "Password"
+- inputText: "<test-account-password>"
+- tapOn: "Sign In"
+- assertVisible: "<post-login affordance, e.g. Home tab>"
+```
+
+The verifier runs this fixture once per session before any visual flow. If the simulator is already signed in, the trailing `assertVisible` returns instantly and the fixture is a cheap no-op. **Use a test account, never production credentials** — the YAML is committed to the project.
+
+### Neither set
+
+When `visual_mobile=true` and `visual_auth_fixture` is null, the orchestrator surfaces a one-line advisory at Step 2.8 (`Advisory (maestro/no_auth_fixture): ...`) so you know auth handling is unconfigured. If the simulator is signed-out, every affected task emits `visual_mobile: skipped_unable` with `dedup_key: simulator_unauthenticated`. The review queue collapses those into a single row covering all affected tasks via `affected_tasks`. Clear the row via `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" remove --task <task-id>` once you've fixed sign-in.
+
 ## Sandbox Permissions
 
 The MCP path needs no Bash permissions. If Claude Code blocks any Maestro-adjacent command during a CLI-fallback run, add them to your allow list in settings:
@@ -181,6 +222,7 @@ npx @playwright/mcp@latest  # should start without errors
 
 Check the following in order:
 
+0. Is the simulator signed into your app? If your app requires auth, see [Authenticating the simulator](#authenticating-the-simulator) above. A signed-out simulator now collapses to a single deduped queue row (`dedup_key: simulator_unauthenticated`) instead of one row per task — check `.soloflow/human-review-queue.md` for that entry before chasing MCP issues.
 1. `claude mcp list | grep -i maestro` — is the MCP server registered? Registering it is optional, but if you intended to use MCP mode and shadow agents aren't current, the verifier silently falls back to CLI. If you want MCP specifically, register + sync shadows.
 2. `which maestro` — is the CLI on PATH? (Required for both MCP and CLI modes.)
 3. `xcrun simctl list devices booted | grep -c Booted` (iOS) or `adb devices | awk '$2=="device"' | wc -l` (Android) — is at least one device booted?

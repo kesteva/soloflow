@@ -145,6 +145,7 @@ Findings are stored at `.soloflow/active/findings/SPRINT-NNN-findings.md` — on
 | `verification.visual_maestro_flow_dirs` | `["maestro/", ".maestro/", "test/maestro/"]` | Dirs searched for Maestro flows |
 | `verification.visual_screenshot_budget` | 3 | Max screenshots per verification run |
 | `verification.visual_prefer_hierarchy` | `true` | Prefer `maestro hierarchy` (~200–600 tokens plain text) over screenshot capture (~1600 tokens) |
+| `verification.visual_auth_fixture` | `null` | Path to a Maestro flow run once per verifier session to authenticate the simulator/emulator. See [VISUAL-VERIFICATION-SETUP.md → Authenticating the simulator](VISUAL-VERIFICATION-SETUP.md#authenticating-the-simulator) |
 | `verification.dev_server.enabled` | `false` | Opt in to sprint-managed dev server (Metro / Vite / etc.) |
 | `verification.dev_server.name` | `dev-server` | Display name in prompts |
 | `verification.dev_server.probe_url` | `http://localhost:8081/status` | URL probed at sprint start + before visual_mobile |
