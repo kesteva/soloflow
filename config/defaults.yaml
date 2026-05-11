@@ -76,6 +76,30 @@ compound:
   pending_sprints:
     picker_threshold: 2             # prompt with picker when ≥ N pending sprints; fewer → pick oldest silently
 
+# TaskCompleted hook quality gate. Independent of the verifier (`verification.*`):
+# this is the post-completion guardrail that runs the project's test runner and
+# type checker after a TaskUpdate → completed. It exists so that obviously broken
+# work can't be silently marked done, but it should never block legitimate setup
+# tasks or tasks in projects whose suite needs build artifacts / browsers / a
+# GUI before it can even start.
+#   enabled    = master switch. false disables the gate entirely.
+#   test       = run the detected test runner.
+#   typecheck  = run the detected type checker.
+#   skip_e2e   = when the project's `test` script is an end-to-end runner
+#                (playwright/cypress/webdriver/detox/maestro/nightwatch), skip
+#                it by default — these almost always need browsers and a built
+#                artifact and will false-positive on every task. Flip to false
+#                to opt in.
+#   skip_when_unrunnable = preflight: if the runner's binary or its deps aren't
+#                installed (no node_modules, no tsc, missing pytest, etc.) skip
+#                with a one-line note rather than producing a failing run.
+quality_gate:
+  enabled: true
+  test: true
+  typecheck: true
+  skip_e2e: true
+  skip_when_unrunnable: true
+
 verification:
   run_tests: true
   run_typecheck: true
