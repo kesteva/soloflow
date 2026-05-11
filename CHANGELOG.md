@@ -4,6 +4,13 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **`quality_gate.*` config block** governs the TaskCompleted hook (`hooks/task-completed.js`). Five keys: `enabled`, `test`, `typecheck`, `skip_e2e` (skip when the project's test script invokes Playwright/Cypress/WebdriverIO/Detox/Maestro/Nightwatch), and `skip_when_unrunnable` (skip when the runner's deps aren't installed locally — no `node_modules`, missing `tsc`, missing `pytest`, etc.). Defaults preserve the gate's intent while preventing the false failures it used to produce on setup tasks and fresh forks.
+- **`/soloflow:config` — "Quality gate" sub-flow (5g.5)** surfaces the five new toggles. Kept distinct from "Verification" (5g) since the quality gate is the per-task hook and the verifier is the sprint-level agent — same underlying tools, different code paths.
+
+### Fixed
+- **TaskCompleted hook no longer fails on tasks that didn't touch testable code.** Previously, every `TaskUpdate → completed` invoked the project's `test` and `typecheck` commands indiscriminately; on a fresh fork or any project whose suite needs build artifacts/browsers/a GUI, the hook exited 2 on every task, blocking legitimate setup work and training the user to ignore the gate. The hook now skips with a one-line note (and exit 0) when (a) the gate or any sub-check is disabled in config, (b) the test script looks like an E2E runner, or (c) the runner's deps aren't installed in `cwd`.
+
 ## [0.9.13] - 2026-05-11
 
 ### Added
