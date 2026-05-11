@@ -165,6 +165,70 @@ test('review-queue: --bucket filter on remove', () => {
   assert.equal(g.buckets.decisions, 0);
 });
 
+test('review-queue: dedup_key collapses appends and tracks affected_tasks', () => {
+  const cwd = scaffold(mktmp());
+
+  run('state/review-queue.js', ['append', '--entry-json',
+    JSON.stringify({ task: 'TASK-A', type: 'config_issue', bucket: 'actions', dedup_key: 'simulator_unauthenticated', action: 'sign in', blocked_checks: ['mobile-visual'], level: 'visual', severity: 'medium' })
+  ], { cwd });
+  run('state/review-queue.js', ['append', '--entry-json',
+    JSON.stringify({ task: 'TASK-B', type: 'config_issue', bucket: 'actions', dedup_key: 'simulator_unauthenticated', action: 'sign in', blocked_checks: ['mobile-visual'], level: 'visual', severity: 'medium' })
+  ], { cwd });
+
+  const g = JSON.parse(run('state/review-queue.js', ['gather'], { cwd }).out);
+  assert.equal(g.pending_count, 1, 'two entries with same dedup_key collapse to one');
+  assert.equal(g.actions.length, 1);
+  assert.deepEqual(g.actions[0].affected_tasks.sort(), ['TASK-A', 'TASK-B']);
+  assert.equal(g.actions[0].task, 'TASK-A', 'first-seen task is preserved');
+});
+
+test('review-queue: dedup_key merge promotes severity and unions blocked_checks', () => {
+  const cwd = scaffold(mktmp());
+
+  run('state/review-queue.js', ['append', '--entry-json',
+    JSON.stringify({ task: 'TASK-A', type: 'config_issue', bucket: 'actions', dedup_key: 'visual_mobile_unavailable', action: 'install maestro', blocked_checks: ['mobile-visual'], level: 'visual', severity: 'low' })
+  ], { cwd });
+  run('state/review-queue.js', ['append', '--entry-json',
+    JSON.stringify({ task: 'TASK-B', type: 'config_issue', bucket: 'actions', dedup_key: 'visual_mobile_unavailable', action: 'install maestro', blocked_checks: ['ad-hoc-visual'], level: 'visual', severity: 'high' })
+  ], { cwd });
+
+  const g = JSON.parse(run('state/review-queue.js', ['gather'], { cwd }).out);
+  assert.equal(g.pending_count, 1);
+  assert.equal(g.actions[0].severity, 'high', 'severity promotes to max');
+  assert.deepEqual(g.actions[0].blocked_checks.sort(), ['ad-hoc-visual', 'mobile-visual']);
+});
+
+test('review-queue: dedup_key absent → no merge, behavior unchanged', () => {
+  const cwd = scaffold(mktmp());
+
+  run('state/review-queue.js', ['append', '--entry-json',
+    JSON.stringify({ task: 'TASK-A', type: 'action_required', bucket: 'actions', action: 'do thing', severity: 'medium' })
+  ], { cwd });
+  run('state/review-queue.js', ['append', '--entry-json',
+    JSON.stringify({ task: 'TASK-B', type: 'action_required', bucket: 'actions', action: 'do thing', severity: 'medium' })
+  ], { cwd });
+
+  const g = JSON.parse(run('state/review-queue.js', ['gather'], { cwd }).out);
+  assert.equal(g.pending_count, 2, 'without dedup_key, both entries remain');
+});
+
+test('review-queue: dedup_key match against overridden entry creates new pending row', () => {
+  const cwd = scaffold(mktmp());
+
+  run('state/review-queue.js', ['append', '--entry-json',
+    JSON.stringify({ task: 'TASK-A', type: 'config_issue', bucket: 'actions', dedup_key: 'simulator_unauthenticated', action: 'sign in', severity: 'medium' })
+  ], { cwd });
+  run('state/review-queue.js', ['override', '--task', 'TASK-A', '--type', 'config_issue', '--justification', 'fixed manually'], { cwd });
+  run('state/review-queue.js', ['append', '--entry-json',
+    JSON.stringify({ task: 'TASK-B', type: 'config_issue', bucket: 'actions', dedup_key: 'simulator_unauthenticated', action: 'sign in again', severity: 'medium' })
+  ], { cwd });
+
+  const g = JSON.parse(run('state/review-queue.js', ['gather'], { cwd }).out);
+  assert.equal(g.pending_count, 1, 'overridden entry does not absorb the new pending entry');
+  assert.equal(g.actions[0].task, 'TASK-B');
+  assert.equal(g.overridden.length, 1);
+});
+
 test('review-queue: concurrent appends serialize through the lock (no entries lost)', async () => {
   const cwd = scaffold(mktmp());
   const root = path.resolve(__dirname, '..', '..');

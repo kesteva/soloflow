@@ -274,11 +274,43 @@ async function appendEntry(filePath, entry) {
     }
     entry.bucket = inferred;
   }
+  const dedupKey = typeof entry.dedup_key === 'string' && entry.dedup_key.length > 0 ? entry.dedup_key : null;
   return withQueueLock(filePath, () => {
     const state = parseFile(filePath);
+    if (dedupKey) {
+      const existing = state.entries.find((e) =>
+        e && typeof e === 'object' && e.type !== 'overridden' && e.dedup_key === dedupKey
+      );
+      if (existing) {
+        mergeDedup(existing, entry);
+        return rewrite(filePath, state.entries);
+      }
+      const now = new Date().toISOString();
+      if (!entry.created_at) entry.created_at = now;
+      entry.updated_at = now;
+    }
     state.entries.push(entry);
     return rewrite(filePath, state.entries);
   });
+}
+
+function mergeDedup(existing, incoming) {
+  const tasks = Array.isArray(existing.affected_tasks)
+    ? existing.affected_tasks.slice()
+    : (existing.task ? [existing.task] : []);
+  if (incoming.task && !tasks.includes(incoming.task)) tasks.push(incoming.task);
+  existing.affected_tasks = tasks;
+  if (severityRank(incoming.severity) > severityRank(existing.severity)) {
+    existing.severity = incoming.severity;
+  }
+  if (Array.isArray(incoming.blocked_checks)) {
+    const merged = Array.isArray(existing.blocked_checks) ? existing.blocked_checks.slice() : [];
+    for (const bc of incoming.blocked_checks) if (!merged.includes(bc)) merged.push(bc);
+    existing.blocked_checks = merged;
+  }
+  const now = new Date().toISOString();
+  if (!existing.created_at) existing.created_at = now;
+  existing.updated_at = now;
 }
 
 async function removeEntries(filePath, predicate) {
