@@ -89,6 +89,12 @@ verification:
     - test/maestro/
   visual_screenshot_budget: 3   # max screenshots per verification run
   visual_prefer_hierarchy: true # use maestro hierarchy (plain text) before screenshots
+  # Optional Maestro flow run once per verifier session to authenticate the
+  # simulator/emulator before the first visual flow. Path is relative to the
+  # project root. When null, no auth pre-flight runs; a signed-out simulator
+  # surfaces as a single deduplicated queue entry per dedup_key
+  # (simulator_unauthenticated). Convention: ship as .maestro/fixtures/sign-in.yaml.
+  visual_auth_fixture: null
   # Optional: sprint-managed dev server (e.g., Metro for React Native).
   # When enabled, sprint-initiator probes `probe_url` at sprint start. The
   # orchestrator offers to start (offline) or kill+restart (running externally)
