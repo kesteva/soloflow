@@ -278,7 +278,9 @@ Surface four orthogonal signals from the phase 2 output: the smoke baseline, tas
 
 If none of the above triggers a prompt:
 - If `dev_server_action` was `"start"` or `"restart"` AND `sprint.json.dev_server.online == true`, print `{name} running under sprint (task_id: {task_id}; agents can read output_path from sprint.json.dev_server.output_path).`
-- Print `Smoke baseline clean; all required infra available; all task prerequisites satisfied.` and proceed to Step 3 with no prompt.
+- Print `Smoke baseline clean; all required infra available; all task prerequisites satisfied.`
+- If `infra_check.advisories` is non-empty, print one line per advisory: `Advisory ({category}/{kind}): {message}` — inform-only, do not prompt.
+- Proceed to Step 3 with no prompt.
 
 Let `gated_task_ids` = the set of task IDs in `task_prerequisites` with at least one failing entry where `blocking: true`. This set drives the gating behavior below.
 
@@ -294,7 +296,12 @@ Compose the question body from these sections (omit a section if it has nothing 
 **Task-level infra** (only if `infra_check.missing` is non-empty):
 - Header: `{N} task(s) in this sprint expect infrastructure that isn't available:`
 - Per `missing` entry: `- {category} — {reason}. Affected: {task_id list}. Tests that will be skipped: {flattened test_targets}.`
+- Per `infra_check.advisories` entry whose `category` matches a `missing` entry, append a sub-line: `  · Advisory ({kind}): {message}` indented under the matching category line.
 - Trailer: `Continuing will skip these checks; verifier will mark them SKIPPED — {category} not available.`
+
+**Advisories** (only if `infra_check.advisories` has entries whose `category` does NOT appear in `infra_check.missing` — surface them as their own section so they aren't lost):
+- Header: `Advisory check(s) — inform-only, will not block the sprint:`
+- Per advisory: `- {category}/{kind}: {message}`
 
 **Dev server** (only if `dev_server_action` was `"start"` or `"restart"` AND `sprint.json.dev_server.online == false`):
 - `{name} failed to come online within {startup_timeout_seconds}s after {dev_server_action}. Output captured at {sprint.json.dev_server.output_path}.`

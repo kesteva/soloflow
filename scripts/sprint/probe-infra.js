@@ -217,10 +217,22 @@ function main() {
 
   const task_prerequisites = probePrereqs(plans);
 
+  // Non-blocking advisories surfaced at orchestrator Step 2.8 alongside the
+  // task-level infra surface. Inform-only — never gate or prompt.
+  const advisories = [];
+  if (configDriven.has('maestro') && config.resolve('verification.visual_auth_fixture', null) === null) {
+    advisories.push({
+      category: 'maestro',
+      kind: 'no_auth_fixture',
+      message: 'verification.visual_mobile=true but visual_auth_fixture is unset. Signed-out simulator runs will deduplicate to a single queue entry (dedup_key: simulator_unauthenticated). Consider creating .maestro/fixtures/sign-in.yaml and setting verification.visual_auth_fixture.',
+    });
+  }
+
   process.stdout.write(JSON.stringify({
     required: Array.from(required).sort(),
     available: available.sort(),
     missing,
+    advisories,
     task_prerequisites,
   }, null, 2) + '\n');
 }
