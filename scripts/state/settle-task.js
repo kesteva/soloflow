@@ -79,6 +79,35 @@ function inGitRepo(cwd) {
   }
 }
 
+function isPathTracked(cwd, filePath) {
+  try {
+    git(['ls-files', '--error-unmatch', '--', filePath], { cwd });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function findPlanFiles(cwd, taskId) {
+  const root = path.join(cwd, '.soloflow', 'active', 'plans');
+  if (!fs.existsSync(root)) return [];
+  const wanted = `${taskId}-plan.md`;
+  const out = [];
+  const stack = [root];
+  while (stack.length) {
+    const dir = stack.pop();
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+    catch { continue; }
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) stack.push(p);
+      else if (e.isFile() && e.name === wanted) out.push(p);
+    }
+  }
+  return out;
+}
+
 function main() {
   const { taskId, verdict, doneReport, stuckReport, touched, commit, commitSha, sprint } = parseArgs(process.argv.slice(2));
 
@@ -114,6 +143,22 @@ function main() {
 
   writeAtomic(sprintPath, JSON.stringify(state, null, 2) + '\n');
 
+  // On `done`, delete the matching plan file so it doesn't linger as
+  // `orphan_plan` cruft. Same atomic settle: the deletion is staged into the
+  // task's `chore(TASK-NNN): done` commit alongside sprint.json and the done
+  // report. See docs/CRUFT-CLEANUP.md scenario 1.
+  let deletedPlanPath = null;
+  if (verdict === 'done') {
+    const matches = findPlanFiles(cwd, taskId);
+    if (matches.length > 1) {
+      die(`multiple plan files found for ${taskId}: ${matches.map((m) => path.relative(cwd, m)).join(', ')}; resolve duplicates before settling`);
+    }
+    if (matches.length === 1) {
+      fs.unlinkSync(matches[0]);
+      deletedPlanPath = matches[0];
+    }
+  }
+
   if (!commit) {
     process.stdout.write(`${taskId}: ${verdict} (no-commit)\n`);
     return;
@@ -127,6 +172,7 @@ function main() {
   const toStage = [sprintPath];
   if (verdict === 'done' && doneReport) toStage.push(doneReport);
   if (verdict === 'stuck' && stuckReport) toStage.push(stuckReport);
+  if (deletedPlanPath && isPathTracked(cwd, deletedPlanPath)) toStage.push(deletedPlanPath);
   for (const p of touched) {
     if (fs.existsSync(p)) toStage.push(p);
   }
