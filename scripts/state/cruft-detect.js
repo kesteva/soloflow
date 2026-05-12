@@ -15,13 +15,19 @@
 //   5. empty_epic           — epic folder with no TASK plans AND no tasks in sprint.json
 //                             matching the epic slug
 //   6. malformed_queue      — human-review-queue entries missing required fields
-//   7. completed_in_backlog — done report exists AND task still listed in backlog.json
+//   8. untracked_plan       — plan exists in active/plans but its frontmatter
+//                             `status` is missing or unrecognized (planner crashed
+//                             before writing status, or hand-edit broke it)
+//   9. stale_idea           — IDEA in active/ideas/ whose `created` frontmatter
+//                             is older than cruft.stale_idea_days (default 60).
+//                             First time-based scenario.
 
 const fs = require('fs');
 const path = require('path');
 const yaml = require('../lib/yaml');
 const paths = require('../lib/paths');
 const rq = require('../lib/review-queue');
+const config = require('../lib/config');
 
 function globRecursive(root, matcher) {
   const out = [];
@@ -41,19 +47,25 @@ function globRecursive(root, matcher) {
   return out;
 }
 
+// Aggregate every active sprint's tasks into a single object keyed by task ID,
+// merging across sprints. Multi-sprint concurrency lands in PR #5; today
+// findActiveSprintIds returns at most one entry, but the aggregation works
+// for either case.
 function readSprint(cwd) {
-  const p = paths.sprintJsonPath(cwd);
-  if (!fs.existsSync(p)) return null;
-  try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
-  catch { return null; }
+  const entries = paths.findActiveSprintIds(cwd);
+  if (entries.length === 0) return null;
+  const out = { tasks: {} };
+  for (const entry of entries) {
+    try {
+      const json = JSON.parse(fs.readFileSync(entry.path, 'utf8'));
+      if (json && json.tasks) Object.assign(out.tasks, json.tasks);
+      if (json && json.sprint && !out.sprint) out.sprint = json.sprint;
+    } catch { /* skip malformed */ }
+  }
+  return out;
 }
 
-function readBacklog(cwd) {
-  const p = paths.backlogJsonPath(cwd);
-  if (!fs.existsSync(p)) return null;
-  try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
-  catch { return null; }
-}
+const VALID_PLAN_STATUSES = new Set(['ready', 'deferred', 'in-flight', 'done']);
 
 function readFm(p) {
   try { return yaml.splitFrontmatter(fs.readFileSync(p, 'utf8')).frontmatter || {}; }
@@ -69,8 +81,6 @@ function main() {
   const cwd = process.cwd();
   const state = readSprint(cwd);
   const sprintTasks = (state && state.tasks) || {};
-  const backlog = readBacklog(cwd);
-  const backlogTasks = (backlog && backlog.tasks) || {};
 
   const planFiles = globRecursive(path.join(paths.activeDir(cwd), 'plans'), (n) => /^TASK-\d+-plan\.md$/.test(n));
   const doneFiles = globRecursive(path.join(paths.archiveDir(cwd), 'done'), (n) => /^TASK-\d+-done\.md$/.test(n));
@@ -149,16 +159,58 @@ function main() {
     malformed_queue.push({ entry: null, reason: `queue_parse_error: ${err.message}` });
   }
 
-  // Scenario 7 — completed task still in backlog.
-  const completed_in_backlog = [];
-  for (const id of Object.keys(backlogTasks)) {
-    if (doneByTask.has(id)) completed_in_backlog.push({ task_id: id, done_path: doneByTask.get(id) });
+  // Scenario 8 — untracked plan: frontmatter status missing or unrecognized.
+  // Plans with a recognized status (ready / deferred / in-flight / done) are
+  // legitimate queue entries; only plans with broken frontmatter signal a
+  // crashed-mid-write planner or hand-edit corruption.
+  const untracked_plan = [];
+  for (const [id, planPath] of planByTask) {
+    if (doneByTask.has(id)) continue;   // covered by Scenario 1 (orphan_plan)
+    if (stuckByTask.has(id)) continue;  // covered by Scenario 3 (stale_stuck_file) when relevant
+    const fm = readFm(planPath);
+    if (VALID_PLAN_STATUSES.has(fm.status)) continue;
+    untracked_plan.push({
+      task_id: id,
+      plan_path: planPath,
+      status: fm.status || null,
+      epic: fm.epic || null,
+      title: fm.title || null,
+    });
+  }
+
+  // Scenario 9 — stale idea: IDEA file with `created` frontmatter older than
+  // cruft.stale_idea_days. First time-based scenario; older IDEAs likely
+  // need re-clarification before refinement (project may have moved on).
+  const stale_idea = [];
+  const staleDays = config.resolve('cruft.stale_idea_days', 60);
+  const staleThresholdMs = staleDays * 24 * 60 * 60 * 1000;
+  const ideasDir = path.join(paths.activeDir(cwd), 'ideas');
+  if (fs.existsSync(ideasDir)) {
+    const now = Date.now();
+    for (const entry of fs.readdirSync(ideasDir)) {
+      if (!/^IDEA-\d+\.md$/.test(entry)) continue;
+      const ideaPath = path.join(ideasDir, entry);
+      const fm = readFm(ideaPath);
+      if (!fm.created) continue; // skip un-stamped (handled by migrate-004)
+      const createdMs = Date.parse(fm.created);
+      if (Number.isNaN(createdMs)) continue;
+      const ageMs = now - createdMs;
+      if (ageMs > staleThresholdMs) {
+        stale_idea.push({
+          idea_id: entry.replace(/\.md$/, ''),
+          idea_path: ideaPath,
+          created: fm.created,
+          age_days: Math.floor(ageMs / (24 * 60 * 60 * 1000)),
+          threshold_days: staleDays,
+        });
+      }
+    }
   }
 
   const total =
     orphan_plan.length + ghost_sprint_entry.length + stale_stuck_file.length +
     mid_commit_settle.length + empty_epic.length + malformed_queue.length +
-    completed_in_backlog.length;
+    untracked_plan.length + stale_idea.length;
 
   process.stdout.write(JSON.stringify({
     total,
@@ -168,7 +220,8 @@ function main() {
     mid_commit_settle,
     empty_epic,
     malformed_queue,
-    completed_in_backlog,
+    untracked_plan,
+    stale_idea,
   }, null, 2) + '\n');
 }
 

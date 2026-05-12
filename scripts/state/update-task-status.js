@@ -12,6 +12,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const paths = require('../lib/paths');
 
 const VALID_STATUSES = new Set(['pending', 'in_progress', 'blocked', 'stuck', 'human_needed']);
 
@@ -30,10 +31,11 @@ function parseArgs(argv) {
     else if (a === '--create') opts.create = true;
     else if (a === '--plan') opts.plan = argv[++i];
     else if (a === '--epic') opts.epic = argv[++i];
+    else if (a === '--sprint') opts.sprint = argv[++i];
     else if (a.startsWith('--')) die(`unknown flag: ${a}`);
     else positional.push(a);
   }
-  if (positional.length !== 2) die('usage: update-task-status.js <TASK-ID> <status> [--note "..."] [--executor-loops N] [--create [--plan <path>] [--epic <slug>]]');
+  if (positional.length !== 2) die('usage: update-task-status.js <TASK-ID> <status> [--sprint SPRINT-NNN] [--note "..."] [--executor-loops N] [--create [--plan <path>] [--epic <slug>]]');
   return { taskId: positional[0], status: positional[1], ...opts };
 }
 
@@ -49,36 +51,56 @@ function compactTimestamp() {
 
 function scaffoldQuickSprint() {
   const now = new Date().toISOString();
+  const id = `SPRINT-quick-${compactTimestamp()}`;
   return {
-    version: 2,
-    sprint: { id: `SPRINT-quick-${compactTimestamp()}`, status: 'active', started: now },
-    tasks: {},
+    id,
+    state: {
+      version: 2,
+      sprint: { id, status: 'active', started: now },
+      tasks: {},
+    },
   };
 }
 
+function resolveSprintForUpdate(cwd, explicitSprintId, create) {
+  if (explicitSprintId) {
+    const p = paths.sprintJsonPath(cwd, explicitSprintId);
+    if (fs.existsSync(p)) return { id: explicitSprintId, path: p, state: JSON.parse(fs.readFileSync(p, 'utf8')) };
+    if (create) {
+      fs.mkdirSync(paths.sprintDirPath(cwd, explicitSprintId), { recursive: true });
+      const now = new Date().toISOString();
+      return {
+        id: explicitSprintId, path: p,
+        state: { version: 2, sprint: { id: explicitSprintId, status: 'active', started: now }, tasks: {} },
+      };
+    }
+    die(`${p} not found`);
+  }
+  const active = paths.findActiveSprintIds(cwd);
+  if (active.length === 1) {
+    const e = active[0];
+    return { id: e.id, path: e.path, state: JSON.parse(fs.readFileSync(e.path, 'utf8')) };
+  }
+  if (active.length > 1) {
+    die(`multiple active sprints (${active.map((s) => s.id).join(', ')}); pass --sprint to disambiguate`);
+  }
+  if (!create) die('no active sprint found under .soloflow/active/sprints/');
+  const quick = scaffoldQuickSprint();
+  fs.mkdirSync(paths.sprintDirPath(cwd, quick.id), { recursive: true });
+  return { id: quick.id, path: paths.sprintJsonPath(cwd, quick.id), state: quick.state };
+}
+
 function main() {
-  const { taskId, status, note, executorLoops, create, plan, epic } = parseArgs(process.argv.slice(2));
+  const { taskId, status, note, executorLoops, create, plan, epic, sprint } = parseArgs(process.argv.slice(2));
 
   if (!/^TASK-\d{3,}$/.test(taskId)) die(`invalid task ID: ${taskId}`);
   if (!VALID_STATUSES.has(status)) die(`invalid status: ${status} (expected one of: ${[...VALID_STATUSES].join(', ')})`);
   if ((plan !== undefined || epic !== undefined) && !create) die('--plan / --epic require --create');
 
-  const sprintDir = path.join(process.cwd(), '.soloflow', 'active');
-  const sprintPath = path.join(sprintDir, 'sprint.json');
-
-  let state;
-  if (fs.existsSync(sprintPath)) {
-    try {
-      state = JSON.parse(fs.readFileSync(sprintPath, 'utf8'));
-    } catch (e) {
-      die(`${sprintPath} is not valid JSON: ${e.message}`);
-    }
-  } else if (create) {
-    fs.mkdirSync(sprintDir, { recursive: true });
-    state = scaffoldQuickSprint();
-  } else {
-    die(`${sprintPath} not found`);
-  }
+  const cwd = process.cwd();
+  const resolved = resolveSprintForUpdate(cwd, sprint, create);
+  const sprintPath = resolved.path;
+  let state = resolved.state;
 
   if (!state.tasks || typeof state.tasks !== 'object') {
     if (create) state.tasks = {};

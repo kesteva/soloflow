@@ -40,8 +40,26 @@
 // rewrites it in the sectioned form.
 
 const fs = require('fs');
+const path = require('path');
 const yaml = require('./yaml');
+const paths = require('./paths');
 const { writeAtomic } = require('./fs-atomic');
+const { withFileLock } = require('./lock');
+
+// Lock path lives in the common gitdir so concurrent worktrees serialize on
+// the same lock. Keyed on a fixed slug; review-queue mutations are
+// inherently global (one shared file).
+function reviewQueueLockPath(filePath) {
+  // filePath is the .soloflow/human-review-queue.md path; resolve cwd from
+  // its parent's parent (cwd/.soloflow).
+  const stateDir = path.dirname(filePath);
+  const cwd = path.dirname(stateDir);
+  return path.join(paths.commonGitDir(cwd), 'soloflow-review-queue.lock');
+}
+
+function withQueueLock(filePath, fn) {
+  return withFileLock(reviewQueueLockPath(filePath), fn);
+}
 
 const HEADING = '# Human Review Queue';
 const EMPTY_SECTION_MSG = '_No items._';
@@ -245,7 +263,7 @@ function rewrite(filePath, entries, extraFrontmatter = {}) {
   return pending;
 }
 
-function appendEntry(filePath, entry) {
+async function appendEntry(filePath, entry) {
   if (!entry || typeof entry !== 'object') {
     throw new Error('appendEntry: entry must be an object');
   }
@@ -256,34 +274,72 @@ function appendEntry(filePath, entry) {
     }
     entry.bucket = inferred;
   }
-  const state = parseFile(filePath);
-  state.entries.push(entry);
-  return rewrite(filePath, state.entries);
-}
-
-function removeEntries(filePath, predicate) {
-  const state = parseFile(filePath);
-  const before = state.entries.length;
-  const kept = state.entries.filter((e) => !predicate(e));
-  const removed = before - kept.length;
-  rewrite(filePath, kept);
-  return removed;
-}
-
-function overrideEntry(filePath, predicate, justification) {
-  const state = parseFile(filePath);
-  const now = new Date().toISOString();
-  let count = 0;
-  for (const e of state.entries) {
-    if (predicate(e)) {
-      e.type = 'overridden';
-      e.override = justification;
-      e.override_at = now;
-      count++;
+  const dedupKey = typeof entry.dedup_key === 'string' && entry.dedup_key.length > 0 ? entry.dedup_key : null;
+  return withQueueLock(filePath, () => {
+    const state = parseFile(filePath);
+    if (dedupKey) {
+      const existing = state.entries.find((e) =>
+        e && typeof e === 'object' && e.type !== 'overridden' && e.dedup_key === dedupKey
+      );
+      if (existing) {
+        mergeDedup(existing, entry);
+        return rewrite(filePath, state.entries);
+      }
+      const now = new Date().toISOString();
+      if (!entry.created_at) entry.created_at = now;
+      entry.updated_at = now;
     }
+    state.entries.push(entry);
+    return rewrite(filePath, state.entries);
+  });
+}
+
+function mergeDedup(existing, incoming) {
+  const tasks = Array.isArray(existing.affected_tasks)
+    ? existing.affected_tasks.slice()
+    : (existing.task ? [existing.task] : []);
+  if (incoming.task && !tasks.includes(incoming.task)) tasks.push(incoming.task);
+  existing.affected_tasks = tasks;
+  if (severityRank(incoming.severity) > severityRank(existing.severity)) {
+    existing.severity = incoming.severity;
   }
-  rewrite(filePath, state.entries);
-  return count;
+  if (Array.isArray(incoming.blocked_checks)) {
+    const merged = Array.isArray(existing.blocked_checks) ? existing.blocked_checks.slice() : [];
+    for (const bc of incoming.blocked_checks) if (!merged.includes(bc)) merged.push(bc);
+    existing.blocked_checks = merged;
+  }
+  const now = new Date().toISOString();
+  if (!existing.created_at) existing.created_at = now;
+  existing.updated_at = now;
+}
+
+async function removeEntries(filePath, predicate) {
+  return withQueueLock(filePath, () => {
+    const state = parseFile(filePath);
+    const before = state.entries.length;
+    const kept = state.entries.filter((e) => !predicate(e));
+    const removed = before - kept.length;
+    rewrite(filePath, kept);
+    return removed;
+  });
+}
+
+async function overrideEntry(filePath, predicate, justification) {
+  return withQueueLock(filePath, () => {
+    const state = parseFile(filePath);
+    const now = new Date().toISOString();
+    let count = 0;
+    for (const e of state.entries) {
+      if (predicate(e)) {
+        e.type = 'overridden';
+        e.override = justification;
+        e.override_at = now;
+        count++;
+      }
+    }
+    rewrite(filePath, state.entries);
+    return count;
+  });
 }
 
 function severityRank(sev) {

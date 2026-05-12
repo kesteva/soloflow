@@ -36,7 +36,7 @@ function filePath(opts) {
   return opts.file && opts.file !== true ? opts.file : paths.reviewQueuePath();
 }
 
-function main() {
+async function main() {
   const [subcmd, ...rest] = process.argv.slice(2);
   if (!subcmd) die('review-queue', 'usage: review-queue.js <gather|append|remove|override|recompute> [options]');
   const { opts } = parse(rest, { repeatable: new Set(['type', 'bucket']) });
@@ -76,7 +76,7 @@ function main() {
         }
         e.bucket = inferred;
       }
-      try { pending = rq.appendEntry(filePath(opts), e); }
+      try { pending = await rq.appendEntry(filePath(opts), e); }
       catch (err) { die('review-queue', err.message); }
     }
     process.stdout.write(JSON.stringify({ appended: entries.length, pending_count: pending }) + '\n');
@@ -97,7 +97,7 @@ function main() {
       if (buckets.length > 0 && !buckets.includes(e.bucket)) return false;
       return true;
     };
-    const removed = rq.removeEntries(filePath(opts), predicate);
+    const removed = await rq.removeEntries(filePath(opts), predicate);
     process.stdout.write(JSON.stringify({ removed }) + '\n');
     return;
   }
@@ -110,7 +110,7 @@ function main() {
     // prereqs, not HUMAN_NEEDED decisions). Override with --type to broaden.
     const types = (opts.type && opts.type.length > 0) ? opts.type : ['action_required'];
     const predicate = (e) => e && e.task === task && types.includes(e.type);
-    const count = rq.overrideEntry(filePath(opts), predicate, justification);
+    const count = await rq.overrideEntry(filePath(opts), predicate, justification);
     process.stdout.write(JSON.stringify({ overridden: count }) + '\n');
     return;
   }
@@ -139,4 +139,4 @@ function bucketsFromOpt(raw, fallback) {
   return out.length === 0 ? fallback : out;
 }
 
-main();
+main().catch((e) => die('review-queue', e.message || String(e)));

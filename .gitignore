@@ -4,3 +4,8 @@ workflow-implementation-plan.md
 # so it doesn't collide for users who already have these servers
 # registered. Local dev registrations stay untracked.
 .mcp.json
+
+# Phase worktrees live as siblings of .soloflow/ at the repo root so they
+# don't nest a .soloflow/ inside a .soloflow/. Each subdir is a transient
+# git worktree managed by phase-worktree-setup.js / phase-worktree-merge.js.
+.soloflow-worktrees/

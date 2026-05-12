@@ -45,6 +45,12 @@ limits:
 #                           whole-IDEA flow.
 parallelism:
   task_refiner_parallel: true
+  # Phase-level worktrees + settle-phase integrator. When true, the four phases
+  # (clarify, planning, execution, compound) run in their own git worktrees at
+  # .soloflow-worktrees/<phase>-<id>/ and merge back via settle-phase.js.
+  # Default false during rollout; flip to true once the phase-worktree
+  # machinery is exercised in your project.
+  phase_worktrees: false
 
 code_review:
   enabled: true
@@ -70,12 +76,37 @@ compound:
   pending_sprints:
     picker_threshold: 2             # prompt with picker when ≥ N pending sprints; fewer → pick oldest silently
 
+# TaskCompleted hook quality gate. Independent of the verifier (`verification.*`):
+# this is the post-completion guardrail that runs the project's test runner and
+# type checker after a TaskUpdate → completed. It exists so that obviously broken
+# work can't be silently marked done, but it should never block legitimate setup
+# tasks or tasks in projects whose suite needs build artifacts / browsers / a
+# GUI before it can even start.
+#   enabled    = master switch. false disables the gate entirely.
+#   test       = run the detected test runner.
+#   typecheck  = run the detected type checker.
+#   skip_e2e   = when the project's `test` script is an end-to-end runner
+#                (playwright/cypress/webdriver/detox/maestro/nightwatch), skip
+#                it by default — these almost always need browsers and a built
+#                artifact and will false-positive on every task. Flip to false
+#                to opt in.
+#   skip_when_unrunnable = preflight: if the runner's binary or its deps aren't
+#                installed (no node_modules, no tsc, missing pytest, etc.) skip
+#                with a one-line note rather than producing a failing run.
+quality_gate:
+  enabled: true
+  test: true
+  typecheck: true
+  skip_e2e: true
+  skip_when_unrunnable: true
+
 verification:
   run_tests: true
   run_typecheck: true
   run_linter: true
   visual_mobile: false    # enable when maestro CLI is installed and a simulator/emulator is running
   visual_web: false       # enable when Playwright MCP is configured
+  visual_macos: false     # enable when peekaboo CLI is installed (brew install steipete/tap/peekaboo) and Screen Recording + Accessibility permissions are granted
   visual_mobile_app_id: null    # bundle ID for ad-hoc Maestro flows; auto-detected from existing flows when null
   visual_maestro_flow_dirs:     # directories to search for project Maestro flows
     - maestro/
@@ -83,6 +114,12 @@ verification:
     - test/maestro/
   visual_screenshot_budget: 3   # max screenshots per verification run
   visual_prefer_hierarchy: true # use maestro hierarchy (plain text) before screenshots
+  # Optional Maestro flow run once per verifier session to authenticate the
+  # simulator/emulator before the first visual flow. Path is relative to the
+  # project root. When null, no auth pre-flight runs; a signed-out simulator
+  # surfaces as a single deduplicated queue entry per dedup_key
+  # (simulator_unauthenticated). Convention: ship as .maestro/fixtures/sign-in.yaml.
+  visual_auth_fixture: null
   # Optional: sprint-managed dev server (e.g., Metro for React Native).
   # When enabled, sprint-initiator probes `probe_url` at sprint start. The
   # orchestrator offers to start (offline) or kill+restart (running externally)
@@ -127,8 +164,13 @@ paths:
   state_dir: .soloflow
   active_dir: .soloflow/active
   archive_dir: .soloflow/archive
-  backlog: .soloflow/active/backlog.json
-  sprint: .soloflow/active/sprint.json
+  sprints_dir: .soloflow/active/sprints   # per-sprint layout (PR #3)
+
+# Cruft-detect knobs. stale_idea_days controls Scenario 9: an IDEA in
+# active/ideas/ whose `created` frontmatter timestamp is older than this
+# many days is surfaced for archive-or-re-clarify. Default 60 days.
+cruft:
+  stale_idea_days: 60
 
 # Remote-version checking. The SessionStart hook calls check-version.js, which
 # fetches .claude-plugin/plugin.json from main and caches the result at

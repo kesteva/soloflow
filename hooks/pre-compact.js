@@ -15,37 +15,77 @@ if (!fs.existsSync(soloflowDir)) {
   process.exit(0);
 }
 
-const backlogPath = path.join(soloflowDir, 'active', 'backlog.json');
-const sprintPath = path.join(soloflowDir, 'active', 'sprint.json');
+const sprintsDir = path.join(soloflowDir, 'active', 'sprints');
+const plansDir = path.join(soloflowDir, 'active', 'plans');
 const checkpointPath = path.join(soloflowDir, 'checkpoint.md');
 
-if (!fs.existsSync(sprintPath)) {
-  process.exit(0);
+// Pick a single primary sprint to anchor the checkpoint. Multi-sprint flow
+// lands in PR #5; today there is at most one active sprint.
+function readPrimarySprint() {
+  if (!fs.existsSync(sprintsDir)) return null;
+  let primary = null;
+  try {
+    for (const entry of fs.readdirSync(sprintsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const p = path.join(sprintsDir, entry.name, 'sprint.json');
+      if (!fs.existsSync(p)) continue;
+      try {
+        const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+        if (!primary) primary = { id: entry.name, path: p, ...data };
+      } catch { /* skip */ }
+    }
+  } catch { /* skip */ }
+  return primary;
+}
+
+const primary = readPrimarySprint();
+if (!primary) process.exit(0);
+const sprintPath = primary.path;
+
+// Glob plans/ and pick out IDs whose frontmatter status is `ready`.
+function readyTaskIdsFromPlans(root) {
+  const ids = [];
+  if (!fs.existsSync(root)) return ids;
+  const stack = [root];
+  while (stack.length) {
+    const dir = stack.pop();
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+    catch { continue; }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) { stack.push(full); continue; }
+      const m = entry.name.match(/^TASK-(\d+)-plan\.md$/);
+      if (!m) continue;
+      try {
+        const fd = fs.openSync(full, 'r');
+        const buf = Buffer.alloc(1024);
+        const n = fs.readSync(fd, buf, 0, buf.length, 0);
+        fs.closeSync(fd);
+        const head = buf.slice(0, n).toString('utf8');
+        if (/(?:^|\n)status:\s*ready\b/.test(head)) ids.push(`TASK-${m[1]}`);
+      } catch { /* skip */ }
+    }
+  }
+  return ids.sort();
 }
 
 try {
   const sprintData = JSON.parse(fs.readFileSync(sprintPath, 'utf8'));
-  const sprintTasks = Object.entries(sprintData.tasks);
-
-  // Also read backlog for ready tasks
-  let backlogTasks = [];
-  if (fs.existsSync(backlogPath)) {
-    const backlog = JSON.parse(fs.readFileSync(backlogPath, 'utf8'));
-    backlogTasks = Object.entries(backlog.tasks);
-  }
+  const sprintTasks = Object.entries(sprintData.tasks || {});
 
   const now = new Date().toISOString();
 
   const inFlight = sprintTasks.filter(([_, t]) => t.status === 'in_progress').map(([id]) => id);
   const stuck = sprintTasks.filter(([_, t]) => t.status === 'stuck').map(([id]) => id);
   const humanNeeded = sprintTasks.filter(([_, t]) => t.status === 'human_needed').map(([id]) => id);
-  const ready = backlogTasks.filter(([_, t]) => t.status === 'ready').map(([id]) => id);
+  const ready = readyTaskIdsFromPlans(plansDir);
 
   // Determine current phase
   let phase = 'idle';
   if (sprintData.sprint && sprintData.sprint.status === 'active') {
     phase = '3 (execution sprint)';
-  } else if (backlogTasks.length > 0) {
+  } else if (ready.length > 0) {
     phase = '2 (refinement)';
   }
 

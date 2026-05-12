@@ -4,6 +4,38 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-05-11
+
+### Added
+- **Native macOS visual verification via Peekaboo.** Third platform alongside Maestro (mobile) and Playwright (web), mirroring Maestro's MCP-preferred-with-CLI-fallback posture. Drives running `.app` bundles via accessibility tree + screenshots, with `click` / `type` / `menu` / `hotkey` / `scroll` interaction primitives.
+  - New config toggle `verification.visual_macos` (off by default).
+  - `skills/visual-verify/SKILL.md` v0.5.0 adds **Peekaboo (macOS) Availability** and **Peekaboo Patterns (macOS)** sections covering MCP and CLI paths, token budgets, animation handling, and serialization rules. Prefer `peekaboo see --json-output` (JSON only) when you do not need pixels — the image-bearing form runs ~2000 tokens per call.
+  - `shadow-verifier` / `shadow-sprint-verifier` settings gate resolves three platform keys; both add `mcp__peekaboo__*` to `tools` and `peekaboo` to `mcpServers`. New `visual_macos_unavailable` dedup_key for the human-review queue. Report blocks and the persisted sprint-verification.md frontmatter add `visual_macos:` rows.
+  - `/soloflow:init` Q2 restructured to **multi-select** across Mobile / Web / macOS (replaces Mobile|Web|Both single-select). Detects `peekaboo` on PATH, offers `brew install steipete/tap/peekaboo`, surfaces Accessibility / Screen Recording grants via `peekaboo permissions`, and offers to register the MCP server via `npx -y @steipete/peekaboo`.
+  - `scripts/sprint/probe-infra.js` adds the `peekaboo` category — keyword-driven (MACOS_RE) and config-driven (`visual_macos=true`) demand, MCP-or-CLI probe parity with Maestro, shadow cross-check that only demotes when shadows are broken AND `peekaboo` CLI is also missing.
+  - `docs/VISUAL-VERIFICATION-SETUP.md` adds Peekaboo prerequisites (brew install, macOS 15+, permission grants on the parent process, npx for MCP path), MCP registration snippets, sandbox allowlist entry (`Bash(peekaboo *)`), and three troubleshooting subsections (`skipped_unable` triage, permission-grant-targets-parent-process gotcha, shadow-agent currency).
+- **`quality_gate.*` config block** governs the TaskCompleted hook (`hooks/task-completed.js`). Five keys: `enabled`, `test`, `typecheck`, `skip_e2e` (skip when the project's test script invokes Playwright/Cypress/WebdriverIO/Detox/Maestro/Nightwatch), and `skip_when_unrunnable` (skip when the runner's deps aren't installed locally — no `node_modules`, missing `tsc`, missing `pytest`, etc.). Defaults preserve the gate's intent while preventing the false failures it used to produce on setup tasks and fresh forks.
+- **`/soloflow:config` — "Quality gate" sub-flow (5g.5)** surfaces the five new toggles. Kept distinct from "Verification" (5g) since the quality gate is the per-task hook and the verifier is the sprint-level agent — same underlying tools, different code paths.
+
+### Fixed
+- **TaskCompleted hook no longer fails on tasks that didn't touch testable code.** Previously, every `TaskUpdate → completed` invoked the project's `test` and `typecheck` commands indiscriminately; on a fresh fork or any project whose suite needs build artifacts/browsers/a GUI, the hook exited 2 on every task, blocking legitimate setup work and training the user to ignore the gate. The hook now skips with a one-line note (and exit 0) when (a) the gate or any sub-check is disabled in config, (b) the test script looks like an E2E runner, or (c) the runner's deps aren't installed in `cwd`.
+
+### Migration
+After upgrading, run `/soloflow:sync-agents` to copy the updated shadow agents into `.claude/agents/`, then **restart Claude Code** — subagents load their `tools:` / `mcpServers:` allowlists at session start, so the new `mcp__peekaboo__*` bindings only reach freshly-synced shadows on the next session. To enable macOS verification, set `verification.visual_macos: true` in `.soloflow/config.json` (or use the `/soloflow:init` wizard's Q2) and install Peekaboo: `brew install steipete/tap/peekaboo`, then grant Accessibility + Screen Recording permissions to the parent process. Existing mobile/web flows are unchanged — `visual_macos` defaults to `false`.
+
+## [0.9.13] - 2026-05-11
+
+### Added
+- **`verification.visual_auth_fixture`** — optional Maestro flow run once per verifier session to authenticate the simulator before visual flows. Convention: `.maestro/fixtures/sign-in.yaml`. When unset and the simulator is signed-out, multiple affected tasks collapse to a single deduped queue entry (`dedup_key: simulator_unauthenticated`) instead of one row per task.
+- **Review-queue `dedup_key`** — `appendEntry` now collapses entries sharing a non-empty `dedup_key`: tasks accumulate in `affected_tasks`, severity promotes to max, `blocked_checks` unions. Conventional keys used by `shadow-verifier`: `simulator_unauthenticated`, `visual_mobile_unavailable`, `visual_web_unavailable`, `metro_offline`. Behavior is unchanged when `dedup_key` is absent.
+- **`infra_check.advisories`** in sprint-initiator output — inform-only signals surfaced at orchestrator Step 2.8. First advisory: `no_auth_fixture` when `verification.visual_mobile=true` but `visual_auth_fixture` is unset.
+
+### Changed
+- **`shadow-verifier` / `shadow-sprint-verifier`** add a mobile auth-state pre-flight sub-step and document the `dedup_key` conventions in the Config-gap escalation block.
+
+### Migration
+After upgrading, run `/soloflow:sync-agents` to sync the updated shadow agents into `.claude/agents/`, then restart Claude Code so the new auth pre-flight logic takes effect in subagent sessions. No config changes are required — `visual_auth_fixture` defaults to `null` and the dedup behavior activates only for entries that opt in via `dedup_key`.
+
 ## [0.9.8] - 2026-04-24
 
 ### Added

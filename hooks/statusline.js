@@ -18,32 +18,72 @@ function readSoloFlowState(dir) {
 
   const state = {};
 
-  // Read sprint.json
-  const sprintPath = path.join(soloflowDir, 'active', 'sprint.json');
-  if (fs.existsSync(sprintPath)) {
+  // Aggregate every active per-sprint sprint.json under active/sprints/.
+  const sprintsDir = path.join(soloflowDir, 'active', 'sprints');
+  if (fs.existsSync(sprintsDir)) {
+    let inProgress = [];
+    let stuck = 0;
+    let humanNeeded = 0;
+    let primarySprint = null;
     try {
-      const sprint = JSON.parse(fs.readFileSync(sprintPath, 'utf8'));
-      if (sprint.sprint) {
-        state.sprintId = sprint.sprint.id;
-        state.sprintStatus = sprint.sprint.status;
+      for (const entry of fs.readdirSync(sprintsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const sprintPath = path.join(sprintsDir, entry.name, 'sprint.json');
+        if (!fs.existsSync(sprintPath)) continue;
+        try {
+          const sprint = JSON.parse(fs.readFileSync(sprintPath, 'utf8'));
+          if (sprint.sprint && !primarySprint) {
+            primarySprint = { id: sprint.sprint.id, status: sprint.sprint.status };
+          }
+          const tasks = Object.entries(sprint.tasks || {});
+          inProgress = inProgress.concat(tasks.filter(([, t]) => t.status === 'in_progress').map(([id]) => id));
+          stuck += tasks.filter(([, t]) => t.status === 'stuck').length;
+          humanNeeded += tasks.filter(([, t]) => t.status === 'human_needed').length;
+        } catch { /* skip malformed */ }
       }
-      const tasks = Object.entries(sprint.tasks || {});
-      state.inProgress = tasks.filter(([, t]) => t.status === 'in_progress').map(([id]) => id);
-      state.stuck = tasks.filter(([, t]) => t.status === 'stuck').length;
-      state.humanNeeded = tasks.filter(([, t]) => t.status === 'human_needed').length;
-    } catch (e) { /* ignore parse errors */ }
+    } catch { /* skip directory read errors */ }
+    if (primarySprint) {
+      state.sprintId = primarySprint.id;
+      state.sprintStatus = primarySprint.status;
+    }
+    state.inProgress = inProgress;
+    state.stuck = stuck;
+    state.humanNeeded = humanNeeded;
   }
 
-  // Read backlog.json for ready count
-  const backlogPath = path.join(soloflowDir, 'active', 'backlog.json');
-  if (fs.existsSync(backlogPath)) {
-    try {
-      const backlog = JSON.parse(fs.readFileSync(backlogPath, 'utf8'));
-      state.ready = Object.values(backlog.tasks || {}).filter(t => t.status === 'ready').length;
-    } catch (e) { /* ignore */ }
-  }
+  // Count plans with frontmatter status: ready
+  state.ready = countReadyPlans(path.join(soloflowDir, 'active', 'plans'));
 
   return state;
+}
+
+// Count plans with frontmatter `status: ready`. Stays cheap (recursive
+// readdir + a tiny regex on each file's first 1KB) so the statusline
+// doesn't pay a real parser cost on every render.
+function countReadyPlans(plansRoot) {
+  if (!fs.existsSync(plansRoot)) return 0;
+  let count = 0;
+  const stack = [plansRoot];
+  while (stack.length) {
+    const dir = stack.pop();
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+    catch { continue; }
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) { stack.push(p); continue; }
+      if (!/^TASK-\d+-plan\.md$/.test(e.name)) continue;
+      try {
+        const fd = fs.openSync(p, 'r');
+        const buf = Buffer.alloc(1024);
+        const n = fs.readSync(fd, buf, 0, buf.length, 0);
+        fs.closeSync(fd);
+        const head = buf.slice(0, n).toString('utf8');
+        if (/\nstatus:\s*ready\b/.test(head) || /^status:\s*ready\b/m.test(head)) count++;
+      } catch { /* skip unreadable */ }
+    }
+  }
+  return count;
 }
 
 function formatState(s) {
@@ -77,7 +117,7 @@ function readUpdateBadge() {
     if (!fs.existsSync(cachePath)) return '';
     const cache = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
     if (!cache || !cache.update_available || !cache.latest_version) return '';
-    return ` \x1b[2;36m⇑ v${cache.latest_version}\x1b[0m`;
+    return ` \x1b[36m⇑ v${cache.latest_version} available — upgrade\x1b[0m`;
   } catch (e) {
     return '';
   }

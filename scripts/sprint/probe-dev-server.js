@@ -33,6 +33,7 @@ const path = require('path');
 const http = require('http');
 const https = require('https');
 const config = require('../lib/config');
+const paths = require('../lib/paths');
 const { parse } = require('../lib/args');
 
 const PROBE_TIMEOUT_MS = 3000;
@@ -60,13 +61,18 @@ function probeHttp(target, matchSubstr) {
 }
 
 function readManagedTaskId(cwd) {
-  const sprintPath = path.join(cwd, '.soloflow', 'active', 'sprint.json');
-  if (!fs.existsSync(sprintPath)) return null;
-  try {
-    const data = JSON.parse(fs.readFileSync(sprintPath, 'utf8'));
-    const taskId = data && data.dev_server && data.dev_server.task_id;
-    return typeof taskId === 'string' && taskId.length > 0 ? taskId : null;
-  } catch { return null; }
+  // Probe across all per-sprint sprint.json files; the first one with a
+  // dev_server.task_id wins. Multi-sprint flow lands in PR #5; for now
+  // there is at most one active sprint.
+  const active = paths.findActiveSprintIds(cwd);
+  for (const entry of active) {
+    try {
+      const data = JSON.parse(fs.readFileSync(entry.path, 'utf8'));
+      const taskId = data && data.dev_server && data.dev_server.task_id;
+      if (typeof taskId === 'string' && taskId.length > 0) return taskId;
+    } catch { /* skip */ }
+  }
+  return null;
 }
 
 async function main() {

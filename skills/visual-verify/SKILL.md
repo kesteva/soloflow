@@ -1,14 +1,14 @@
 ---
 name: visual-verify
-description: This skill should be used when verifying UI changes visually. Prefers Maestro MCP when available, falls back to the Maestro CLI. Web verification uses Playwright MCP. Provides patterns for availability probes, path selection, ephemeral/inline flows, screenshot capture, and view hierarchy inspection.
-version: 0.4.0
+description: This skill should be used when verifying UI changes visually. Mobile prefers Maestro MCP with Maestro CLI fallback. Web uses Playwright MCP. macOS prefers Peekaboo MCP with the peekaboo CLI fallback. Provides patterns for availability probes, path selection, ephemeral/inline flows, screenshot capture, and view hierarchy inspection.
+version: 0.5.0
 ---
 
 # Visual Verification
 
-This skill provides patterns for visually verifying UI changes. For mobile, SoloFlow **prefers Maestro MCP** and automatically falls back to the **Maestro CLI** when MCP is unreachable. For web, it uses the **Playwright MCP** server (no CLI fallback).
+This skill provides patterns for visually verifying UI changes. For mobile, SoloFlow **prefers Maestro MCP** and automatically falls back to the **Maestro CLI** when MCP is unreachable. For web, it uses the **Playwright MCP** server (no CLI fallback). For native macOS apps, it **prefers Peekaboo MCP** and falls back to the **Peekaboo CLI** when MCP is unreachable.
 
-Pick a path **once per verification run** — never mix MCP and CLI Maestro calls in the same run (both own port 7001; mixing causes contention).
+Pick a path **once per verification run** — never mix MCP and CLI Maestro calls in the same run (both own port 7001; mixing causes contention). The same single-path rule applies to Peekaboo even though it has no port collision: two concurrent UI driver calls against the same window race regardless of transport.
 
 ## Dev-Server Preflight (mobile only)
 
@@ -55,6 +55,22 @@ Playwright has no CLI fallback.
 
 1. Run `which npx` via Bash. If not found, skip web verification.
 2. Attempt a lightweight `mcp__playwright__*` probe (e.g., a noop `browser_install` check). If the MCP server is unreachable, skip web verification.
+
+## Peekaboo (macOS) Availability
+
+Before running any macOS verification, probe which path to use and record the decision for the rest of the run. Same single-path rule as Maestro:
+
+1. **Check `mcp__peekaboo__*` availability.** If the tool surface is bound to this session (`mcp__peekaboo__see`, `mcp__peekaboo__click`, etc. in your available-tools list) AND a lightweight call succeeds, set `USE_PEEKABOO_MCP=true`.
+   - Lightweight probe: call `mcp__peekaboo__permissions`. It returns quickly and surfaces missing Accessibility / Screen Recording grants up-front.
+   - If the tool is unbound (not in your allowlist) OR the probe errors, set `USE_PEEKABOO_MCP=false` and continue to step 2.
+2. **Check CLI fallback.** Run `which peekaboo` via Bash. If found, probe permissions:
+   ```bash
+   peekaboo permissions
+   ```
+   If the output reports both Accessibility and Screen Recording as granted, use the **Peekaboo CLI Patterns (fallback)** below.
+3. **Neither available.** Report `skipped_unable` with reason "mcp__peekaboo__* not bound and `peekaboo` CLI not installed or required permissions not granted" and proceed. (The verifier agents know to escalate this via the config-gap recipe.)
+
+**Permission grants.** Peekaboo (either path) needs the parent process (Terminal / Claude Code) granted both **Accessibility** and **Screen Recording** in System Settings → Privacy & Security. Without them, every action errors. Grants survive process restarts but must be re-applied after major macOS updates.
 
 ## Maestro MCP Patterns (primary)
 
@@ -221,6 +237,92 @@ After the ephemeral flow lands the app on the target screen, run `maestro hierar
 
 **`appId` resolution order** — same as the MCP path (see above).
 
+## Peekaboo Patterns (macOS)
+
+All MCP interactions go through `mcp__peekaboo__*` tools. Most interactions target a specific app — pass it as `app: "AppName"` or via bundle id. Path Selection (above) decides MCP vs. CLI; stay on the chosen path for the whole run.
+
+### App lifecycle
+
+```
+mcp__peekaboo__app(action="launch", name="<AppName or bundle id>")
+mcp__peekaboo__app(action="quit", name="<AppName>")
+```
+
+CLI equivalents:
+
+```bash
+peekaboo app launch "<AppName>"
+peekaboo app quit "<AppName>"
+```
+
+### Element Presence — `see`
+
+`see` returns a screenshot **and** a structured accessibility annotation for the captured window/app. It is the macOS equivalent of `inspect_view_hierarchy` + `take_screenshot` rolled into one call — request the JSON only when you do not need the image.
+
+```
+mcp__peekaboo__see(app="<AppName>", mode="window")
+  → returns image + element list with role, title, frame, identifier.
+```
+
+CLI:
+```bash
+peekaboo see --app "<AppName>" --json-output > /tmp/sf-peekaboo-$$.json
+```
+
+Use this for: confirming buttons exist, checking text content, verifying layout structure, reading accessibility labels.
+
+### Screen Capture
+
+`see` already returns an image — there is no separate "screenshot-only" tool that costs less. To minimize token use when you do not need pixels, prefer the JSON-only CLI form (`peekaboo see --json-output` then parse) and avoid passing the captured image back to the model. Cap visible-screenshot captures at the resolved `verification.visual_screenshot_budget` (fallback: 3) for the run.
+
+### Interaction Primitives
+
+- `mcp__peekaboo__click(app="<AppName>", on="<element query>")` — click. Element query can be role+title, identifier, or `coords: "x,y"`.
+- `mcp__peekaboo__type(text="<text>")` — type into the focused field.
+- `mcp__peekaboo__press(key="<key>")` — press a single key (`return`, `escape`, `tab`, etc.).
+- `mcp__peekaboo__hotkey(keys=["cmd","s"])` — chord.
+- `mcp__peekaboo__scroll(app="<AppName>", direction="down", amount=3)` — scroll the focused or specified region.
+- `mcp__peekaboo__menu(app="<AppName>", path=["File","New"])` — drive menu bar items by path. Indispensable for native Mac apps whose primary affordances live in the menubar.
+- `mcp__peekaboo__window(action="focus", app="<AppName>")` — focus/bring forward.
+
+CLI equivalents follow the `peekaboo <verb> --app "<AppName>" <args>` pattern, e.g.:
+
+```bash
+peekaboo click --app "MyApp" --on "Button:Save"
+peekaboo type "hello"
+peekaboo hotkey "cmd,s"
+peekaboo menu --app "MyApp" --path "File,New"
+```
+
+Prefer the higher-level `menu`, `click on=<query>`, and `hotkey` tools over raw `coords` — they are stable across window-size changes and produce better evidence in failure reports.
+
+### Diagnostics
+
+- `mcp__peekaboo__permissions` — report Accessibility / Screen Recording grant status. Run once at the top of a session when MCP first errors.
+- `mcp__peekaboo__list(target="apps"|"windows")` — discover what is currently running. Useful when an `app:` lookup by name fails.
+
+**Animations.** Native AppKit/SwiftUI animations are typically <500 ms but not zero. After a `click`/`menu` that triggers a sheet or transition, insert a brief wait (`mcp__peekaboo__sleep(ms=500)`) before the next `see`, otherwise you may capture a mid-transition frame.
+
+## Peekaboo CLI Patterns (fallback)
+
+Use only when the MCP probe in **Peekaboo (macOS) Availability** failed. All CLI verification is invoked via Bash. Each command exits non-zero on failure and prints a structured error.
+
+```bash
+peekaboo app launch "MyApp"
+peekaboo see --app "MyApp" --json-output > /tmp/sf-peekaboo-hier-$$.json
+peekaboo click --app "MyApp" --on "Button:Save"
+peekaboo see --app "MyApp" --path /tmp/sf-peekaboo-shot-$$.png   # writes PNG, omit --json-output for image only
+peekaboo app quit "MyApp"
+```
+
+For screenshots captured this way, downsize before reading to manage token cost:
+
+```bash
+sips -Z 1400 /tmp/sf-peekaboo-shot-$$.png > /dev/null
+```
+
+The CLI does not own a port lock, but treat operations against the same window as serialized — do not run two `peekaboo` commands targeting the same app in parallel.
+
 ## Playwright Patterns (Web)
 
 ### Page Verification
@@ -240,15 +342,18 @@ Prefer cheaper operations first:
 |---|---|---|
 | `mcp__maestro__inspect_view_hierarchy` | MCP | ~50 (CSV) |
 | `maestro hierarchy` | CLI | ~200–600 (plain text) |
+| `peekaboo see --json-output` (JSON only) | MCP/CLI | ~300–1500 (JSON, varies with window complexity) |
 | Page content read (web) | — | variable |
 | Screenshot (any path, after sizing) | MCP/CLI | ~1600 |
+| `mcp__peekaboo__see` (image + JSON) | MCP | ~2000 |
 
-A typical verification should use 1–2 hierarchy inspections and at most `verification.visual_screenshot_budget` screenshots (default 3). If you find yourself taking more screenshots, reconsider whether hierarchy data or page content would suffice. MCP hierarchy is roughly 4–10× cheaper than CLI hierarchy — one concrete reason MCP is the preferred path.
+A typical verification should use 1–2 hierarchy inspections and at most `verification.visual_screenshot_budget` screenshots (default 3). If you find yourself taking more screenshots, reconsider whether hierarchy data or page content would suffice. MCP hierarchy is roughly 4–10× cheaper than CLI hierarchy — one concrete reason MCP is the preferred path. For macOS, prefer the JSON-only form of `see` (CLI with `--json-output`) when you only need element presence — the bundled image otherwise inflates each call to ~2000 tokens.
 
 ## Serialization Rules
 
 - **Never mix Maestro MCP and CLI calls in a single verification run.** Both bind port 7001; concurrent use produces unpredictable failures. Path Selection picks one path for the whole run.
 - **Within a single path, serialize against the same device.** `maestro test` and `maestro hierarchy` hold a device lock via `idb_companion`; the MCP server holds the same lock. Don't run two Maestro operations in parallel against the same device — even through different tool calls.
+- **Peekaboo: pick one path, never run concurrent operations against the same app window.** Peekaboo has no port-lock collision, but two simultaneous `click`/`see`/`type` calls against the same window race each other (focus stealing, mid-animation captures, dropped events). Pick MCP or CLI once and serialize all calls against a given app.
 
 ## Mapping Results to Criteria
 

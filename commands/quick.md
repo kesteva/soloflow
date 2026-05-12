@@ -97,15 +97,15 @@ estimated_complexity: low|medium|high
 {Restate each criterion with clear pass/fail definition}
 ```
 
-Write the plan file with `noclobber`/`wx` semantics; if it already exists (a parallel worker raced), recompute the next ID and retry. Then add the task entry to `.soloflow/active/sprint.json` (quick path skips backlog) by running:
+Write the plan file with `noclobber`/`wx` semantics; if it already exists (a parallel worker raced), recompute the next ID and retry. Then add the task entry to a quick-mode sprint by running:
 
 ```
 node "${CLAUDE_PLUGIN_ROOT}/scripts/state/update-task-status.js" TASK-{NNN} in_progress --create --plan .soloflow/active/plans/TASK-{NNN}-plan.md
 ```
 
-`--create` scaffolds `sprint.json` (with a `SPRINT-quick-<timestamp>` id) if it doesn't exist yet, and inserts the task entry.
+`--create` scaffolds a per-sprint `.soloflow/active/sprints/SPRINT-quick-<timestamp>/sprint.json` if no active sprint exists yet, and inserts the task entry.
 
-After `--create` completes, read `.soloflow/sprint.json` (or `.soloflow/active/sprint.json` depending on where the script writes — check both) to get `sprint.id`, and call this value `{sprint_id}` for the rest of the command. Ensure `.soloflow/active/findings/` exists (`mkdir -p`). If `.soloflow/active/findings/{sprint_id}-findings.md` does not already exist, create it with `wx`/`noclobber` semantics:
+After `--create` completes, the script's stdout prints `TASK-{NNN}: in_progress (create)` — the active sprint can be discovered via `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/next-ids.js" --kind sprint` (returns the next free ID, not the current one) or by globbing `.soloflow/active/sprints/*/sprint.json` and reading `sprint.id`. Call that value `{sprint_id}` for the rest of the command. Ensure `.soloflow/active/findings/` exists (`mkdir -p`). If `.soloflow/active/findings/{sprint_id}-findings.md` does not already exist, create it with `wx`/`noclobber` semantics:
 
 ```
 ---

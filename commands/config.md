@@ -73,7 +73,7 @@ Use `AskUserQuestion`:
 **If Round 1 = Operations:**
 - **Question:** "Which operation setting?"
 - **Header:** "Operations"
-- **Options:** `"Limits"`, `"Git & run branches"`, `"Code review"`, `"Sprint code review"`, `"Verification"`, `"Roadmap"` *(the picker cap is 4 — split as `"Limits"`, `"Git"`, `"Verification"`, `"More..."` and the "More..." path re-asks with `"Code review"`, `"Sprint code review"`, `"Roadmap"`, `"Back"`)*
+- **Options:** `"Limits"`, `"Git & run branches"`, `"Code review"`, `"Sprint code review"`, `"Verification"`, `"Quality gate"`, `"Roadmap"` *(the picker cap is 4 — split as `"Limits"`, `"Git"`, `"Verification"`, `"More..."`; the first "More..." path re-asks with `"Quality gate"`, `"Code review"`, `"Sprint code review"`, `"More..."`; the second "More..." path re-asks with `"Roadmap"`, `"Back"`.)*
 
 **If Round 1 = Reset to defaults:** see Step 6.
 
@@ -211,6 +211,33 @@ server since 0.9.3 — only the CLI is required.
 - `"Reset to default"` → `["maestro/", ".maestro/", "test/maestro/"]`
 - `"Edit"` — prompt for a comma-separated list; split, trim, filter empty, store as array.
 
+### 5g.5. Quality gate
+
+Five settings on the TaskCompleted hook (`hooks/task-completed.js`). Distinct
+from 5g — that subsection toggles the sprint verifier; this one toggles the
+per-task hook that runs the project's test runner + type checker on every
+TaskUpdate → completed.
+
+- `quality_gate.enabled` — boolean
+- `quality_gate.test` — boolean
+- `quality_gate.typecheck` — boolean
+- `quality_gate.skip_e2e` — boolean
+- `quality_gate.skip_when_unrunnable` — boolean
+
+Use the same boolean question pattern as 5b (Enable / Disable / Use default
+with `(current)` labeling). Bundle up to 4 toggles per `AskUserQuestion`
+call.
+
+Annotate `skip_e2e` and `skip_when_unrunnable` in the question text so the
+intent is clear: `skip_e2e` skips when the test script invokes a known
+end-to-end runner (Playwright, Cypress, WebdriverIO, Detox, Maestro,
+Nightwatch); `skip_when_unrunnable` skips when the runner's deps aren't
+installed (no `node_modules`, missing `tsc`, missing `pytest`, etc.). Both
+default true.
+
+If `quality_gate.enabled` is set to `false`, optionally show a one-line
+note that the other four toggles have no effect while disabled.
+
 ### 5h. Roadmap
 
 Two settings:
@@ -321,6 +348,11 @@ verification.visual_mobile_app_id
 verification.visual_screenshot_budget
 verification.visual_prefer_hierarchy
 verification.visual_maestro_flow_dirs
+quality_gate.enabled
+quality_gate.test
+quality_gate.typecheck
+quality_gate.skip_e2e
+quality_gate.skip_when_unrunnable
 git.branch_per_run
 git.branch_name_format
 git.merge_strategy

@@ -37,12 +37,27 @@ function parseArgs(argv) {
     else if (a === '--stuck-report') opts.stuckReport = argv[++i];
     else if (a === '--touched') opts.touched.push(argv[++i]);
     else if (a === '--commit-sha') opts.commitSha = argv[++i];
+    else if (a === '--sprint') opts.sprint = argv[++i];
     else if (a === '--no-commit') opts.commit = false;
     else if (a.startsWith('--')) die(`unknown flag: ${a}`);
     else positional.push(a);
   }
-  if (positional.length !== 2) die('usage: settle-task.js <TASK-ID> <verdict> [--done-report <path>] [--stuck-report <path>] [--touched <path> ...] [--commit-sha <sha>] [--no-commit]');
+  if (positional.length !== 2) die('usage: settle-task.js <TASK-ID> <verdict> [--sprint SPRINT-NNN] [--done-report <path>] [--stuck-report <path>] [--touched <path> ...] [--commit-sha <sha>] [--no-commit]');
   return { taskId: positional[0], verdict: positional[1], ...opts };
+}
+
+function resolveSprintPath(cwd, explicitSprintId) {
+  if (explicitSprintId) {
+    const p = paths.sprintJsonPath(cwd, explicitSprintId);
+    if (!fs.existsSync(p)) die(`${p} not found`);
+    return { id: explicitSprintId, path: p };
+  }
+  const active = paths.findActiveSprintIds(cwd);
+  if (active.length === 0) die('no active sprint found under .soloflow/active/sprints/');
+  if (active.length > 1) {
+    die(`multiple active sprints found (${active.map((s) => s.id).join(', ')}); pass --sprint to disambiguate`);
+  }
+  return { id: active[0].id, path: active[0].path };
 }
 
 function writeAtomic(filePath, content) {
@@ -64,8 +79,37 @@ function inGitRepo(cwd) {
   }
 }
 
+function isPathTracked(cwd, filePath) {
+  try {
+    git(['ls-files', '--error-unmatch', '--', filePath], { cwd });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function findPlanFiles(cwd, taskId) {
+  const root = path.join(cwd, '.soloflow', 'active', 'plans');
+  if (!fs.existsSync(root)) return [];
+  const wanted = `${taskId}-plan.md`;
+  const out = [];
+  const stack = [root];
+  while (stack.length) {
+    const dir = stack.pop();
+    let entries;
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+    catch { continue; }
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      if (e.isDirectory()) stack.push(p);
+      else if (e.isFile() && e.name === wanted) out.push(p);
+    }
+  }
+  return out;
+}
+
 function main() {
-  const { taskId, verdict, doneReport, stuckReport, touched, commit, commitSha } = parseArgs(process.argv.slice(2));
+  const { taskId, verdict, doneReport, stuckReport, touched, commit, commitSha, sprint } = parseArgs(process.argv.slice(2));
 
   if (!/^TASK-\d{3,}$/.test(taskId)) die(`invalid task ID: ${taskId}`);
   if (!VALID_VERDICTS.has(verdict)) die(`invalid verdict: ${verdict} (expected one of: ${[...VALID_VERDICTS].join(', ')})`);
@@ -74,8 +118,7 @@ function main() {
   if (verdict === 'stuck' && !stuckReport) die('--stuck-report is required when verdict is stuck');
 
   const cwd = process.cwd();
-  const sprintPath = path.join(cwd, '.soloflow', 'active', 'sprint.json');
-  if (!fs.existsSync(sprintPath)) die(`${sprintPath} not found`);
+  const { path: sprintPath } = resolveSprintPath(cwd, sprint);
 
   let state;
   try {
@@ -87,27 +130,9 @@ function main() {
   if (!state.tasks[taskId]) die(`${taskId} not found in active sprint`);
 
   const now = new Date().toISOString();
-  let backlogTouched = false;
-  const backlogPath = paths.backlogJsonPath(cwd);
   if (verdict === 'done') {
     if (!fs.existsSync(doneReport)) die(`done report not found at ${doneReport} (write it before calling settle-task)`);
     delete state.tasks[taskId];
-
-    // Invariant: backlog.json only contains incomplete tasks. Scrub the task if present.
-    // Parse errors / missing file are non-fatal — the sprint.json write is the primary contract.
-    if (fs.existsSync(backlogPath)) {
-      let backlog;
-      try {
-        backlog = JSON.parse(fs.readFileSync(backlogPath, 'utf8'));
-      } catch (e) {
-        process.stderr.write(`settle-task: warning — ${backlogPath} is not valid JSON; skipping backlog scrub (${e.message})\n`);
-      }
-      if (backlog && backlog.tasks && backlog.tasks[taskId]) {
-        delete backlog.tasks[taskId];
-        writeAtomic(backlogPath, JSON.stringify(backlog, null, 2) + '\n');
-        backlogTouched = true;
-      }
-    }
   } else {
     if (verdict === 'stuck' && !fs.existsSync(stuckReport)) die(`stuck report not found at ${stuckReport}`);
     const task = state.tasks[taskId];
@@ -117,6 +142,22 @@ function main() {
   }
 
   writeAtomic(sprintPath, JSON.stringify(state, null, 2) + '\n');
+
+  // On `done`, delete the matching plan file so it doesn't linger as
+  // `orphan_plan` cruft. Same atomic settle: the deletion is staged into the
+  // task's `chore(TASK-NNN): done` commit alongside sprint.json and the done
+  // report. See docs/CRUFT-CLEANUP.md scenario 1.
+  let deletedPlanPath = null;
+  if (verdict === 'done') {
+    const matches = findPlanFiles(cwd, taskId);
+    if (matches.length > 1) {
+      die(`multiple plan files found for ${taskId}: ${matches.map((m) => path.relative(cwd, m)).join(', ')}; resolve duplicates before settling`);
+    }
+    if (matches.length === 1) {
+      fs.unlinkSync(matches[0]);
+      deletedPlanPath = matches[0];
+    }
+  }
 
   if (!commit) {
     process.stdout.write(`${taskId}: ${verdict} (no-commit)\n`);
@@ -131,7 +172,7 @@ function main() {
   const toStage = [sprintPath];
   if (verdict === 'done' && doneReport) toStage.push(doneReport);
   if (verdict === 'stuck' && stuckReport) toStage.push(stuckReport);
-  if (backlogTouched) toStage.push(backlogPath);
+  if (deletedPlanPath && isPathTracked(cwd, deletedPlanPath)) toStage.push(deletedPlanPath);
   for (const p of touched) {
     if (fs.existsSync(p)) toStage.push(p);
   }

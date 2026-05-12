@@ -28,11 +28,11 @@ Phase: gather
 
 1. **Sanity check.** Verify `.soloflow/` exists. If not, report `initialized: false` and stop.
 
-2. **Read backlog.** Use the query helper instead of ad-hoc `node -e` — `backlog.json.tasks` is an **object keyed by task ID**, not an array, and hand-written `.filter` calls fail with `TypeError: b.tasks.filter is not a function`.
+2. **Read ready plans.** Plan frontmatter is the queue source of truth — there is no `backlog.json`. Use the query helper instead of hand-rolled globs:
    ```
-   node "${CLAUDE_PLUGIN_ROOT}/scripts/state/backlog-query.js" --status ready
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/state/plan-query.js" --status ready
    ```
-   Add `--epic <slug>`, `--plan-contains <substr>`, `--id TASK-NNN` (repeatable), or `--fields id,status,title,epic,depends_on,plan_path` as needed; `--format ids|count|json` (default json). Returns `status: "ready"` tasks here. If the orchestrator passed argument filters (task IDs or `IDEA-NNN`), note them in the output but still return the full ready set — the orchestrator decides scope.
+   Add `--epic <slug>`, `--plan-contains <substr>`, `--id TASK-NNN` (repeatable), or `--fields id,status,title,epic,depends_on,plan_path` as needed; `--format ids|count|json` (default json). Returns plans whose frontmatter `status: ready`. If the orchestrator passed argument filters (task IDs or `IDEA-NNN`), note them in the output but still return the full ready set — the orchestrator decides scope.
 
 3. **Find natural next epic.** For each ready task, read its plan file (glob `.soloflow/active/plans/**/TASK-{NNN}-plan.md`) and extract the `epic` frontmatter field. The natural next epic is the first epic (by lowest task ID) that has ready tasks.
 
@@ -64,7 +64,7 @@ Phase: gather
    ```
    node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/probe-dev-server.js"
    ```
-   Parse the JSON. If `enabled: false`, set `dev_server: null` in gather output. Otherwise pass through `name`, `online`, and `managed_by_sprint` (the orchestrator drives the start/restart prompt from these three fields). The script also reads `.soloflow/active/sprint.json` to detect a sprint-managed task_id; you do NOT need to read sprint.json yourself.
+   Parse the JSON. If `enabled: false`, set `dev_server: null` in gather output. Otherwise pass through `name`, `online`, and `managed_by_sprint` (the orchestrator drives the start/restart prompt from these three fields). The script auto-discovers active sprints under `.soloflow/active/sprints/` to detect a sprint-managed task_id; you do NOT need to read sprint.json yourself.
 
 ### Output
 
@@ -152,8 +152,13 @@ Decisions:
 2. **Remember branch choice.** If `remember_branch_choice` is true, read `.soloflow/config.json` (or create it). Merge `{"git":{"branch_per_run":"always"}}` into the existing content. Write the file.
 
 3. **Write sprint state.**
-   - Read `.soloflow/active/backlog.json`.
-   - Move the selected tasks from `backlog.json` to a new `sprint.json`. Concretely: **delete each `selected_task_ids` entry from `backlog.json.tasks` and add it to `sprint.json.tasks` with `status: "pending"`**. A task must never be present in both files.
+   - Flip each selected plan's frontmatter `status` from `ready` to `in-flight`:
+     ```
+     node "${CLAUDE_PLUGIN_ROOT}/scripts/state/set-plan-status.js" in-flight {selected_task_id_1} {selected_task_id_2} ...
+     ```
+     The script atomically rewrites each plan's frontmatter (preserving every other field) and emits a JSON summary of `updated` + `skipped`. A "skipped" entry means the plan file was already in-flight (resume path) or missing (data corruption — bubble up).
+   - Create the per-sprint directory: `mkdir -p .soloflow/active/sprints/{sprint_id}/`.
+   - Write `.soloflow/active/sprints/{sprint_id}/sprint.json` with the same selected task IDs in `tasks` (each with `status: "pending"`):
      ```json
      {
        "sprint": {
@@ -166,7 +171,7 @@ Decisions:
      }
      ```
      `execution_mode` is persisted so that checkpoint-resume paths (commands/sprint.md Step 0.5) recover the same mode without re-prompting. Downstream steps read it from `sprint.sprint.execution_mode`.
-   - Write `backlog.json` (with the entries removed) and `sprint.json` (with the entries added). Both writes are required — Step 5's commit stages both paths.
+   - Plans are the source of truth; `sprint.json.tasks` mirrors the in-flight set. Step 5's commit stages both the per-sprint `sprint.json` and the modified plan files.
 
 3.5. **Create per-sprint findings file.**
    - Ensure `.soloflow/active/findings/` exists (`mkdir -p`).
@@ -191,7 +196,7 @@ Decisions:
    - `base_sha=$(git rev-parse HEAD)`
    - Generate branch name from `branch_name_format` config: replace `{timestamp}` → `date +%Y%m%d-%H%M%S`, `{sprint_id}` → sprint ID.
    - `git checkout -b <branch_name>` — if this fails, report ERROR immediately. Do NOT fall back to current branch.
-   - Add `run` object to `sprint.json`:
+   - Add `run` object to `.soloflow/active/sprints/{sprint_id}/sprint.json`:
      ```json
      "run": {
        "branch": "<branch_name>",
@@ -200,20 +205,20 @@ Decisions:
        "created_at": "<ISO timestamp>"
      }
      ```
-   - Write `sprint.json` again with the run object.
+   - Write the per-sprint `sprint.json` again with the run object.
 
 5. **Commit sprint start.** Run:
    ```
    node "${CLAUDE_PLUGIN_ROOT}/scripts/state/commit-atomic.js" \
        --message "chore({sprint_id}): start sprint" \
-       --path .soloflow/active/sprint.json \
-       --path .soloflow/active/backlog.json \
+       --path .soloflow/active/sprints/{sprint_id}/sprint.json \
        --path .soloflow/active/findings/{sprint_id}-findings.md \
+       --path {plan_path_for_each_selected_task} \
        [--path .soloflow/active/findings.md]      # only if step 3.5 migrated it
        [--path .soloflow/human-review-queue.md]   # only if step 1 modified it
        [--path .soloflow/config.json]             # only if step 2 modified it
    ```
-   The script skips explicit paths, skips silently if not in a git repo, skips if nothing staged, and never uses `git add -A`.
+   Stage every plan file whose frontmatter status was flipped in Step 3 (one `--path` per plan). The script skips explicit paths, skips silently if not in a git repo, skips if nothing staged, and never uses `git add -A`.
 
 6. **Pre-sprint regression smoke** (skip if `skip_smoke` is true).
    a. **Discover test infrastructure:**
@@ -237,6 +242,7 @@ Decisions:
    - Additionally requires `maestro` when `verification.visual_mobile=true` and `playwright` when `verification.visual_web=true` — independent of plan content, since the verifier's Level 2 decision gate fires for any UI file or UI-visible AC. Config-driven demands produce a `missing` entry whose `reason` is suffixed with `(required by verification.visual_*=true)` so the orchestrator can surface the registration gap instead of letting every task degrade to `skipped_unable`.
    - Probes each required category via Bash (MCP registration + CLI presence + docker daemon).
    - For config-driven visual categories (`maestro` / `playwright`), also cross-checks the shadow agents at `.claude/agents/shadow-verifier.md` and `.claude/agents/shadow-sprint-verifier.md`. `claude mcp list` passing doesn't guarantee that `mcp__{server}__*` tool bindings actually reach the shadow-verifier subagent session — that depends on current shadows. If shadows are `not_installed`, `untracked`, or `stale`, the category is demoted from `available` to `missing` with a shadow-specific reason so the orchestrator catches the silent-skip gap up-front.
+   - Emits a top-level `advisories` array (inform-only, never blocking). Current advisories: `kind: no_auth_fixture` when `verification.visual_mobile=true` but `verification.visual_auth_fixture` is unset — signals that the orchestrator should surface a one-line nudge at Step 2.8 about the recommended `.maestro/fixtures/sign-in.yaml` convention.
    - Runs each plan's `prerequisites[]` checks with a 5-second timeout, classifying `pass` / `fail` / `timeout`.
    - Emits the full `infra_check` payload (see Output schema below) as JSON.
 
@@ -298,6 +304,10 @@ infra_check:  # ALWAYS present (never null). Empty arrays if nothing required.
       impacts:
         - task_id: "TASK-NNN"
           test_targets: ["{behavior from test_strategy.targets[].behavior}"]
+  advisories:                                      # inform-only, never blocking. Surfaced at orchestrator Step 2.8.
+    - category: "maestro"                          # the category this advisory annotates
+      kind: "no_auth_fixture"                      # stable identifier; orchestrator can choose per-kind formatting
+      message: "{one-line nudge for the user}"
   task_prerequisites:                              # per-task plan-declared probes (see Step 6.5.b2). Empty if no plan had prerequisites.
     - task_id: "TASK-NNN"
       description: "{prereq description from plan}"

@@ -24,9 +24,17 @@ const fs = require('fs');
 const { parse, die } = require('../lib/args');
 const paths = require('../lib/paths');
 
-function loadSprint(cwd) {
-  const p = paths.sprintJsonPath(cwd);
-  if (!fs.existsSync(p)) die('ready-tasks', 'no sprint.json found');
+function loadSprint(cwd, explicitSprintId) {
+  let p;
+  if (explicitSprintId) {
+    p = paths.sprintJsonPath(cwd, explicitSprintId);
+    if (!fs.existsSync(p)) die('ready-tasks', `${p} not found`);
+  } else {
+    const active = paths.findActiveSprintIds(cwd);
+    if (active.length === 0) die('ready-tasks', 'no active sprint found');
+    if (active.length > 1) die('ready-tasks', `multiple active sprints (${active.map((s) => s.id).join(', ')}); pass --sprint`);
+    p = active[0].path;
+  }
   try { return JSON.parse(fs.readFileSync(p, 'utf8')); }
   catch (e) { die('ready-tasks', `sprint.json invalid: ${e.message}`); }
 }
@@ -62,7 +70,7 @@ function main() {
   const completedArg = (opts.completed || '').split(',').map((s) => s.trim()).filter(Boolean);
   const completed = new Set(completedArg);
 
-  const state = loadSprint(process.cwd());
+  const state = loadSprint(process.cwd(), opts.sprint);
   const tasks = state.tasks || {};
   const ids = Object.keys(tasks);
 

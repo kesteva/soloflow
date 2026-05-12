@@ -41,7 +41,7 @@ Mapping used in this command:
 
 1. If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
 2. If `.soloflow/human-review-queue.md` does not exist, report: "Human review queue file missing. Run `/soloflow:init` to repair state." and stop.
-3. `.soloflow/active/sprint.json` may be absent — that's OK. Cruft Scenarios 2 and 4 (which need it) are skipped gracefully.
+3. `.soloflow/active/sprints/*/sprint.json` may be absent — that's OK. Cruft Scenarios 2 and 4 (which need at least one active sprint) are skipped gracefully.
 4. Initialize in-memory counters to 0:
    - `cruft_resolved`
    - `decisions_resolved`, `decisions_deferred`, `decisions_dismissed`
@@ -55,9 +55,28 @@ Mapping used in this command:
 
 ## Step 1: Cruft detection + resolution
 
-Skip this step entirely if `$ARGUMENTS` contains `--skip-cruft` or any of the bucket-scope flags.
+Skip this step entirely (no prompt, no question) if `$ARGUMENTS` contains `--skip-cruft` or any of the bucket-scope flags. The flag IS the answer.
 
-Read `docs/CRUFT-CLEANUP.md` via the Read tool and follow its procedure to completion. Use `review-queue` as the commit-message `<command>` label. The procedure updates the `cruft_resolved` counter initialized in Step 0.
+Otherwise, before running the cruft procedure, ask the user whether they want to run it:
+
+1. Detect in-flight phases. Run via Bash:
+
+   ```bash
+   ls .soloflow-worktrees 2>/dev/null | grep -E '^(execution|planning|compound|clarify)-' || true
+   ```
+
+   Parse the output into a list of `<phase>-<id>` strings. If empty, no phases are in flight.
+
+2. Use **AskUserQuestion** with one question:
+   - **Question:** `"Run cruft cleanup as Step 1? It sweeps .soloflow/ for orphan plans, ghost sprint entries, stale stuck files, mid-commit settles, empty epics, malformed queue entries, completed-in-backlog, untracked plans, and stale ideas. Most items are auto-resolvable."` — if the in-flight list is non-empty, append a second sentence: `"<N> phase worktree(s) in flight: <comma-separated list>. Cruft may transiently flag in-progress state from these phases (mid-commit settle, untracked plans being written) — skipping is safer until they complete."`
+   - **Header:** `"Run cruft?"`
+   - **Options:**
+     1. `"Yes — run cruft"` *(label `(Recommended)` when no phases are in flight)*
+     2. `"Skip cruft"` *(label `(Recommended)` when one or more phases ARE in flight)*
+
+3. On **Skip cruft**: leave `cruft_resolved = 0`, print `"Skipping cruft cleanup."`, and proceed to Step 2.
+
+4. On **Yes — run cruft**: read `docs/CRUFT-CLEANUP.md` via the Read tool and follow its procedure to completion. Use `review-queue` as the commit-message `<command>` label. The procedure updates the `cruft_resolved` counter initialized in Step 0.
 
 For the same cruft sweep without the rest of this command's triage, see `/soloflow:housekeeping`.
 
@@ -576,17 +595,14 @@ Each `pending_refines` entry is a single bug-fix task — no slice decomposition
    - Apply parity gates 3a/3b from `commands/planner.md` per plan.
    - On terminal failure (no parseable plan after respawn cap): drop that item, surface in the final review-queue report under `Refinement failures`, and proceed.
 
-8. **Write plans + backlog.** For each successful plan:
+8. **Write plans.** For each successful plan:
    - Write to `.soloflow/active/plans/TASK-{NNN}-plan.md` (respect epic subfolder if the detailer assigned one — though in this path orphan tasks are the common case). Use `wx`/noclobber semantics; on collision, recompute the next ID and retry.
-   - Add to `.soloflow/active/backlog.json`:
-     ```json
-     { "id": "TASK-{NNN}", "status": "ready", "depends_on": [], "created": "{ISO}" }
-     ```
+   - The plan's frontmatter MUST carry `status: ready` — that frontmatter IS the queue entry; no separate queue file to update.
    - If the detailer expanded into an existing epic subfolder, that's fine. New epics are not produced here (review-queue refinements are bug fixes; the detailer should not propose new epics in detail mode anyway).
 
 9. Set `tasks_created = <count of new plans>`.
 
-10. Stage only the new plan files + `.soloflow/active/backlog.json`. Commit:
+10. Stage only the new plan files. Commit:
     ```
     feat: review-queue — plan TASK-{first}..TASK-{last} from testing issues
     ```

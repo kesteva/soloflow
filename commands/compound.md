@@ -254,11 +254,10 @@ For the set of approved B-items, produce execution-ready task plans by spawning 
    - Multi-sprint batch: *"These work items were surfaced by the compounder during {comma-separated BATCH_SPRINTS}. Each item below carries its own Source-Sprint field — use it to pick epic/scope if applicable. Refine each into an execution-ready task plan."*
 4. Spawn the **task-refiner** agent via the Agent tool with the brief, starting task counter, and existing epics — same interface as `/soloflow:planner` Step 2.
 5. Capture the output. Parse into individual plan files and any new EPIC-{slug}.md blocks.
-6. Write each plan file to `.soloflow/active/plans/` (respecting epic subfolders), using `noclobber`/`wx` semantics. Retry on collision.
-7. Add each task to `.soloflow/active/backlog.json` with `status: "ready"`.
-8. Commit the batch as one commit:
+6. Write each plan file to `.soloflow/active/plans/` (respecting epic subfolders), using `noclobber`/`wx` semantics. Retry on collision. Each plan's frontmatter MUST carry `status: ready` — that frontmatter IS the queue entry; no separate queue file to update.
+7. Commit the batch as one commit:
    - Single-sprint: `feat(SPRINT-{NNN}): plan TASK-{NNN}..TASK-{MMM} from compound` (unchanged).
-   - Multi-sprint: `feat(SPRINT-{MIN}..{MAX}): plan TASK-{NNN}..TASK-{MMM} from compound` including all plan files and backlog.json.
+   - Multi-sprint: `feat(SPRINT-{MIN}..{MAX}): plan TASK-{NNN}..TASK-{MMM} from compound` including all plan files.
 
 ### Bucket C — CLAUDE.md / CODE-PATTERNS.md improvements
 

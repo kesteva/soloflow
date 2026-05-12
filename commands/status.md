@@ -12,8 +12,8 @@ Display the current SoloFlow workflow state for this project.
 1. **Check initialization.** If `.soloflow/` does not exist, report: "SoloFlow not initialized. Run `/soloflow:init` first." and stop.
 
 2. **Read state files:**
-   - `.soloflow/active/backlog.json` for backlog tasks
-   - `.soloflow/active/sprint.json` for active sprint and in-flight tasks
+   - Plans under `.soloflow/active/plans/**/TASK-*-plan.md` — frontmatter `status` is the queue source of truth (use `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/plan-query.js" --status ready` for ready count, etc.)
+   - `.soloflow/active/sprints/*/sprint.json` (per-sprint layout; glob across all active sprints)
    - `.soloflow/checkpoint.md` for last checkpoint info
    - `.soloflow/human-review-queue.md` for pending reviews
 

@@ -4,8 +4,8 @@
 // Task-level infra availability probe (sprint-initiator.md step 6.5).
 //
 // Reads selected task plans, infers required infra categories (maestro,
-// playwright, docker) from keyword scans, probes availability via shell,
-// and probes per-task `prerequisites[]` blocks from plan frontmatter.
+// playwright, peekaboo, docker) from keyword scans, probes availability via
+// shell, and probes per-task `prerequisites[]` blocks from plan frontmatter.
 //
 // Usage:
 //   node probe-infra.js --plan path/to/TASK-001-plan.md --plan path/to/TASK-002-plan.md
@@ -28,6 +28,7 @@ const shadowAgents = require('../init/shadow-agents');
 
 const MOBILE_RE = /\b(ios|android|mobile|maestro|simulator|react-native)\b/i;
 const WEB_RE = /\b(browser|playwright|e2e|web|page\.|screenshot)\b/i;
+const MACOS_RE = /\b(macos|appkit|peekaboo|xcodebuild)\b/i;
 const DOCKER_RE = /\b(docker|container|compose|dockerfile)\b/i;
 const SERVICE_RE = /\b(postgres|redis|rabbitmq|mysql)\b/i;
 const SERVICE_ACTION_RE = /\b(start|spin up|local|test against|container)\b/i;
@@ -53,6 +54,7 @@ function categoriesForPlan(planPath) {
   const categories = new Set();
   if (hasIntegration && MOBILE_RE.test(combined)) categories.add('maestro');
   if (hasIntegration && WEB_RE.test(combined) && !MOBILE_RE.test(combined)) categories.add('playwright');
+  if (hasIntegration && MACOS_RE.test(combined) && !MOBILE_RE.test(combined)) categories.add('peekaboo');
   if (DOCKER_RE.test(combined)) categories.add('docker');
   else if (SERVICE_RE.test(combined) && SERVICE_ACTION_RE.test(combined)) categories.add('docker');
   return { categories: Array.from(categories), test_targets: testStrategy.map((t) => t && t.behavior).filter(Boolean) };
@@ -89,6 +91,19 @@ function probeCategory(cat) {
     const cli = tryShell('which npx >/dev/null');
     if (!cli.ok) return { ok: false, reason: 'CLI not found' };
     return { ok: true };
+  }
+  if (cat === 'peekaboo') {
+    // Peekaboo follows the Maestro posture: MCP-first with CLI fallback. Either
+    // path is sufficient at preflight; the verifier's Path Selection picks one
+    // at run-time. Accessibility / Screen Recording grants are probed at
+    // verifier run-time (not preflight), since users commonly grant permissions
+    // right before the first sprint that needs them.
+    const mcp = tryShell('claude mcp list 2>/dev/null | grep -qi peekaboo');
+    const cli = tryShell('which peekaboo >/dev/null');
+    if (mcp.ok && cli.ok) return { ok: true };
+    if (mcp.ok && !cli.ok) return { ok: true, reason: 'MCP registered; CLI not found (fallback unavailable)' };
+    if (!mcp.ok && cli.ok) return { ok: true, reason: 'CLI present; MCP not registered (fallback only)' };
+    return { ok: false, reason: 'neither MCP nor CLI available' };
   }
   if (cat === 'docker') {
     const bin = tryShell('which docker >/dev/null');
@@ -144,6 +159,10 @@ function main() {
     required.add('playwright');
     configDriven.add('playwright');
   }
+  if (config.resolve('verification.visual_macos', false) === true) {
+    required.add('peekaboo');
+    configDriven.add('peekaboo');
+  }
 
   const available = [];
   const missing = [];
@@ -153,29 +172,30 @@ function main() {
     const impacts = perPlan
       .filter((p) => p.categories.includes(cat))
       .map((p) => ({ task_id: p.task_id, test_targets: p.test_targets }));
-    const reason = configDriven.has(cat)
-      ? `${r.reason} (required by verification.visual_${cat === 'maestro' ? 'mobile' : 'web'}=true)`
+    const TOGGLE = { maestro: 'visual_mobile', playwright: 'visual_web', peekaboo: 'visual_macos' };
+    const reason = configDriven.has(cat) && TOGGLE[cat]
+      ? `${r.reason} (required by verification.${TOGGLE[cat]}=true)`
       : r.reason;
     missing.push({ category: cat, reason, impacts });
   }
 
-  // Shadow-install cross-check for Playwright and Maestro.
+  // Shadow-install cross-check for Playwright, Maestro, and Peekaboo.
   //
   // `claude mcp list` only confirms the MCP server is registered — it doesn't
-  // guarantee `mcp__{playwright,maestro}__*` tool bindings reach the shadow-
-  // verifier subagent session. That propagation depends on the shadow agents
-  // at .claude/agents/shadow-verifier.md and shadow-sprint-verifier.md.
+  // guarantee `mcp__{playwright,maestro,peekaboo}__*` tool bindings reach the
+  // shadow-verifier subagent session. That propagation depends on the shadow
+  // agents at .claude/agents/shadow-verifier.md and shadow-sprint-verifier.md.
   //
   // Playwright has no CLI fallback — broken shadows silently degrade every
   // task to `skipped_unable`. Demote unconditionally when shadows are broken.
   //
-  // Maestro has a CLI fallback (since 0.9.7). Broken shadows only degrade to
-  // CLI mode, which is still functional. Only demote when shadows are broken
-  // AND the CLI is also unavailable — otherwise the fallback absorbs the gap
-  // silently. (We still preserve Maestro's probeCategory reason when it
-  // indicates MCP isn't registered — in that case the fallback is the only
-  // path and the shadow cross-check is moot anyway.)
-  if (configDriven.has('playwright') || configDriven.has('maestro')) {
+  // Maestro and Peekaboo both have CLI fallbacks. Broken shadows only degrade
+  // them to CLI mode, which is still functional. Only demote when shadows are
+  // broken AND the corresponding CLI is also unavailable — otherwise the
+  // fallback absorbs the gap silently. (We still preserve the probeCategory
+  // reason when it indicates MCP isn't registered — in that case the fallback
+  // is the only path and the shadow cross-check is moot anyway.)
+  if (configDriven.has('playwright') || configDriven.has('maestro') || configDriven.has('peekaboo')) {
     let shadowState = null;
     try { shadowState = shadowAgents.check(); } catch { /* shadow module unavailable */ }
     if (shadowState) {
@@ -211,16 +231,36 @@ function main() {
           // If CLI is present, broken shadows are tolerable: verifier falls
           // back to CLI mode silently. Deliberately do not warn on that case.
         }
+        if (configDriven.has('peekaboo')) {
+          const cli = tryShell('which peekaboo >/dev/null');
+          if (!cli.ok) {
+            demote('peekaboo', 'mcp__peekaboo__*', ' AND `peekaboo` CLI not installed — no fallback (required by verification.visual_macos=true)');
+          }
+          // Same logic as Maestro: broken shadows with CLI present silently
+          // degrade to CLI mode, which is still functional.
+        }
       }
     }
   }
 
   const task_prerequisites = probePrereqs(plans);
 
+  // Non-blocking advisories surfaced at orchestrator Step 2.8 alongside the
+  // task-level infra surface. Inform-only — never gate or prompt.
+  const advisories = [];
+  if (configDriven.has('maestro') && config.resolve('verification.visual_auth_fixture', null) === null) {
+    advisories.push({
+      category: 'maestro',
+      kind: 'no_auth_fixture',
+      message: 'verification.visual_mobile=true but visual_auth_fixture is unset. Signed-out simulator runs will deduplicate to a single queue entry (dedup_key: simulator_unauthenticated). Consider creating .maestro/fixtures/sign-in.yaml and setting verification.visual_auth_fixture.',
+    });
+  }
+
   process.stdout.write(JSON.stringify({
     required: Array.from(required).sort(),
     available: available.sort(),
     missing,
+    advisories,
     task_prerequisites,
   }, null, 2) + '\n');
 }

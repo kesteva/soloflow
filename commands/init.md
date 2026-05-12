@@ -60,18 +60,17 @@ Increment `dirs_created` for every directory you actually created.
 
 For each of these files, run `test -e <path>` first. **Only** write the file
 if it does not already exist. Never overwrite — the file may contain live
-user state (backlog tasks, sprint data, checkpoint notes). Increment
-`files_created` for every file you actually wrote.
+user state (sprint data, checkpoint notes). Increment `files_created` for
+every file you actually wrote.
 
-**`.soloflow/active/backlog.json`**
-```json
-{
-  "version": 2,
-  "tasks": {}
-}
-```
+(There is no `backlog.json`. Plan frontmatter `status` IS the queue —
+plans live under `.soloflow/active/plans/**/TASK-*-plan.md`.)
 
-**`.soloflow/active/sprint.json`**
+**`.soloflow/active/sprints/`** — per-sprint layout. Each active sprint lives at `.soloflow/active/sprints/<SPRINT-NNN>/sprint.json` (created by `/soloflow:sprint` or `/soloflow:quick` on demand). Init does not scaffold any sprint.json — the directory is created when the first sprint starts.
+
+(For backward-compat documentation: pre-PR-3 projects had a single `.soloflow/active/sprint.json`. Run `node scripts/migrations/migrate-002-per-sprint-sprint-json.js --apply` to move it.)
+
+**Legacy `.soloflow/active/sprint.json` block (kept for reference, no longer scaffolded):**
 ```json
 {
   "version": 2,
@@ -117,8 +116,9 @@ First, **read the existing config** if any:
 - Run `test -e .soloflow/config.json`. If present, Read it and parse the JSON
   into memory as `config`. If absent, start with `config = {}`.
 - Keep existing keys intact — the wizard only touches `verification.visual_mobile`,
-  `verification.visual_web`, and `git.branch_per_run`. Everything else the user
-  may have added to `config.json` must be preserved through the final write.
+  `verification.visual_web`, `verification.visual_macos`, and `git.branch_per_run`.
+  Everything else the user may have added to `config.json` must be preserved
+  through the final write.
 
 When a question has a known "current value" from the parsed config, label
 that option with `(current)` in the `AskUserQuestion` call so the user can
@@ -128,33 +128,36 @@ see what's already set.
 
 Use `AskUserQuestion`:
 
-- **Question:** "Do you want visual verification for this project? SoloFlow can drive a running app via Maestro (mobile) or Playwright (web) to check UI against acceptance criteria."
+- **Question:** "Do you want visual verification for this project? SoloFlow can drive a running app via Maestro (mobile), Playwright (web), or Peekaboo (macOS) to check UI against acceptance criteria."
 - **Header:** "Visual verify"
 - **Options:**
   - "Yes — set it up now"
-  - "No, skip" *(label this one `(current)` if both `visual_mobile` and `visual_web` are currently `false` or unset)*
+  - "No, skip" *(label this one `(current)` if `visual_mobile`, `visual_web`, and `visual_macos` are all currently `false` or unset)*
 
-If **No**: set `config.verification.visual_mobile = false` and `config.verification.visual_web = false`, then jump to Q3.
+If **No**: set `config.verification.visual_mobile = false`, `config.verification.visual_web = false`, and `config.verification.visual_macos = false`, then jump to Q3.
 
 If **Yes**: proceed to Q2.
 
-### Q2 — Project type (only if Q1 = Yes)
+### Q2 — Platforms (only if Q1 = Yes)
 
-Use `AskUserQuestion`:
+Use `AskUserQuestion` with `multiSelect: true`:
 
-- **Question:** "What kind of app is this?"
-- **Header:** "App type"
+- **Question:** "Which platforms should SoloFlow verify? Pick all that apply."
+- **Header:** "Platforms"
+- **multiSelect:** `true`
 - **Options:**
   - "Mobile (Maestro)"
   - "Web (Playwright)"
-  - "Both mobile + web"
+  - "macOS (Peekaboo)"
 
-Label the option matching the current config (if any) with `(current)`.
+Label each option with `(current)` if its corresponding toggle is currently `true`.
 
-Set config accordingly:
-- Mobile → `visual_mobile: true`, `visual_web: false`
-- Web → `visual_mobile: false`, `visual_web: true`
-- Both → both true
+Set config from the selection set:
+- `visual_mobile: true` iff "Mobile (Maestro)" selected, else `false`
+- `visual_web: true` iff "Web (Playwright)" selected, else `false`
+- `visual_macos: true` iff "macOS (Peekaboo)" selected, else `false`
+
+If the user selects nothing, treat it as a redirect to Q1=No: set all three to `false` and jump to Q3.
 
 ### Dependency check (runs after Q2, per selected type)
 
@@ -197,7 +200,26 @@ Set config accordingly:
 2. **If found:** print `✓ npx detected; Playwright MCP runs via "npx @playwright/mcp@latest" on demand — no separate install needed.`
 3. **If missing:** print `⚠ Node.js / npx is required for Playwright visual verification. Install Node.js from https://nodejs.org before running visual verification. Your config will still be written.` Do NOT attempt to install Node.
 
-### MCP server registration (Playwright + Maestro)
+**macOS / Peekaboo** — only if `visual_macos` is now true:
+
+1. Run `which peekaboo` via Bash.
+2. **If found:** print `✓ peekaboo CLI detected at <path>`. Then run `peekaboo permissions 2>&1` and parse the output:
+   - If both Accessibility and Screen Recording are granted → print `✓ Accessibility and Screen Recording permissions granted`.
+   - If either is missing → print `⚠ Peekaboo requires Accessibility and Screen Recording permissions. Grant them in System Settings → Privacy & Security → Accessibility (and Screen Recording), then restart Claude Code. Config will still be written; the verifier will emit 'skipped_unable' until grants are present.` Do NOT block.
+3. **If missing:** use `AskUserQuestion`:
+   - **Question:** "Peekaboo CLI is required for macOS visual verification but isn't on your PATH. Install it now? (Runs `brew install steipete/tap/peekaboo`.)"
+   - **Header:** "Install Peekaboo"
+   - **Options:**
+     - "Install now"
+     - "Skip for now"
+   - **On Install now:** first verify Homebrew is available (`which brew`). If missing, print `⚠ Homebrew is not installed. Install it from https://brew.sh then re-run /soloflow:init.` and skip. If present, run `brew install steipete/tap/peekaboo` via Bash. After it exits, re-run `which peekaboo`.
+     - If now found → print `✓ peekaboo installed at <path>`. Then run `peekaboo permissions` and print the grants summary as above.
+     - If still missing → warn: `⚠ Peekaboo install reported success but `peekaboo` is not on PATH. Restart your shell and try again.` Do NOT retry the installer.
+   - **On Skip for now:** print: `Visual verification will still be enabled in config — the verifier will gracefully skip Peekaboo until \`peekaboo\` is on PATH. Install later with:\n    brew install steipete/tap/peekaboo`
+
+4. **npx check (for MCP path).** Peekaboo's MCP server runs via `npx @steipete/peekaboo`. Run `which npx` via Bash if not already done for Playwright. If missing, print `ℹ Node.js / npx not found — Peekaboo MCP will be unavailable, but the verifier can still use the peekaboo CLI fallback. Install Node.js from https://nodejs.org to enable the MCP path.` Do NOT block or attempt to install Node.
+
+### MCP server registration (Playwright + Maestro + Peekaboo)
 
 Both Playwright and Maestro support MCP servers. Playwright is MCP-only; Maestro prefers MCP with a first-class CLI fallback — users can skip Maestro MCP registration and still get mobile visual verification via the CLI.
 
@@ -235,11 +257,27 @@ The plugin does NOT ship its own `.mcp.json` — that would collide for any user
    - **On Skip:** print `Mobile visual verification will run via the Maestro CLI only. Register later with: claude mcp add --scope user maestro maestro mcp`.
 4. After a successful `claude mcp add`, re-run `claude mcp list` and confirm the entry appears. If not, warn but do not retry.
 
+**Peekaboo MCP (optional, recommended)** — only if `visual_macos` is `true`:
+
+1. Run `claude mcp list` via Bash and grep the output for `peekaboo`.
+2. **If already registered:** print `✓ MCP server "peekaboo" already registered`. Continue.
+3. **If missing:** use `AskUserQuestion`:
+   - **Question:** `'MCP server "peekaboo" is not registered. SoloFlow prefers Peekaboo MCP (cheaper structured a11y inspection) but falls back to the peekaboo CLI. Register now?'`
+   - **Header:** `Register peekaboo`
+   - **Options:**
+     - `"Yes — user scope (all projects, recommended)"`
+     - `"Yes — project scope (this project only, writes .mcp.json)"`
+     - `"Skip (CLI fallback will be used)"`
+   - **On user scope:** `claude mcp add --scope user peekaboo npx -y @steipete/peekaboo`
+   - **On project scope:** same command with `--scope project`.
+   - **On Skip:** print `macOS visual verification will run via the peekaboo CLI only. Register later with: claude mcp add --scope user peekaboo npx -y @steipete/peekaboo`.
+4. After a successful `claude mcp add`, re-run `claude mcp list` and confirm the entry appears. If not, warn but do not retry.
+
 Never run `claude mcp add` without the explicit user choice above — registering servers silently is exactly the collision problem we're avoiding.
 
-### Shadow-install visual verification agents (only if `visual_mobile` or `visual_web` is true)
+### Shadow-install visual verification agents (only if `visual_mobile`, `visual_web`, or `visual_macos` is true)
 
-**Why this step exists — surface it clearly to the user.** `shadow-verifier` and `shadow-sprint-verifier` need to call `mcp__playwright__*` tools for web visual verification and `mcp__maestro__*` tools for mobile (when Maestro MCP is registered; the CLI fallback runs through Bash and is unaffected by shadow state). Plugin-scoped subagents **cannot receive MCP tool bindings** in Claude Code, even when the agent frontmatter declares `mcpServers:` — the declaration is silently ignored for plugin agents. The plugin therefore does not ship a plugin-resolvable `verifier` / `sprint-verifier`; these agents exist only under the `shadow-` prefix and are installed project-local at init. Without this shadow-install, no verifier is available at all (and Maestro MCP mode, if registered, silently falls back to CLI). This step is **mandatory** when visual verification is enabled; skip it only when the plugin root can't be resolved.
+**Why this step exists — surface it clearly to the user.** `shadow-verifier` and `shadow-sprint-verifier` need to call `mcp__playwright__*` tools for web visual verification, `mcp__maestro__*` tools for mobile (when Maestro MCP is registered; the CLI fallback runs through Bash and is unaffected by shadow state), and `mcp__peekaboo__*` tools for macOS (same posture as Maestro — MCP preferred, CLI fallback). Plugin-scoped subagents **cannot receive MCP tool bindings** in Claude Code, even when the agent frontmatter declares `mcpServers:` — the declaration is silently ignored for plugin agents. The plugin therefore does not ship a plugin-resolvable `verifier` / `sprint-verifier`; these agents exist only under the `shadow-` prefix and are installed project-local at init. Without this shadow-install, no verifier is available at all (and Maestro MCP mode, if registered, silently falls back to CLI). This step is **mandatory** when visual verification is enabled; skip it only when the plugin root can't be resolved.
 
 1. Invoke the shadow sync utility with the `visual` set:
    ```
@@ -252,8 +290,8 @@ Never run `claude mcp add` without the explicit user choice above — registerin
 3. Print an explicit callout — visual verification users need to understand what happened and why:
    ```
    ✓ Shadow-installed visual verification agents to .claude/agents/ (plugin v{plugin_version}):
-       shadow-verifier.md         — per-task Level 2 visual check (mcpServers: [maestro, playwright])
-       shadow-sprint-verifier.md  — end-of-sprint visual check    (mcpServers: [maestro, playwright])
+       shadow-verifier.md         — per-task Level 2 visual check (mcpServers: [maestro, playwright, peekaboo])
+       shadow-sprint-verifier.md  — end-of-sprint visual check    (mcpServers: [maestro, playwright, peekaboo])
 
    Why: plugin-scoped subagents cannot receive MCP tool bindings in Claude Code. Project-local ones do.
    /soloflow:sprint spawns these by their shadow-* names, so the MCP tool bindings from .claude/agents/
@@ -317,7 +355,7 @@ Set `config.git.branch_per_run` to `"prompt"`, `"always"`, or `"never"`.
 ### Merge and write
 
 Shallow-merge the wizard answers into the `config` object:
-- Ensure `config.verification` exists; set `visual_mobile` and `visual_web`.
+- Ensure `config.verification` exists; set `visual_mobile`, `visual_web`, and `visual_macos`.
 - Ensure `config.git` exists; set `branch_per_run`.
 - Leave every other key in `config` untouched.
 
@@ -520,6 +558,7 @@ Files:       {files_created} created, {total_files - files_created} already pres
 Config: .soloflow/config.json {created|updated}
   verification.visual_mobile: {value}
   verification.visual_web:    {value}
+  verification.visual_macos:  {value}
   git.branch_per_run:         {value}
 
 Status line: {configured|already configured|skipped (user kept existing)|not configured}
