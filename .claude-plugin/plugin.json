@@ -1,7 +1,7 @@
 {
-  "name": "soloflow-dev",
+  "name": "soloflow",
   "version": "0.10.2",
-  "description": "Hooks-based workflow orchestration for solo product development with Claude Code (dev branch — unstable, for maintainer/tester use only)",
+  "description": "Hooks-based workflow orchestration for solo product development with Claude Code",
   "author": {
     "name": "Krishna Esteva"
   },
