@@ -31,3 +31,27 @@ test('ready-tasks: completed via flag', () => {
   const data = JSON.parse(r.out);
   assert.deepEqual(data.ready, ['TASK-100']);
 });
+
+test('ready-tasks: ignores completed sprint folders left behind by sprint-closer', () => {
+  // Sprint-closer marks sprint.status = "complete" but leaves the folder in
+  // active/sprints/. Without filtering, ready-tasks would die with "multiple
+  // active sprints" once a second sprint is opened.
+  const cwd = scaffold(mktmp(), {
+    withSprint: true,
+    sprintId: 'SPRINT-002',
+    sprintTasks: { 'TASK-050': { status: 'pending' } },
+  });
+  // Add a previously-closed sprint folder.
+  const closedDir = path.join(cwd, '.soloflow/active/sprints/SPRINT-001');
+  fs.mkdirSync(closedDir, { recursive: true });
+  fs.writeFileSync(path.join(closedDir, 'sprint.json'), JSON.stringify({
+    version: 2,
+    sprint: { id: 'SPRINT-001', status: 'complete', started: '2026-01-01T00:00:00Z' },
+    tasks: {},
+  }, null, 2));
+
+  const r = run('sprint/ready-tasks.js', [], { cwd });
+  assert.equal(r.ok, true, `expected success despite stale completed sprint, got err: ${r.err}`);
+  const data = JSON.parse(r.out);
+  assert.deepEqual(data.ready, ['TASK-050']);
+});

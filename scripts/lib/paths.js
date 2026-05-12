@@ -36,11 +36,14 @@ function legacySprintJsonPath(cwd = stateRootCwd()) {
   return path.join(activeDir(cwd), 'sprint.json');
 }
 
-// Glob active/sprints/*/sprint.json and return sprint metadata for each.
-// Returns an array of { id, path, status, started } sorted by id desc so
-// the most recently-numbered sprint is first. Each entry's id is taken
-// from the directory name (canonical) — sprint.json's `sprint.id` is
-// expected to match but the directory name wins on disagreement.
+// Glob active/sprints/*/sprint.json and return metadata for sprints that are
+// still in progress (sprint.status !== 'complete'). Sprint-closer marks the
+// sprint complete in-place but leaves its folder under active/sprints/ so
+// downstream consumers (compounder, ID allocator) can still read sprint.json
+// — so this helper has to filter, not just glob. Sorted by id desc so the
+// most recently-numbered sprint is first. Each entry's id is taken from the
+// directory name (canonical) — sprint.json's `sprint.id` is expected to match
+// but the directory name wins on disagreement.
 function findActiveSprintIds(cwd = stateRootCwd()) {
   const root = sprintsDir(cwd);
   if (!fs.existsSync(root)) return [];
@@ -51,15 +54,28 @@ function findActiveSprintIds(cwd = stateRootCwd()) {
     if (!fs.existsSync(sprintPath)) continue;
     let json = null;
     try { json = JSON.parse(fs.readFileSync(sprintPath, 'utf8')); } catch { /* skip malformed */ }
+    const status = json && json.sprint ? json.sprint.status : null;
+    if (status === 'complete') continue;
     out.push({
       id: entry.name,
       path: sprintPath,
-      status: json && json.sprint ? json.sprint.status : null,
+      status,
       started: json && json.sprint ? json.sprint.started : null,
     });
   }
   out.sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
   return out;
+}
+
+// Lists every directory name under active/sprints/ regardless of status. Use
+// this when you need the full sprint-folder set (e.g. ID allocation) and not
+// `findActiveSprintIds`, which filters out completed sprints.
+function listAllSprintFolders(cwd = stateRootCwd()) {
+  const root = sprintsDir(cwd);
+  if (!fs.existsSync(root)) return [];
+  return fs.readdirSync(root, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name);
 }
 
 function checkpointPath(cwd = stateRootCwd()) { return path.join(stateRoot(cwd), 'checkpoint.md'); }
@@ -108,7 +124,7 @@ function idAllocatorLockPath(cwd = process.cwd()) {
 module.exports = {
   stateRootCwd,
   stateRoot, activeDir, archiveDir,
-  sprintsDir, sprintDirPath, sprintJsonPath, legacySprintJsonPath, findActiveSprintIds,
+  sprintsDir, sprintDirPath, sprintJsonPath, legacySprintJsonPath, findActiveSprintIds, listAllSprintFolders,
   checkpointPath, reviewQueuePath,
   findingsFilePath,
   worktreesDir, taskWorktreePath,

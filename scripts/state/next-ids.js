@@ -74,9 +74,11 @@ function nextSprintId(cwd) {
     }
   }
 
-  // Active sprints (per-sprint layout: active/sprints/<id>/sprint.json)
-  for (const entry of paths.findActiveSprintIds(cwd)) {
-    const m = String(entry.id).match(/^SPRINT-(\d+)$/);
+  // All sprint folders (per-sprint layout: active/sprints/<id>/sprint.json),
+  // including ones marked `status: complete` — sprint-closer leaves them in
+  // place and we must not collide with their IDs.
+  for (const id of paths.listAllSprintFolders(cwd)) {
+    const m = String(id).match(/^SPRINT-(\d+)$/);
     if (m) {
       const n = parseInt(m[1], 10);
       if (n > max) max = n;
