@@ -158,6 +158,11 @@ Decisions:
      ```
      The script atomically rewrites each plan's frontmatter (preserving every other field) and emits a JSON summary of `updated` + `skipped`. A "skipped" entry means the plan file was already in-flight (resume path) or missing (data corruption — bubble up).
    - Create the per-sprint directory: `mkdir -p .soloflow/active/sprints/{sprint_id}/`.
+   - **Detect Playwright target.** Run:
+     ```
+     node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/probe-playwright-target.js"
+     ```
+     Parse the JSON `{ kind, evidence, dev_url_hint, divergence_risk }`. This runs once per sprint so the per-task verifiers don't re-stat `package.json` + `app.json` on every run. The verifier path-selection pre-step reads this back from `sprint.json` (see `agent-templates/shadow-verifier.md` and `skills/visual-verify/SKILL.md`).
    - Write `.soloflow/active/sprints/{sprint_id}/sprint.json` with the same selected task IDs in `tasks` (each with `status: "pending"`):
      ```json
      {
@@ -167,10 +172,11 @@ Decisions:
          "started": "{ISO timestamp}",
          "execution_mode": "serial" | "parallel"
        },
-       "tasks": { /* selected tasks keyed by ID, each with status: "pending" */ }
+       "tasks": { /* selected tasks keyed by ID, each with status: "pending" */ },
+       "playwright_target": { "kind": "electron"|"tauri"|"expo-web"|"capacitor"|null, "evidence": "...", "dev_url_hint": "..."|null, "divergence_risk": true|false }
      }
      ```
-     `execution_mode` is persisted so that checkpoint-resume paths (commands/sprint.md Step 0.5) recover the same mode without re-prompting. Downstream steps read it from `sprint.sprint.execution_mode`.
+     `execution_mode` is persisted so that checkpoint-resume paths (commands/sprint.md Step 0.5) recover the same mode without re-prompting. Downstream steps read it from `sprint.sprint.execution_mode`. `playwright_target` is cached so per-task verifiers can resolve the Playwright-preference path in one read.
    - Plans are the source of truth; `sprint.json.tasks` mirrors the in-flight set. Step 5's commit stages both the per-sprint `sprint.json` and the modified plan files.
 
 3.5. **Create per-sprint findings file.**
