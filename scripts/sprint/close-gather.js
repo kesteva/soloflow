@@ -69,15 +69,18 @@ function tallyVisualCoverage(doneReports, sprintId) {
   const init = () => ({ pass: 0, fail: 0, not_applicable: 0, skipped_user_preference: 0, skipped_by_preference: 0, skipped_unable: 0, skipped_metro_offline: 0 });
   const mobile = init();
   const web = init();
+  const macos = init();
   for (const dr of doneReports) {
     const { frontmatter: fm } = readFm(dr);
     if (!fm || fm.sprint !== sprintId) continue;
     const m = (fm.visual_mobile || 'not_applicable');
     const w = (fm.visual_web || 'not_applicable');
+    const k = (fm.visual_macos || 'not_applicable');
     if (mobile[m] !== undefined) mobile[m]++; else mobile.not_applicable++;
     if (web[w] !== undefined) web[w]++; else web.not_applicable++;
+    if (macos[k] !== undefined) macos[k]++; else macos.not_applicable++;
   }
-  return { mobile, web };
+  return { mobile, web, macos };
 }
 
 function resolveSprint(cwd, explicitSprintId) {
@@ -154,8 +157,8 @@ function main() {
 
   const sprintVerifPath = path.join(paths.activeDir(cwd), 'sprint-verification.md');
   let sprintLevelVisual = {
-    mobile: 'not_applicable', web: 'not_applicable',
-    mobile_note: 'sprint-verifier did not run', web_note: 'sprint-verifier did not run',
+    mobile: 'not_applicable', web: 'not_applicable', macos: 'not_applicable',
+    mobile_note: 'sprint-verifier did not run', web_note: 'sprint-verifier did not run', macos_note: 'sprint-verifier did not run',
   };
   let regressionsCount = 0;
   if (fs.existsSync(sprintVerifPath)) {
@@ -164,8 +167,10 @@ function main() {
       sprintLevelVisual = {
         mobile: fm.visual_mobile || 'not_applicable',
         web: fm.visual_web || 'not_applicable',
+        macos: fm.visual_macos || 'not_applicable',
         mobile_note: fm.visual_mobile_note || null,
         web_note: fm.visual_web_note || null,
+        macos_note: fm.visual_macos_note || null,
       };
       regressionsCount = Number(fm.regressions_count || 0);
     }

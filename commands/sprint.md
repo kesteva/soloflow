@@ -633,7 +633,8 @@ Sprint SPRINT-{NNN} complete.
 Visual coverage:
   Per-task mobile: {per_task.mobile.pass} pass / {per_task.mobile.fail} fail / {per_task.mobile.not_applicable} N/A / {per_task.mobile.skipped_user_preference} skipped (user pref) / {per_task.mobile.skipped_unable} skipped (unable)
   Per-task web:    {per_task.web.pass} pass / {per_task.web.fail} fail / {per_task.web.not_applicable} N/A / {per_task.web.skipped_user_preference} skipped (user pref) / {per_task.web.skipped_unable} skipped (unable)
-  Sprint-level:    mobile={sprint_level.mobile}{sprint_level.mobile_note ? " (" + sprint_level.mobile_note + ")" : ""}, web={sprint_level.web}{sprint_level.web_note ? " (" + sprint_level.web_note + ")" : ""}
+  Per-task macos:  {per_task.macos.pass} pass / {per_task.macos.fail} fail / {per_task.macos.not_applicable} N/A / {per_task.macos.skipped_user_preference} skipped (user pref) / {per_task.macos.skipped_unable} skipped (unable)
+  Sprint-level:    mobile={sprint_level.mobile}{sprint_level.mobile_note ? " (" + sprint_level.mobile_note + ")" : ""}, web={sprint_level.web}{sprint_level.web_note ? " (" + sprint_level.web_note + ")" : ""}, macos={sprint_level.macos}{sprint_level.macos_note ? " (" + sprint_level.macos_note + ")" : ""}
 
 Run branch: {run.branch or "none — ran on <base_branch>"}
   Status: {merge.outcome rendered as "merged into <base>" | "pr-opened: <url>" | "kept open" | "deleted" | "n/a"}
