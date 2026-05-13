@@ -141,6 +141,9 @@ Findings are stored at `.soloflow/active/findings/SPRINT-NNN-findings.md` — on
 | `verification.run_linter` | `true` | Auto-lint after Write/Edit |
 | `verification.visual_mobile` | `false` | Enable Maestro CLI visual verification (mobile) |
 | `verification.visual_web` | `false` | Enable Playwright MCP visual verification (web) |
+| `verification.visual_macos` | `false` | Enable Peekaboo visual verification (native macOS) |
+| `verification.visual_prefer_playwright` | `false` | When `true` and the project is Chromium-driveable (Electron, Tauri, Expo Web, Capacitor), prefer Playwright over Maestro/Peekaboo for UI verification. Expo and Capacitor still fall back to Maestro when a task touches `*.ios.*` / `*.android.*` / `*.native.*` or native-only modules. See [VISUAL-VERIFICATION-SETUP.md → Playwright preference](VISUAL-VERIFICATION-SETUP.md#playwright-preference) |
+| `verification.visual_electron_main` | `null` | Explicit Electron main entry path for the Playwright `_electron.launch` runner. When `null`, the probe autodetects from `package.json#main`, then `out/main.js`, `dist/main.js`, `electron/main.js` |
 | `verification.visual_mobile_app_id` | `null` | Bundle ID for ad-hoc Maestro flows (auto-detected from existing flows when null) |
 | `verification.visual_maestro_flow_dirs` | `["maestro/", ".maestro/", "test/maestro/"]` | Dirs searched for Maestro flows |
 | `verification.visual_screenshot_budget` | 3 | Max screenshots per verification run |
