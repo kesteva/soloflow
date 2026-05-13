@@ -133,6 +133,45 @@ The verifier agent checks these toggles before attempting visual verification. E
 
 `visual_mobile_app_id` is optional. If unset, the verifier grep-detects `appId:` from existing Maestro flows. Set it explicitly for greenfield projects that don't have flows yet.
 
+## Playwright preference
+
+For Chromium-driveable projects, SoloFlow can route UI verification through Playwright instead of the native driver (Maestro or Peekaboo). This is roughly an order of magnitude cheaper than Maestro on tokens (DOM inspection vs. native hierarchy + screenshots) and gives Playwright's full automation surface (network mocking, evaluate JS, console capture).
+
+**When it fires.** Set `verification.visual_prefer_playwright: true` in `.soloflow/config.json`. Default is `false` (opt-in). With the toggle on, `sprint-initiator` runs `scripts/sprint/probe-playwright-target.js` at sprint start and caches a project-type fingerprint into `sprint.json` under `playwright_target`:
+
+| `kind` | Detection | Divergence risk |
+|---|---|---|
+| `electron` | `electron` in `package.json` deps/devDeps | None — Playwright's `_electron` API drives the actual shipped renderer |
+| `tauri` | `@tauri-apps/api` (or `@tauri-apps/cli`) in deps OR `src-tauri/` directory | None — webview is the shipped surface |
+| `expo-web` | `expo` dep AND `app.json` / `app.config.{js,ts,mjs,cjs}` declares a `web` platform | **Yes** — see divergence guard below |
+| `capacitor` | `@capacitor/core` dep AND `capacitor.config.{ts,js,json}` present | Yes — same as Expo |
+| `null` | None of the above | n/a — preference is a no-op |
+
+When `kind` is non-null AND `verification.visual_web=true` AND `mcp__playwright__*` is bound to the verifier session, per-task and end-of-sprint verifiers commit to Playwright before reaching the Maestro/Peekaboo selection. The `visual_mobile` and `visual_macos` outcomes are classified `skipped_by_preference — verified via Playwright ({kind})` rather than `skipped_unable` — it's a healthy substitution, not a gap.
+
+**Native-divergence guard (Expo Web / Capacitor only).** Expo Web is genuinely a different platform from iOS/Android: `Platform.OS === 'web'` branches, `react-native-gesture-handler` web vs. native event semantics, and native-only modules (camera, push, biometrics, deep linking, secure storage) all diverge. Silently routing Maestro verification through Playwright on Expo would let real native regressions slip past. To prevent that, the verifier falls back to Maestro when a task's `files_owned` contains any of:
+
+- `*.ios.{ts,tsx,js,jsx}`
+- `*.android.{ts,tsx,js,jsx}`
+- `*.native.{ts,tsx,js,jsx}`
+- imports `Platform` from `react-native`, OR `react-native-gesture-handler`, OR `expo-camera`, `expo-notifications`, `expo-local-authentication`, `expo-secure-store`, `expo-linking`
+
+Electron and Tauri are exempt — the renderer Playwright drives IS the renderer that ships, so there's nothing to diverge.
+
+**CLAUDE.md E2E gate precedence.** If the project's `CLAUDE.md` has an `E2E Verification Gates` section that mandates native verification for specific files (Maestro / Peekaboo), the gate **always wins** over the Playwright preference. The verifier honors the native gate even with `visual_prefer_playwright=true`. Use this to lock down auth flows, payment flows, or anything else where native-only behavior must be tested on the native target.
+
+**Electron runner.** Playwright drives the binary directly via `_electron.launch({ args: [<main path>] })` — no dev server. The main path resolves from:
+
+1. `verification.visual_electron_main` (config)
+2. `package.json#main`
+3. `out/main.js`, `dist/main.js`, `electron/main.js` (first existing wins)
+
+If none resolves, the verifier emits `skipped_unable` with reason `"could not locate Electron main; set verification.visual_electron_main"`.
+
+**Expo / Tauri / Capacitor dev server.** Playwright needs the web build's dev server reachable (e.g., `npx expo start --web` at `http://localhost:8081/`, or the Tauri dev URL). The existing `verification.dev_server` preflight (see below) covers this — point its `probe_url` at the web port and Playwright preference inherits the offline short-circuit.
+
+**Unavailable-but-preferred fallback.** When `visual_prefer_playwright=true` and `playwright_target.kind` is non-null but Playwright is unavailable (`visual_web=false`, MCP unbound, or npx missing), the verifier emits ONE `human-review-queue.md` entry per sprint with `dedup_key: visual_prefer_playwright_unavailable` and `severity: low`, then falls through to the platform-based selection. Clearing the gap (registering Playwright MCP, flipping `visual_web=true`) silences the entry on the next sprint.
+
 ## Authenticating the simulator
 
 If your app requires sign-in before any visual flow makes sense (most apps with chat, profile, or session-bound features), the simulator must be authenticated before the verifier runs. There are three paths:
