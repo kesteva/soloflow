@@ -78,10 +78,10 @@ stats:
   total_code_review_rounds: {N}
   visual_coverage:
     per_task:
-      mobile: { pass: N, fail: N, not_applicable: N, skipped_user_preference: N, skipped_unable: N, skipped_metro_offline: N }
-      web:    { pass: N, fail: N, not_applicable: N, skipped_user_preference: N, skipped_unable: N, skipped_metro_offline: N }
+      mobile: { pass: N, fail: N, not_applicable: N, skipped_user_preference: N, skipped_by_preference: N, skipped_unable: N, skipped_metro_offline: N }
+      web:    { pass: N, fail: N, not_applicable: N, skipped_user_preference: N, skipped_by_preference: N, skipped_unable: N, skipped_metro_offline: N }
     sprint_level:
-      mobile: "{pass | fail | not_applicable | skipped_user_preference | skipped_unable | skipped_metro_offline}"
+      mobile: "{pass | fail | not_applicable | skipped_user_preference | skipped_by_preference | skipped_unable | skipped_metro_offline}"
       web:    "{pass | fail | not_applicable | skipped_user_preference | skipped_unable | skipped_metro_offline}"
       mobile_note: "{note or null}"
       web_note:    "{note or null}"

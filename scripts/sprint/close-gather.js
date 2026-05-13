@@ -66,7 +66,7 @@ function severityMax(a, b) {
 }
 
 function tallyVisualCoverage(doneReports, sprintId) {
-  const init = () => ({ pass: 0, fail: 0, not_applicable: 0, skipped_user_preference: 0, skipped_unable: 0, skipped_metro_offline: 0 });
+  const init = () => ({ pass: 0, fail: 0, not_applicable: 0, skipped_user_preference: 0, skipped_by_preference: 0, skipped_unable: 0, skipped_metro_offline: 0 });
   const mobile = init();
   const web = init();
   for (const dr of doneReports) {
