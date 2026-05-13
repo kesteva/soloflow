@@ -159,6 +159,10 @@ Set config from the selection set:
 
 If the user selects nothing, treat it as a redirect to Q1=No: set all three to `false` and jump to Q3.
 
+**Tip (print after the selection is recorded, before the dependency checks):**
+
+> If your project is Electron, Tauri, Expo with a web platform, or Capacitor, you can set `verification.visual_prefer_playwright: true` in `.soloflow/config.json` after init to route UI verification through Playwright instead of the native driver. For Electron and Tauri this is essentially free — Playwright drives the actual shipped renderer. For Expo Web and Capacitor the verifier auto-falls-back to Maestro whenever a task touches `*.ios.tsx` / `*.android.tsx` / `*.native.tsx` or imports native-only modules (Platform, gesture handlers, expo-camera, etc.), so iOS/Android-only regressions are not masked. Default is off.
+
 ### Dependency check (runs after Q2, per selected type)
 
 **Mobile / Maestro** — only if `visual_mobile` is now true:
