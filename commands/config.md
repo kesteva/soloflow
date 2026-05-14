@@ -73,7 +73,7 @@ Use `AskUserQuestion`:
 **If Round 1 = Operations:**
 - **Question:** "Which operation setting?"
 - **Header:** "Operations"
-- **Options:** `"Limits"`, `"Git & run branches"`, `"Code review"`, `"Sprint code review"`, `"Verification"`, `"Quality gate"`, `"Roadmap"` *(the picker cap is 4 — split as `"Limits"`, `"Git"`, `"Verification"`, `"More..."`; the first "More..." path re-asks with `"Quality gate"`, `"Code review"`, `"Sprint code review"`, `"More..."`; the second "More..." path re-asks with `"Roadmap"`, `"Back"`.)*
+- **Options:** `"Limits"`, `"Git & run branches"`, `"Code review"`, `"Sprint code review"`, `"Verification"`, `"Quality gate"`, `"Compound"`, `"Roadmap"` *(the picker cap is 4 — split as `"Limits"`, `"Git"`, `"Verification"`, `"More..."`; the first "More..." path re-asks with `"Quality gate"`, `"Code review"`, `"Sprint code review"`, `"More..."`; the second "More..." path re-asks with `"Compound"`, `"Roadmap"`, `"Back"`.)*
 
 **If Round 1 = Reset to defaults:** see Step 6.
 
@@ -256,6 +256,41 @@ dimensions makes roadmap generation trivially wrong.
 - **Header:** `"Output"`
 - **Options:** `"ideas"`, `"plans"`, `"Use default"` (`(current)` labeling).
 
+### 5i. Compound
+
+Five settings on the `/soloflow:compound` learning phase.
+
+**`compound.skeptic.enabled`:**
+- **Question:** `"Run compound-skeptic in Step 2.6 to add IMPLEMENT / DONT_IMPLEMENT verdicts? (default: true, current: <current>)"`
+- **Header:** `"Skeptic"`
+- **Options:** `"Enable"`, `"Disable"`, `"Use default"` (`(current)` labeling).
+
+**`compound.skeptic.auto_accept_verdicts`:**
+- **Question:** `"Auto-apply skeptic verdicts in Step 3 for buckets A/B/C (skipping the per-bucket prompt)? Bucket D always prompts. Only effective when skeptic.enabled. (default: false, current: <current>)"`
+- **Header:** `"Auto-accept"`
+- **Options:** `"Enable"`, `"Disable"`, `"Use default"` (`(current)` labeling).
+
+**`compound.claude_md_reviewer.enabled`:**
+- **Question:** `"Run claude-md-reviewer in Step 2.5 to pre-review Bucket C? (default: true, current: <current>)"`
+- **Header:** `"C reviewer"`
+- **Options:** `"Enable"`, `"Disable"`, `"Use default"` (`(current)` labeling).
+
+**`compound.claude_md_reviewer.pre_review_feedback_rounds`:**
+- **Question:** `"Cap on compounder+reviewer re-runs per Bucket C 'Give feedback' cycle (default: 2, current: <current>)"`
+- **Header:** `"Feedback cap"`
+- **Options:** `"Keep current"`, `"Reset to default"`, `"Enter custom value"`
+
+On `"Enter custom value"`: capture the free-form integer via the AskUserQuestion `"Other"` response. Validate as a non-negative integer (`>= 0`; `0` disables the feedback loop entirely). Re-ask on invalid input.
+
+**`compound.pending_sprints.picker_threshold`:**
+- **Question:** `"Multi-select picker fires when >= this many sprints are pending and no sprint arg is given (default: 2, current: <current>)"`
+- **Header:** `"Picker N"`
+- **Options:** `"Keep current"`, `"Reset to default"`, `"Enter custom value"`
+
+On `"Enter custom value"`: validate as a positive integer (`>= 1`).
+
+Bundle the three booleans in a single AskUserQuestion call; ask the two integer settings as separate calls.
+
 ## Step 6: Reset to defaults
 
 Confirm with `AskUserQuestion`:
@@ -358,6 +393,11 @@ git.branch_name_format
 git.merge_strategy
 roadmap.research_dimensions
 roadmap.default_output
+compound.skeptic.enabled
+compound.skeptic.auto_accept_verdicts
+compound.claude_md_reviewer.enabled
+compound.claude_md_reviewer.pre_review_feedback_rounds
+compound.pending_sprints.picker_threshold
 ```
 
 `paths.*` keys are not surfaced — they're referenced as literals across the
