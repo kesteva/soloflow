@@ -70,6 +70,14 @@ sprint_code_review:
 compound:
   skeptic:
     enabled: true
+    # When true AND skeptic.enabled is true, /soloflow:compound Step 3 skips the
+    # per-bucket AskUserQuestion for buckets A/B/C: every IMPLEMENT verdict is
+    # applied, every DONT_IMPLEMENT verdict is rejected — same semantics as the
+    # "Accept skeptic's recommendations" option, but without prompting.
+    # Bucket D (tester-mode SoloFlow self-improvement feedback) is ALWAYS reviewed
+    # by the user regardless of this flag — auto-archiving feedback meant for a
+    # maintainer would defeat its purpose.
+    auto_accept_verdicts: false
   claude_md_reviewer:
     enabled: true
     pre_review_feedback_rounds: 2   # cap on compounder+reviewer re-runs per "Give feedback" cycle
