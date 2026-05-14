@@ -4,6 +4,11 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **`compound.skeptic.auto_accept_verdicts` config toggle** (default `false`). When `true` AND `skeptic.enabled` is `true`, `/soloflow:compound` Step 3 skips the per-bucket `AskUserQuestion` for buckets A/B/C: every `IMPLEMENT` verdict applies, every `DONT_IMPLEMENT` is rejected — same semantics as the existing "Accept skeptic's recommendations" option, but without prompting. **Bucket D (SoloFlow self-improvement feedback, tester mode) is always reviewed by the user regardless of this flag** — auto-archiving feedback meant for a maintainer would defeat its purpose. Step 6's report prepends a one-line annotation when auto-accept fired.
+- **`/soloflow:sprint-and-compound` command** — runs `/soloflow:sprint` Steps 0.4 → 3.7, then `/soloflow:compound` Steps 0 → 5 inline against the just-finished sprint on the same run branch, then resumes sprint Steps 4 → 4.6 for the merge-choice prompt. Compound's per-item commits land in the merge candidate, so a single final merge prompt decides the fate of both the executed task work and the applied learnings together. Forwards sprint flags (`--quick` / `--no-code-review` / `--no-verification`) verbatim. Pair with `compound.skeptic.auto_accept_verdicts: true` for an autonomous flow whose only remaining prompts are sprint setup, optional human review for stuck tasks, optional Bucket D (tester mode), and the final merge choice.
+- **`/soloflow:config` — new "Compound" sub-flow (5i)** under Operations. Surfaces the five `compound.*` keys (`skeptic.enabled`, `skeptic.auto_accept_verdicts`, `claude_md_reviewer.enabled`, `claude_md_reviewer.pre_review_feedback_rounds`, `pending_sprints.picker_threshold`) — closes a pre-existing gap where no `compound.*` knob was reachable via `/soloflow:config`.
+
 ## [0.10.0] - 2026-05-11
 
 ### Added

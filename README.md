@@ -122,6 +122,7 @@ The main session acts as the orchestrator. All agents run as leaf-node subagents
 | `/soloflow:planner <IDEA-NNN>` | Phase 2 — refine an approved idea into execution-ready task plans |
 | `/soloflow:sprint [IDEA-NNN or TASK list]` | Phase 3 — run an execution sprint (executor → verifier → code reviewer) |
 | `/soloflow:compound [SPRINT-NNN]` | Phase 5 — extract reusable learnings from a completed sprint |
+| `/soloflow:sprint-and-compound [IDEA-NNN or TASK list]` | Run sprint with compound interleaved before the merge prompt — one end-to-end flow with a single final merge decision. Pair with `compound.skeptic.auto_accept_verdicts: true` for fully autonomous operation. |
 | `/soloflow:quick <task>` | Fast path for simple changes — skips idea extraction and refinement but still provides the scaffolding of execution and verification|
 | `/soloflow:bugfix <bug>` | Similar to quick but focused specifically on resolving bugs, puts Claude into bughunting mode first before going through the rest of the execution -> verification flow|
 | `/soloflow:status` | Check current sprint state, task progress, and review queue |
