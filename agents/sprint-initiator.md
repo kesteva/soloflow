@@ -163,7 +163,14 @@ Decisions:
      node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/probe-playwright-target.js"
      ```
      Parse the JSON `{ kind, evidence, dev_url_hint, divergence_risk }`. This runs once per sprint so the per-task verifiers don't re-stat `package.json` + `app.json` on every run. The verifier path-selection pre-step reads this back from `sprint.json` (see `agent-templates/shadow-verifier.md` and `skills/visual-verify/SKILL.md`).
-   - Write `.soloflow/active/sprints/{sprint_id}/sprint.json` with the same selected task IDs in `tasks` (each with `status: "pending"`):
+   - **Read `depends_on` for the selected tasks.** Run:
+     ```
+     node "${CLAUDE_PLUGIN_ROOT}/scripts/state/plan-query.js" \
+         --id {selected_task_id_1} --id {selected_task_id_2} ... \
+         --fields id,depends_on --format json
+     ```
+     Use the returned `depends_on` arrays (default to `[]` when missing) when constructing the `tasks` block below. This is load-bearing: `scripts/sprint/ready-tasks.js` reads dependencies **exclusively** from `sprint.json.tasks[id].depends_on`, so omitting it makes every task look immediately ready and lets parallel batches schedule dependent tasks alongside their prereqs.
+   - Write `.soloflow/active/sprints/{sprint_id}/sprint.json` with the same selected task IDs in `tasks` (each entry carrying `status: "pending"` and the task's `depends_on` array):
      ```json
      {
        "sprint": {
@@ -172,12 +179,15 @@ Decisions:
          "started": "{ISO timestamp}",
          "execution_mode": "serial" | "parallel"
        },
-       "tasks": { /* selected tasks keyed by ID, each with status: "pending" */ },
+       "tasks": {
+         "TASK-NNN": { "status": "pending", "depends_on": [] },
+         "TASK-MMM": { "status": "pending", "depends_on": ["TASK-NNN"] }
+       },
        "playwright_target": { "kind": "electron"|"tauri"|"expo-web"|"capacitor"|null, "evidence": "...", "dev_url_hint": "..."|null, "divergence_risk": true|false }
      }
      ```
-     `execution_mode` is persisted so that checkpoint-resume paths (commands/sprint.md Step 0.5) recover the same mode without re-prompting. Downstream steps read it from `sprint.sprint.execution_mode`. `playwright_target` is cached so per-task verifiers can resolve the Playwright-preference path in one read.
-   - Plans are the source of truth; `sprint.json.tasks` mirrors the in-flight set. Step 5's commit stages both the per-sprint `sprint.json` and the modified plan files.
+     `execution_mode` is persisted so that checkpoint-resume paths (commands/sprint.md Step 0.5) recover the same mode without re-prompting. Downstream steps read it from `sprint.sprint.execution_mode`. `playwright_target` is cached so per-task verifiers can resolve the Playwright-preference path in one read. `depends_on` mirrors each plan's frontmatter and feeds `scripts/sprint/ready-tasks.js` + `scripts/sprint/build-batch.js`.
+   - Plans are the source of truth; `sprint.json.tasks` mirrors the in-flight set (status + depends_on). Step 5's commit stages both the per-sprint `sprint.json` and the modified plan files.
 
 3.5. **Create per-sprint findings file.**
    - Ensure `.soloflow/active/findings/` exists (`mkdir -p`).

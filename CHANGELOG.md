@@ -4,6 +4,9 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- **Parallel sprints with intra-sprint dependencies are now scheduled correctly.** `sprint-initiator` was writing each `sprint.json.tasks[id]` as `{ status: "pending" }` only — no `depends_on`. `scripts/sprint/ready-tasks.js` reads dependencies exclusively from that field, so every task looked immediately ready and `build-batch.js` happily co-scheduled dependent tasks alongside their prereqs in the same parallel batch. Serial mode masked the bug; parallel mode hit it. Step 3 of the execute phase now reads `depends_on` for the selected tasks via `plan-query.js --fields id,depends_on` and writes it into each task entry alongside `status`. Downstream consumers (`update-task-status.js`, sprint-closer merge schema) already preserve the field through status flips.
+
 ## [0.10.3] - 2026-05-14
 
 ### Added
