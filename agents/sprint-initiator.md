@@ -242,7 +242,7 @@ Decisions:
    - Additionally requires `maestro` when `verification.visual_mobile=true` and `playwright` when `verification.visual_web=true` — independent of plan content, since the verifier's Level 2 decision gate fires for any UI file or UI-visible AC. Config-driven demands produce a `missing` entry whose `reason` is suffixed with `(required by verification.visual_*=true)` so the orchestrator can surface the registration gap instead of letting every task degrade to `skipped_unable`.
    - Probes each required category via Bash (MCP registration + CLI presence + docker daemon).
    - For config-driven visual categories (`maestro` / `playwright`), also cross-checks the shadow agents at `.claude/agents/shadow-verifier.md` and `.claude/agents/shadow-sprint-verifier.md`. `claude mcp list` passing doesn't guarantee that `mcp__{server}__*` tool bindings actually reach the shadow-verifier subagent session — that depends on current shadows. If shadows are `not_installed`, `untracked`, or `stale`, the category is demoted from `available` to `missing` with a shadow-specific reason so the orchestrator catches the silent-skip gap up-front.
-   - Emits a top-level `advisories` array (inform-only, never blocking). Current advisories: `kind: no_auth_fixture` when `verification.visual_mobile=true` but `verification.visual_auth_fixture` is unset — signals that the orchestrator should surface a one-line nudge at Step 2.8 about the recommended `.maestro/fixtures/sign-in.yaml` convention.
+   - Emits a top-level `advisories` array (inform-only, never blocking). Each entry carries `category`, `kind`, `severity` (`"info"` or `"warning"`; default `"info"` for unset), and `message`. The orchestrator renders `severity: warning` advisories with a `⚠` sigil at Step 2.8 so they stand out from background output. Current advisories: `kind: no_auth_fixture` (`severity: warning`) when `verification.visual_mobile=true` but `verification.visual_auth_fixture` is unset — the message names the mobile tasks in this sprint that will defer to the review queue if the simulator is signed out, and points the user at the recommended `.maestro/fixtures/sign-in.yaml` convention.
    - Runs each plan's `prerequisites[]` checks with a 5-second timeout, classifying `pass` / `fail` / `timeout`.
    - Emits the full `infra_check` payload (see Output schema below) as JSON.
 
@@ -307,6 +307,7 @@ infra_check:  # ALWAYS present (never null). Empty arrays if nothing required.
   advisories:                                      # inform-only, never blocking. Surfaced at orchestrator Step 2.8.
     - category: "maestro"                          # the category this advisory annotates
       kind: "no_auth_fixture"                      # stable identifier; orchestrator can choose per-kind formatting
+      severity: "warning"                          # "info" (default) | "warning" — orchestrator prefixes warnings with `⚠`
       message: "{one-line nudge for the user}"
   task_prerequisites:                              # per-task plan-declared probes (see Step 6.5.b2). Empty if no plan had prerequisites.
     - task_id: "TASK-NNN"

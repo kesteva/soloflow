@@ -4,6 +4,9 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- **`no_auth_fixture` advisory is now a pre-flight warning, not background prose.** `scripts/sprint/probe-infra.js` tags the advisory `severity: "warning"`, names the mobile tasks in this sprint's scope, and spells out the consequence (every authenticated UI flow defers to the review queue if the simulator is signed out, collapsed via `dedup_key: simulator_unauthenticated`). Orchestrator Step 2.8 (`commands/sprint.md`) now prefixes `severity: warning` advisories with `⚠` in both the no-prompt and prompt-body paths so the unconfigured auth path is hard to miss during sprint setup. `info`-severity advisories continue to render plain. Closes FIND-4 (six tasks deferred in a single sprint without a visible upstream signal).
+
 ## [0.10.0] - 2026-05-11
 
 ### Added

@@ -172,7 +172,7 @@ The verifier runs this fixture once per session before any visual flow. If the s
 
 ### Neither set
 
-When `visual_mobile=true` and `visual_auth_fixture` is null, the orchestrator surfaces a one-line advisory at Step 2.8 (`Advisory (maestro/no_auth_fixture): ...`) so you know auth handling is unconfigured. If the simulator is signed-out, every affected task emits `visual_mobile: skipped_unable` with `dedup_key: simulator_unauthenticated`. The review queue collapses those into a single row covering all affected tasks via `affected_tasks`. Clear the row via `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" remove --task <task-id>` once you've fixed sign-in.
+When `visual_mobile=true` and `visual_auth_fixture` is null, the orchestrator surfaces a `severity: warning` advisory at Step 2.8 prefixed with `⚠` (`⚠ Advisory (maestro/no_auth_fixture): ...`) so the unconfigured auth path is hard to miss during sprint setup. The message names the mobile tasks in scope so you can see how many flows will defer if the simulator is signed out. If the simulator does end up signed-out, every affected task emits `visual_mobile: skipped_unable` with `dedup_key: simulator_unauthenticated`. The review queue collapses those into a single row covering all affected tasks via `affected_tasks`. Clear the row via `node "${CLAUDE_PLUGIN_ROOT}/scripts/state/review-queue.js" remove --task <task-id>` once you've fixed sign-in.
 
 ## Sandbox Permissions
 
