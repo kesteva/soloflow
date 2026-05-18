@@ -246,13 +246,22 @@ function main() {
   const task_prerequisites = probePrereqs(plans);
 
   // Non-blocking advisories surfaced at orchestrator Step 2.8 alongside the
-  // task-level infra surface. Inform-only — never gate or prompt.
+  // task-level infra surface. Inform-only — never gate or prompt. `severity`
+  // is `"info"` (default) or `"warning"`; the orchestrator renders warnings
+  // with a `⚠` sigil so they stand out from background output.
   const advisories = [];
   if (configDriven.has('maestro') && config.resolve('verification.visual_auth_fixture', null) === null) {
+    const mobileImpacts = perPlan
+      .filter((p) => p.categories.includes('maestro'))
+      .map((p) => p.task_id);
+    const scopeNote = mobileImpacts.length > 0
+      ? `${mobileImpacts.length} task(s) in this sprint target mobile (${mobileImpacts.join(', ')}); every authenticated UI flow among them will defer to the review queue if the simulator is signed out`
+      : 'every authenticated UI flow this sprint will defer to the review queue if the simulator is signed out';
     advisories.push({
       category: 'maestro',
       kind: 'no_auth_fixture',
-      message: 'verification.visual_mobile=true but visual_auth_fixture is unset. Signed-out simulator runs will deduplicate to a single queue entry (dedup_key: simulator_unauthenticated). Consider creating .maestro/fixtures/sign-in.yaml and setting verification.visual_auth_fixture.',
+      severity: 'warning',
+      message: `verification.visual_mobile=true but visual_auth_fixture is unset — ${scopeNote} (multiple tasks collapse to one entry via dedup_key: simulator_unauthenticated). Set verification.visual_auth_fixture to a Maestro sign-in flow (convention: .maestro/fixtures/sign-in.yaml) before running the sprint, or sign in manually on the simulator first.`,
     });
   }
 
