@@ -157,9 +157,23 @@ compound_drafts:  # one entry per draft found in active/compound/ (plus legacy s
 
 merge_strategy: "{--no-ff|--ff-only|...}"
 
-dev_server_to_stop:  # null when sprint.json had no dev_server.task_id
-  task_id: "{harness shell task_id from Step 2.5}"
+processes_to_stop:  # every sprint-started harness shell the orchestrator must TaskStop in Step 4.6
+  - kind: "dev_server"                       # extensible; today only dev_server is tracked
+    task_id: "{harness shell task_id from Step 2.5}"
+    name: "{display name}"
+  # empty list when sprint.json had no tracked background shells
+
+port_sweep:  # dev-server probe port for sweep-processes.js defensive PID kill; null when dev_server is disabled
+  port: {N}
   name: "{display name}"
+
+worktree_sweep:  # one entry per .soloflow/worktrees/TASK-NNN/ dir present at close
+  - task_id: "TASK-NNN"
+    path: "{abs path}"
+    branch: "{run.branch}-TASK-NNN"
+    branch_exists: {true|false}
+    stale: {true|false}                        # true when branch_exists is false — safe to remove
+  # empty list when no per-task worktrees remain
 `` `
 ```
 
@@ -253,7 +267,29 @@ Decisions:
      - `git checkout {base_branch}` — on failure, report ERROR.
      - `git branch -D {branch}` (destructive; the orchestrator already confirmed).
 
-5. **Capture head SHA.** `git rev-parse --short HEAD` for the report.
+5. **Sweep stragglers and stale worktrees.** Run the sweep helper to clean
+   up anything the sprint pipeline may have left behind. This is the
+   git-/filesystem-side counterpart to the orchestrator's Step 4.6
+   `TaskStop` over `processes_to_stop` — between the two, no sprint-started
+   process or per-task worktree should survive the close.
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/sweep-processes.js"
+   ```
+   Parse the JSON output and surface it verbatim under `process_sweep` in
+   the report. The script:
+   - lsof-kills any PID holding the dev-server probe port (graceful SIGTERM,
+     SIGKILL after 3s) — defends against a lost `dev_server.task_id`.
+   - removes any `.soloflow/worktrees/TASK-NNN/` dir whose task branch is
+     gone (stale residue of a prior `worktree-merge.js`).
+   - leaves merge-conflict-preserved worktrees in place and reports them
+     under `preserved_worktrees` so the user can still inspect them.
+   - runs `git worktree prune` to flush stale metadata.
+
+   Note: pending subagents are an orchestrator concern, not yours. The
+   orchestrator awaits every leaf-node Agent call synchronously, so by the
+   time finalize runs there are no in-flight subagents to cancel.
+
+6. **Capture head SHA.** `git rev-parse --short HEAD` for the report.
 
 ### Output
 
@@ -299,6 +335,26 @@ merge:
   merge_sha: "{short SHA, only for merged}"
   pr_url: "{URL, only for pr-opened}"
   conflict_paths: ["{path1}", ...]  # only if ERROR with merge_status: conflicts
+
+process_sweep:  # verbatim JSON from sweep-processes.js (step 5)
+  port_swept: {port or null}
+  base_branch: "{branch or null}"
+  port_kills:
+    - pid: {N}
+      method: "{SIGTERM|SIGKILL|already_gone|failed}"
+      error: "{message, only when method=failed}"
+    # empty list when no stragglers were holding the port
+  removed_worktrees:
+    - task_id: "TASK-NNN"
+      path: "{abs path}"
+    # empty list when nothing was stale
+  preserved_worktrees:
+    - task_id: "TASK-NNN"
+      path: "{abs path}"
+      branch: "{run.branch}-TASK-NNN"
+      reason: "{remove_failed or omitted}"
+    # empty list when no merge-conflict worktrees remained
+  pruned: {true|false}
 
 head_sha: "{short SHA at end of close}"
 `` `

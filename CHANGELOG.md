@@ -4,6 +4,16 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Sprint close sweep.** `sprint-closer` finalize now runs `scripts/sprint/sweep-processes.js` as its last step to clean up anything the sprint pipeline may have started:
+  - lsof-kills any straggler PID holding the dev-server probe port (SIGTERM, escalating to SIGKILL after 3s) — defends against a lost `dev_server.task_id` from a session restart.
+  - removes any `.soloflow/worktrees/TASK-NNN/` dir whose task branch is gone (stale residue from `worktree-merge.js`); preserves dirs whose branch still exists (typically merge-conflict inspection surfaces) and reports them.
+  - `git worktree prune` to flush stale metadata.
+- **`close-gather` output schema expanded** to support the sweep:
+  - `processes_to_stop[]` (array) replaces the singleton `dev_server_to_stop` — `/soloflow:sprint` Step 4.6 now iterates and `TaskStop`s every tracked harness shell. Today this is only the dev_server; the shape future-proofs additional background shells.
+  - `port_sweep` surfaces the dev-server probe port for the closer's lsof kill.
+  - `worktree_sweep[]` enumerates per-task worktree dirs and classifies each as stale (branch gone, safe to remove) or preserved (branch present).
+
 ## [0.10.0] - 2026-05-11
 
 ### Added
