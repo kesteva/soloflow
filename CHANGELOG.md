@@ -4,6 +4,8 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-05-18
+
 ### Added
 - **Sprint close sweep.** `sprint-closer` finalize now runs `scripts/sprint/sweep-processes.js` as its last step to clean up anything the sprint pipeline may have started:
   - lsof-kills any straggler PID holding the dev-server probe port (SIGTERM, escalating to SIGKILL after 3s) — defends against a lost `dev_server.task_id` from a session restart.
