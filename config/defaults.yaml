@@ -70,6 +70,14 @@ sprint_code_review:
 compound:
   skeptic:
     enabled: true
+    # When true AND skeptic.enabled is true, /soloflow:compound Step 3 skips the
+    # per-bucket AskUserQuestion for buckets A/B/C: every IMPLEMENT verdict is
+    # applied, every DONT_IMPLEMENT verdict is rejected — same semantics as the
+    # "Accept skeptic's recommendations" option, but without prompting.
+    # Bucket D (tester-mode SoloFlow self-improvement feedback) is ALWAYS reviewed
+    # by the user regardless of this flag — auto-archiving feedback meant for a
+    # maintainer would defeat its purpose.
+    auto_accept_verdicts: false
   claude_md_reviewer:
     enabled: true
     pre_review_feedback_rounds: 2   # cap on compounder+reviewer re-runs per "Give feedback" cycle
@@ -107,6 +115,18 @@ verification:
   visual_mobile: false    # enable when maestro CLI is installed and a simulator/emulator is running
   visual_web: false       # enable when Playwright MCP is configured
   visual_macos: false     # enable when peekaboo CLI is installed (brew install steipete/tap/peekaboo) and Screen Recording + Accessibility permissions are granted
+  # When true and the project is a Chromium-driveable target (Electron, Tauri,
+  # Expo with web platform, Capacitor), prefer Playwright MCP over Maestro/Peekaboo
+  # for UI verification. Default false — opt in only when the project's web
+  # surface is a faithful proxy for the shipped UI (always true for Electron/Tauri;
+  # sometimes false for Expo Web, where Platform.OS=='web' branches diverge).
+  # For Expo / Capacitor the verifier auto-falls-back to Maestro when a task
+  # touches `*.ios.*`, `*.android.*`, `*.native.*`, or imports native-only modules.
+  visual_prefer_playwright: false
+  # Optional explicit override for the Electron main entry. When null, the probe
+  # autodetects from package.json#main, then common build paths
+  # (dist/main.js, out/main.js, electron/main.js).
+  visual_electron_main: null
   visual_mobile_app_id: null    # bundle ID for ad-hoc Maestro flows; auto-detected from existing flows when null
   visual_maestro_flow_dirs:     # directories to search for project Maestro flows
     - maestro/

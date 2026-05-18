@@ -124,6 +124,7 @@ Compound is Phase 6 — the end-of-sprint learning pass. Findings files are per-
 | Setting | Default | Description |
 |---|---|---|
 | `compound.skeptic.enabled` | `true` | Spawn `compound-skeptic` in Step 2.6 after the proposal is written. Emits per-item IMPLEMENT / DONT_IMPLEMENT verdicts and enables the "Accept skeptic's recommendations" option in Step 3. |
+| `compound.skeptic.auto_accept_verdicts` | `false` | When `true` AND `skeptic.enabled: true`, Step 3 skips the per-bucket `AskUserQuestion` **for buckets A, B, and C only**. Each affected bucket is auto-resolved using the same semantics as "Accept skeptic's recommendations" — every `IMPLEMENT` verdict applies, every `DONT_IMPLEMENT` is rejected. **Bucket D (SoloFlow self-improvement feedback, tester mode) is always reviewed by the user** regardless of this flag — auto-archiving feedback meant for a maintainer would defeat its purpose. Note: when this flag is on, `compound.claude_md_reviewer.pre_review_feedback_rounds` has no effect (the Bucket C "Give feedback" loop is unreachable). |
 | `compound.claude_md_reviewer.enabled` | `true` | Spawn `claude-md-reviewer` in Step 2.5 against **all** C-items before the user sees options. Tightens or drops items, splits mixed rule+pattern proposals into a CLAUDE.md pointer + CODE-PATTERNS.md entry. |
 | `compound.claude_md_reviewer.pre_review_feedback_rounds` | `2` | Cap on how many times "Give feedback" on Bucket C can re-run compounder + claude-md-reviewer before the last reviewer output is used as final. |
 | `compound.pending_sprints.picker_threshold` | `2` | When `/soloflow:compound` is invoked with no argument, prompt the sprint picker if ≥ this many sprints are pending; fewer → use the oldest silently. |
@@ -141,6 +142,9 @@ Findings are stored at `.soloflow/active/findings/SPRINT-NNN-findings.md` — on
 | `verification.run_linter` | `true` | Auto-lint after Write/Edit |
 | `verification.visual_mobile` | `false` | Enable Maestro CLI visual verification (mobile) |
 | `verification.visual_web` | `false` | Enable Playwright MCP visual verification (web) |
+| `verification.visual_macos` | `false` | Enable Peekaboo visual verification (native macOS) |
+| `verification.visual_prefer_playwright` | `false` | When `true` and the project is Chromium-driveable (Electron, Tauri, Expo Web, Capacitor), prefer Playwright over Maestro/Peekaboo for UI verification. Expo and Capacitor still fall back to Maestro when a task touches `*.ios.*` / `*.android.*` / `*.native.*` or native-only modules. See [VISUAL-VERIFICATION-SETUP.md → Playwright preference](VISUAL-VERIFICATION-SETUP.md#playwright-preference) |
+| `verification.visual_electron_main` | `null` | Explicit Electron main entry path for the Playwright `_electron.launch` runner. When `null`, the probe autodetects from `package.json#main`, then `out/main.js`, `dist/main.js`, `electron/main.js` |
 | `verification.visual_mobile_app_id` | `null` | Bundle ID for ad-hoc Maestro flows (auto-detected from existing flows when null) |
 | `verification.visual_maestro_flow_dirs` | `["maestro/", ".maestro/", "test/maestro/"]` | Dirs searched for Maestro flows |
 | `verification.visual_screenshot_budget` | 3 | Max screenshots per verification run |

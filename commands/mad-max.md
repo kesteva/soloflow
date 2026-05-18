@@ -205,7 +205,8 @@ Render using fields from the closer's gather and finalize outputs (sprint-verifi
 - **Visual coverage:**
   - Per-task mobile: {per_task.mobile.pass} pass / {per_task.mobile.fail} fail / {per_task.mobile.not_applicable} N/A / {per_task.mobile.skipped_user_preference} skipped (user pref) / {per_task.mobile.skipped_unable} skipped (unable)
   - Per-task web:    {per_task.web.pass} pass / {per_task.web.fail} fail / {per_task.web.not_applicable} N/A / {per_task.web.skipped_user_preference} skipped (user pref) / {per_task.web.skipped_unable} skipped (unable)
-  - Sprint-level:    mobile={sprint_level.mobile}{note if present}, web={sprint_level.web}{note if present}
+  - Per-task macos:  {per_task.macos.pass} pass / {per_task.macos.fail} fail / {per_task.macos.not_applicable} N/A / {per_task.macos.skipped_user_preference} skipped (user pref) / {per_task.macos.skipped_unable} skipped (unable)
+  - Sprint-level:    mobile={sprint_level.mobile}{note if present}, web={sprint_level.web}{note if present}, macos={sprint_level.macos}{note if present}
 - **Head SHA:** {head_sha}
 
 Next step: run /soloflow:sprint to resume human review and merge, or inspect {run.branch} manually.

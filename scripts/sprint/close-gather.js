@@ -66,18 +66,21 @@ function severityMax(a, b) {
 }
 
 function tallyVisualCoverage(doneReports, sprintId) {
-  const init = () => ({ pass: 0, fail: 0, not_applicable: 0, skipped_user_preference: 0, skipped_unable: 0, skipped_metro_offline: 0 });
+  const init = () => ({ pass: 0, fail: 0, not_applicable: 0, skipped_user_preference: 0, skipped_by_preference: 0, skipped_unable: 0, skipped_metro_offline: 0 });
   const mobile = init();
   const web = init();
+  const macos = init();
   for (const dr of doneReports) {
     const { frontmatter: fm } = readFm(dr);
     if (!fm || fm.sprint !== sprintId) continue;
     const m = (fm.visual_mobile || 'not_applicable');
     const w = (fm.visual_web || 'not_applicable');
+    const k = (fm.visual_macos || 'not_applicable');
     if (mobile[m] !== undefined) mobile[m]++; else mobile.not_applicable++;
     if (web[w] !== undefined) web[w]++; else web.not_applicable++;
+    if (macos[k] !== undefined) macos[k]++; else macos.not_applicable++;
   }
-  return { mobile, web };
+  return { mobile, web, macos };
 }
 
 function resolveSprint(cwd, explicitSprintId) {
@@ -154,8 +157,8 @@ function main() {
 
   const sprintVerifPath = path.join(paths.activeDir(cwd), 'sprint-verification.md');
   let sprintLevelVisual = {
-    mobile: 'not_applicable', web: 'not_applicable',
-    mobile_note: 'sprint-verifier did not run', web_note: 'sprint-verifier did not run',
+    mobile: 'not_applicable', web: 'not_applicable', macos: 'not_applicable',
+    mobile_note: 'sprint-verifier did not run', web_note: 'sprint-verifier did not run', macos_note: 'sprint-verifier did not run',
   };
   let regressionsCount = 0;
   if (fs.existsSync(sprintVerifPath)) {
@@ -164,8 +167,10 @@ function main() {
       sprintLevelVisual = {
         mobile: fm.visual_mobile || 'not_applicable',
         web: fm.visual_web || 'not_applicable',
+        macos: fm.visual_macos || 'not_applicable',
         mobile_note: fm.visual_mobile_note || null,
         web_note: fm.visual_web_note || null,
+        macos_note: fm.visual_macos_note || null,
       };
       regressionsCount = Number(fm.regressions_count || 0);
     }
@@ -273,16 +278,66 @@ function main() {
   // 8. Merge strategy.
   const mergeStrategy = config.resolve('git.merge_strategy', '--no-ff', cwd);
 
-  // 9. Dev-server cleanup. The orchestrator's Step 2.5 wrote a transient
-  //    {task_id, output_path, name} block to sprint.json when it started a
-  //    dev server in a background shell. Surface it so the orchestrator can
-  //    call TaskStop after sprint-closer finalize completes.
-  let devServerToStop = null;
+  // 9. Process / worktree sweep inputs. The orchestrator's Step 2.5 wrote a
+  //    transient {task_id, output_path, name} block to sprint.json when it
+  //    started a dev server in a background shell. Surface every
+  //    sprint-started harness shell so the orchestrator can TaskStop each
+  //    one in Step 4.6. Today that's just dev_server; the array shape
+  //    future-proofs the contract.
+  const processesToStop = [];
   if (state.dev_server && typeof state.dev_server.task_id === 'string' && state.dev_server.task_id.length > 0) {
-    devServerToStop = {
+    processesToStop.push({
+      kind: 'dev_server',
       task_id: state.dev_server.task_id,
       name: state.dev_server.name || 'dev-server',
-    };
+    });
+  }
+
+  //    Port sweep input: dev-server probe port (if configured + enabled).
+  //    sprint-closer's finalize phase passes this to sweep-processes.js so
+  //    any straggler PIDs on the port are killed even when dev_server.task_id
+  //    is missing (e.g. session restart lost the harness task handle).
+  let portSweep = null;
+  const devServerEnabled = config.resolve('verification.dev_server.enabled', false, cwd) === true;
+  if (devServerEnabled) {
+    const port = config.resolve('verification.dev_server.probe_port', null, cwd);
+    const name = config.resolve('verification.dev_server.name', 'dev-server', cwd);
+    const portNum = port == null ? null : Number(port);
+    if (portNum != null && Number.isFinite(portNum) && portNum > 0) {
+      portSweep = { port: portNum, name };
+    }
+  }
+
+  //    Worktree sweep: enumerate .soloflow/worktrees/TASK-NNN/ dirs and
+  //    classify each by whether its task branch still exists. Stale dirs
+  //    (no branch) are removable; preserved dirs (branch present, typically
+  //    a merge-conflict from worktree-merge.js) stay for human inspection.
+  const worktreeSweep = [];
+  const runBranch = (state.run && state.run.branch)
+    || (state.sprint && state.sprint.run && state.sprint.run.branch)
+    || null;
+  const wtRoot = paths.worktreesDir(cwd);
+  if (fs.existsSync(wtRoot)) {
+    for (const entry of fs.readdirSync(wtRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      if (!/^TASK-\d{3,}$/.test(entry.name)) continue;
+      const wtPath = path.join(wtRoot, entry.name);
+      const taskBranch = runBranch ? `${runBranch}-${entry.name}` : null;
+      let branchExists = false;
+      if (taskBranch) {
+        try {
+          require('child_process').execFileSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${taskBranch}`], { cwd, stdio: 'ignore' });
+          branchExists = true;
+        } catch { branchExists = false; }
+      }
+      worktreeSweep.push({
+        task_id: entry.name,
+        path: wtPath,
+        branch: taskBranch,
+        branch_exists: branchExists,
+        stale: !branchExists,
+      });
+    }
   }
 
   // Emit.
@@ -328,7 +383,9 @@ function main() {
     findings_reconciliation: findingsReconciliation,
     compound_drafts: compoundDrafts,
     merge_strategy: mergeStrategy,
-    dev_server_to_stop: devServerToStop,
+    processes_to_stop: processesToStop,
+    port_sweep: portSweep,
+    worktree_sweep: worktreeSweep,
   };
 
   process.stdout.write(JSON.stringify(payload, null, 2) + '\n');

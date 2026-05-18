@@ -18,11 +18,22 @@ You run two sequential passes. Pass 1 first, then Pass 2 — never in parallel.
 
 ## Pass 1: Visual verification (manual, change-scoped)
 
-You classify each platform (`visual_mobile`, `visual_web`, `visual_macos`) into exactly one of the same five outcomes the per-task verifier uses: `pass | fail | not_applicable | skipped_user_preference | skipped_unable`. See `agents/shadow-verifier.md` → **Outcome classification** for precise definitions. Classify each platform independently.
+You classify each platform (`visual_mobile`, `visual_web`, `visual_macos`) into exactly one of the same six outcomes the per-task verifier uses: `pass | fail | not_applicable | skipped_user_preference | skipped_by_preference | skipped_unable`. See `agents/shadow-verifier.md` → **Outcome classification** for precise definitions. Classify each platform independently.
 
 Apply the gates in this order for each platform:
 
 1. **Settings gate.** If the resolved setting for this platform is `false`, emit `skipped_user_preference` for that platform. If all three are `false`, classify them and skip to Pass 2.
+
+1.5 **Playwright preference pre-step (run once for the sprint pass).** Mirror the per-task verifier's preference gate so the sprint-level run picks the same path:
+
+   - Resolve `verification.visual_prefer_playwright` (fallback `false`). If anything other than `true` → skip this pre-step and run all platforms via their native drivers.
+   - Read `playwright_target` from `.soloflow/active/sprints/{sprint.id}/sprint.json` (cached at sprint start by `sprint-initiator`). If missing OR `kind` is `null` → skip.
+   - Resolve `verification.visual_web` (fallback `false`) AND check `mcp__playwright__*` is in your available-tools list. If either fails → emit ONE queue entry with `dedup_key: visual_prefer_playwright_unavailable` and `severity: low` (see `agents/shadow-verifier.md` → **Config-gap escalation**), then fall through to platform-based selection.
+   - **CLAUDE.md E2E gate precedence**: if any flow's underlying files overlap a CLAUDE.md `E2E Verification Gates` entry mandating native verification → those flows still run via Maestro/Peekaboo. Other flows can still use Playwright.
+   - **Expo / Capacitor native-divergence guard**: if `playwright_target.kind` is `expo-web` or `capacitor`, exclude flows whose underlying changed files match `*.ios.*` / `*.android.*` / `*.native.*` or import `Platform` from `react-native`, `react-native-gesture-handler`, `expo-camera`, `expo-notifications`, `expo-local-authentication`, `expo-secure-store`, `expo-linking` from the Playwright run — those run on Maestro instead. Electron and Tauri have no divergence guard.
+   - For every other flow in this sprint, route through Playwright via `mcp__playwright__*`. Classify the corresponding `visual_mobile` / `visual_macos` toggles (when set to `true`) as `skipped_by_preference — verified via Playwright ({kind})`. `visual_web` reports the Playwright run's actual outcome.
+
+   See `skills/visual-verify/SKILL.md` → §Playwright Preference for the canonical decision flow.
 
 2. **Identify affected user flows** (only for platforms whose settings gate passed). For each completed task, read its plan and determine which user-facing flows its changes participate in. A "flow" is a complete user journey (e.g., "Design wizard: genre selection → options → confirm screen"). Focus on:
    - Tasks that modified UI components or screens
@@ -64,9 +75,9 @@ Before returning, write `.soloflow/active/sprint-verification.md` (overwriting a
 ```markdown
 ---
 sprint: SPRINT-{NNN}
-visual_mobile: pass | fail | not_applicable | skipped_user_preference | skipped_unable
+visual_mobile: pass | fail | not_applicable | skipped_user_preference | skipped_by_preference | skipped_unable
 visual_web:    pass | fail | not_applicable | skipped_user_preference | skipped_unable
-visual_macos:  pass | fail | not_applicable | skipped_user_preference | skipped_unable
+visual_macos:  pass | fail | not_applicable | skipped_user_preference | skipped_by_preference | skipped_unable
 visual_mobile_note: "{one-line reason, omit for pass/not_applicable}"
 visual_web_note:    "{one-line reason, omit for pass/not_applicable}"
 visual_macos_note:  "{one-line reason, omit for pass/not_applicable}"
@@ -96,9 +107,9 @@ Combine both passes into a single report. The Visual Verification block MUST mat
 - **Sprint-verification file:** .soloflow/active/sprint-verification.md
 
 ### Visual Verification
-- **visual_mobile:** pass | fail | not_applicable | skipped_user_preference | skipped_unable — {one-line reason}
+- **visual_mobile:** pass | fail | not_applicable | skipped_user_preference | skipped_by_preference | skipped_unable — {one-line reason}
 - **visual_web:**    pass | fail | not_applicable | skipped_user_preference | skipped_unable — {one-line reason}
-- **visual_macos:**  pass | fail | not_applicable | skipped_user_preference | skipped_unable — {one-line reason}
+- **visual_macos:**  pass | fail | not_applicable | skipped_user_preference | skipped_by_preference | skipped_unable — {one-line reason}
 - **Flows tested:** {count}
 - **Flows deferred:** {count} (awaiting human action)
 - **Failures:**

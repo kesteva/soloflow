@@ -158,7 +158,19 @@ Decisions:
      ```
      The script atomically rewrites each plan's frontmatter (preserving every other field) and emits a JSON summary of `updated` + `skipped`. A "skipped" entry means the plan file was already in-flight (resume path) or missing (data corruption — bubble up).
    - Create the per-sprint directory: `mkdir -p .soloflow/active/sprints/{sprint_id}/`.
-   - Write `.soloflow/active/sprints/{sprint_id}/sprint.json` with the same selected task IDs in `tasks` (each with `status: "pending"`):
+   - **Detect Playwright target.** Run:
+     ```
+     node "${CLAUDE_PLUGIN_ROOT}/scripts/sprint/probe-playwright-target.js"
+     ```
+     Parse the JSON `{ kind, evidence, dev_url_hint, divergence_risk }`. This runs once per sprint so the per-task verifiers don't re-stat `package.json` + `app.json` on every run. The verifier path-selection pre-step reads this back from `sprint.json` (see `agent-templates/shadow-verifier.md` and `skills/visual-verify/SKILL.md`).
+   - **Read `depends_on` for the selected tasks.** Run:
+     ```
+     node "${CLAUDE_PLUGIN_ROOT}/scripts/state/plan-query.js" \
+         --id {selected_task_id_1} --id {selected_task_id_2} ... \
+         --fields id,depends_on --format json
+     ```
+     Use the returned `depends_on` arrays (default to `[]` when missing) when constructing the `tasks` block below. This is load-bearing: `scripts/sprint/ready-tasks.js` reads dependencies **exclusively** from `sprint.json.tasks[id].depends_on`, so omitting it makes every task look immediately ready and lets parallel batches schedule dependent tasks alongside their prereqs.
+   - Write `.soloflow/active/sprints/{sprint_id}/sprint.json` with the same selected task IDs in `tasks` (each entry carrying `status: "pending"` and the task's `depends_on` array):
      ```json
      {
        "sprint": {
@@ -167,11 +179,15 @@ Decisions:
          "started": "{ISO timestamp}",
          "execution_mode": "serial" | "parallel"
        },
-       "tasks": { /* selected tasks keyed by ID, each with status: "pending" */ }
+       "tasks": {
+         "TASK-NNN": { "status": "pending", "depends_on": [] },
+         "TASK-MMM": { "status": "pending", "depends_on": ["TASK-NNN"] }
+       },
+       "playwright_target": { "kind": "electron"|"tauri"|"expo-web"|"capacitor"|null, "evidence": "...", "dev_url_hint": "..."|null, "divergence_risk": true|false }
      }
      ```
-     `execution_mode` is persisted so that checkpoint-resume paths (commands/sprint.md Step 0.5) recover the same mode without re-prompting. Downstream steps read it from `sprint.sprint.execution_mode`.
-   - Plans are the source of truth; `sprint.json.tasks` mirrors the in-flight set. Step 5's commit stages both the per-sprint `sprint.json` and the modified plan files.
+     `execution_mode` is persisted so that checkpoint-resume paths (commands/sprint.md Step 0.5) recover the same mode without re-prompting. Downstream steps read it from `sprint.sprint.execution_mode`. `playwright_target` is cached so per-task verifiers can resolve the Playwright-preference path in one read. `depends_on` mirrors each plan's frontmatter and feeds `scripts/sprint/ready-tasks.js` + `scripts/sprint/build-batch.js`.
+   - Plans are the source of truth; `sprint.json.tasks` mirrors the in-flight set (status + depends_on). Step 5's commit stages both the per-sprint `sprint.json` and the modified plan files.
 
 3.5. **Create per-sprint findings file.**
    - Ensure `.soloflow/active/findings/` exists (`mkdir -p`).
@@ -242,7 +258,7 @@ Decisions:
    - Additionally requires `maestro` when `verification.visual_mobile=true` and `playwright` when `verification.visual_web=true` — independent of plan content, since the verifier's Level 2 decision gate fires for any UI file or UI-visible AC. Config-driven demands produce a `missing` entry whose `reason` is suffixed with `(required by verification.visual_*=true)` so the orchestrator can surface the registration gap instead of letting every task degrade to `skipped_unable`.
    - Probes each required category via Bash (MCP registration + CLI presence + docker daemon).
    - For config-driven visual categories (`maestro` / `playwright`), also cross-checks the shadow agents at `.claude/agents/shadow-verifier.md` and `.claude/agents/shadow-sprint-verifier.md`. `claude mcp list` passing doesn't guarantee that `mcp__{server}__*` tool bindings actually reach the shadow-verifier subagent session — that depends on current shadows. If shadows are `not_installed`, `untracked`, or `stale`, the category is demoted from `available` to `missing` with a shadow-specific reason so the orchestrator catches the silent-skip gap up-front.
-   - Emits a top-level `advisories` array (inform-only, never blocking). Current advisories: `kind: no_auth_fixture` when `verification.visual_mobile=true` but `verification.visual_auth_fixture` is unset — signals that the orchestrator should surface a one-line nudge at Step 2.8 about the recommended `.maestro/fixtures/sign-in.yaml` convention.
+   - Emits a top-level `advisories` array (inform-only, never blocking). Each entry carries `category`, `kind`, `severity` (`"info"` or `"warning"`; default `"info"` for unset), and `message`. The orchestrator renders `severity: warning` advisories with a `⚠` sigil at Step 2.8 so they stand out from background output. Current advisories: `kind: no_auth_fixture` (`severity: warning`) when `verification.visual_mobile=true` but `verification.visual_auth_fixture` is unset — the message names the mobile tasks in this sprint that will defer to the review queue if the simulator is signed out, and points the user at the recommended `.maestro/fixtures/sign-in.yaml` convention.
    - Runs each plan's `prerequisites[]` checks with a 5-second timeout, classifying `pass` / `fail` / `timeout`.
    - Emits the full `infra_check` payload (see Output schema below) as JSON.
 
@@ -307,6 +323,7 @@ infra_check:  # ALWAYS present (never null). Empty arrays if nothing required.
   advisories:                                      # inform-only, never blocking. Surfaced at orchestrator Step 2.8.
     - category: "maestro"                          # the category this advisory annotates
       kind: "no_auth_fixture"                      # stable identifier; orchestrator can choose per-kind formatting
+      severity: "warning"                          # "info" (default) | "warning" — orchestrator prefixes warnings with `⚠`
       message: "{one-line nudge for the user}"
   task_prerequisites:                              # per-task plan-declared probes (see Step 6.5.b2). Empty if no plan had prerequisites.
     - task_id: "TASK-NNN"

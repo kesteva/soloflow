@@ -132,6 +132,7 @@ Runs before the user sees any options, so the C-bucket presented in Step 3 is al
 Adds per-item IMPLEMENT / DONT_IMPLEMENT verdicts before the user sees options, giving the user an informed "accept skeptic's recommendations" shortcut in Step 3.
 
 1. **Resolve `compound.skeptic.enabled`** per the three-tier recipe (fallback: `true`). If `false`, skip this step entirely — Step 3 will omit the "Accept skeptic's recommendations" option.
+   - Also resolve `compound.skeptic.auto_accept_verdicts` per the three-tier recipe (fallback: `false`). Store as `AUTO_ACCEPT_VERDICTS`. When `true` AND the skeptic reaches `REPORTED` in this step, Step 3 will auto-apply the verdicts for buckets A/B/C without prompting. Bucket D is excluded from auto-accept and always prompts. If `skeptic.enabled` is `false`, `AUTO_ACCEPT_VERDICTS` has no effect (no verdicts exist to accept).
 2. If every bucket is empty (`_No items._` in A, B, C, and D or D absent), skip — there's nothing to verdict.
 3. Spawn the **compound-skeptic** agent with:
    - The target `SPAN_LABEL`.
@@ -187,6 +188,26 @@ Full proposal: [active/compound/{PROPOSAL_BASENAME}]({absolute path on disk})
 
 The scannable summary from Step 2.7 is already on screen — the user has read the per-item Summary and skeptic verdict for every bucket before this step fires. Do not re-emit that summary here. The per-bucket AskUserQuestion still embeds its own compact title list per the cutoff rule below.
 
+### Auto-accept short-circuit (`AUTO_ACCEPT_VERDICTS`)
+
+If `AUTO_ACCEPT_VERDICTS` (resolved in Step 2.6) is `true` AND the skeptic reached `REPORTED`, **buckets A, B, and C bypass the AskUserQuestion flow below**. For each non-empty A/B/C bucket with at least one verdict, apply the same semantics as the "Accept skeptic's recommendations" option: every item with `Skeptic Verdict: IMPLEMENT` is accepted, every item with `Skeptic Verdict: DONT_IMPLEMENT` is rejected. Print one inline summary line per bucket and record the split for Step 6:
+
+```
+Bucket {letter} — auto-accepted skeptic ({N IMPLEMENT applied, M DONT_IMPLEMENT rejected})
+```
+
+Edge cases:
+- Bucket has zero verdicts (e.g., every C-item was dropped in Step 2.5): the auto-accept gate (`bucket has ≥1 verdict`) excludes it. Fall through to the normal "skip empty bucket" handling — no prompt, no auto-accept line.
+- Bucket has only `IMPLEMENT` verdicts: equivalent to "Approve all". Print the one-liner with `(N IMPLEMENT applied, 0 DONT_IMPLEMENT rejected)`.
+- Bucket has only `DONT_IMPLEMENT` verdicts: equivalent to "Reject all". Print the one-liner with `(0 IMPLEMENT applied, N DONT_IMPLEMENT rejected)`. Step 6's row will show `0 applied / 0 IMPLEMENT / N proposed`.
+- `compound.claude_md_reviewer.pre_review_feedback_rounds` has no effect when auto-accept is on, because the Bucket C "Give feedback" loop is unreachable.
+
+**Bucket D is explicitly excluded from auto-accept.** It always uses the inline write-up + Archive/Edit/Reject flow described below, regardless of `AUTO_ACCEPT_VERDICTS`. Bucket D is SoloFlow self-improvement feedback meant for a maintainer to read — auto-archiving without human review would defeat its purpose.
+
+If `AUTO_ACCEPT_VERDICTS` is `false` OR the skeptic did not run, all buckets follow the normal per-bucket AskUserQuestion flow below.
+
+### Per-bucket AskUserQuestion flow
+
 Walk through each bucket sequentially. For each non-empty bucket:
 
 1. Build a compact summary: item count and one-line title per item. When `|BATCH_SPRINTS| >= 2`, prefix each title with its `[Source-Sprint]` (same rule as Step 2.7). Single-sprint batches render titles without the prefix.
@@ -217,7 +238,7 @@ Question format: `Bucket C — CLAUDE.md / CODE-PATTERNS.md improvements: {m} ap
 - If every C-item was dropped (`m == 0`), skip the AskUserQuestion entirely — just print the dropped list as info and continue to the next bucket.
 - **"Give feedback" on Bucket C:** re-run the compounder with the feedback appended. The re-run passes the FULL `inputs` list (all of `BATCH_SPRINTS`) so the compounder rebuilds Bucket C end-to-end with cross-sprint context intact. Then re-run Step 2.5 (claude-md-reviewer) before re-presenting. Cap the loop at resolved `compound.claude_md_reviewer.pre_review_feedback_rounds` (fallback: `2`). When the cap is hit, print `Feedback budget exhausted — using last reviewer output as final.` and treat the current state of Bucket C as the final presentation. Feedback on buckets A/B/D does not re-trigger Step 2.5, but it DOES re-run the compounder against the full `inputs` list.
 
-**Bucket D exception (SoloFlow improvements):** Do not use the standard approve/reject flow. Instead:
+**Bucket D exception (SoloFlow improvements):** Do not use the standard approve/reject flow, and do not honor `AUTO_ACCEPT_VERDICTS` — Bucket D always prompts the user (its write-up is SoloFlow self-improvement feedback that must reach a maintainer). Instead:
 1. Print the full feedback write-up inline so the user can read and copy it directly. When batching, each D-item's title in the write-up carries its `[Source-Sprint]` prefix so maintainers can correlate recommendations back to the originating sprint(s).
 2. If the skeptic ran and emitted any `DONT_IMPLEMENT` verdicts on D-items, print a one-line summary first: `Skeptic marked {N} of {M} recommendations IMPLEMENT.` If every D-item is `IMPLEMENT`, omit the summary.
 3. Use **AskUserQuestion**: `SoloFlow feedback ready. Archive and continue?` with options:
@@ -326,6 +347,8 @@ Findings : archived → {comma-joined archive/findings/SPRINT-NNN-findings.md pa
 
 The `{skeptic_implement}` column reflects how many items the skeptic endorsed per bucket. Omit the column entirely (just show `{N applied} / {M proposed}`) if the skeptic was disabled or did not run.
 
+When at least one A/B/C bucket fired through the auto-accept short-circuit (Step 3, `AUTO_ACCEPT_VERDICTS: true`), prepend a single-line header above the `Applied:` block: `(auto-accepted skeptic verdicts — no per-bucket review)`. Omit it when no bucket auto-accepted (e.g., flag was off, skeptic disabled, or every bucket was empty / fell through the gate).
+
 The **By sprint** block attributes each bucket's applied/proposed counts back to the contributing sprint via each item's `**Source-Sprint:**`. Dedup items (multi-sprint Source-Sprint) count toward every sprint they cite.
 
 ---
@@ -336,6 +359,7 @@ The **By sprint** block attributes each bucket's applied/proposed counts back to
 - The compounder agent is read-only except for its own proposal draft (`active/compound/{PROPOSAL_BASENAME}` — single-sprint or span-named) — it never writes directly to plans or CLAUDE.md.
 - The claude-md-reviewer agent runs as a pre-review in Step 2.5, tightening Bucket C before the user sees options. It can only edit the proposal file to insert `[reviewer: ready]` / `[dropped — reason]` markers and refined diffs, preserving each item's Source-Sprint field.
 - The compound-skeptic agent runs in Step 2.6 (after claude-md-reviewer), adding per-item IMPLEMENT / DONT_IMPLEMENT verdicts to non-dropped items. It enables the "Accept skeptic's recommendations" option. Toggle via `compound.skeptic.enabled`. It never touches an item's Source-Sprint field.
+- The `compound.skeptic.auto_accept_verdicts` toggle (default `false`) makes Step 3 non-interactive for buckets A/B/C when the skeptic ran: each is auto-resolved using the same semantics as "Accept skeptic's recommendations". Bucket D always prompts — its write-up is SoloFlow self-improvement feedback that must reach a maintainer. Pair with `/soloflow:sprint-and-compound` for a pipeline whose only remaining prompts are sprint setup, Bucket D review (tester mode only), and the final merge choice.
 - Step 2.7 emits a single scannable summary (one line per item: `[Source-Sprint]` prefix when batching + title + Summary + skeptic verdict + reasoning) with a link to the full proposal file. It fires once, just before Step 3's bucket-by-bucket flow, so the user can triage the whole batch at a glance.
 - Rejected items are preserved in the archived proposal so they can be revisited manually.
 - **Batching.** Multiple sprints can await compound simultaneously. When two or more sprints are in the batch (`--all` or a multi-select picker subset), this command runs ONCE over the merged set — one compounder invocation with cross-sprint dedup, one review flow, one apply pass, one archive. Each per-sprint findings file archives individually. Per-item commits scope to each item's originating sprint (dedup items scope to the earliest source sprint with an `Also surfaced by:` body line).

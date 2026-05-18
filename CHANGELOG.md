@@ -4,6 +4,41 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-05-18
+
+### Added
+- **Sprint close sweep.** `sprint-closer` finalize now runs `scripts/sprint/sweep-processes.js` as its last step to clean up anything the sprint pipeline may have started:
+  - lsof-kills any straggler PID holding the dev-server probe port (SIGTERM, escalating to SIGKILL after 3s) — defends against a lost `dev_server.task_id` from a session restart.
+  - removes any `.soloflow/worktrees/TASK-NNN/` dir whose task branch is gone (stale residue from `worktree-merge.js`); preserves dirs whose branch still exists (typically merge-conflict inspection surfaces) and reports them.
+  - `git worktree prune` to flush stale metadata.
+- **`close-gather` output schema expanded** to support the sweep:
+  - `processes_to_stop[]` (array) replaces the singleton `dev_server_to_stop` — `/soloflow:sprint` Step 4.6 now iterates and `TaskStop`s every tracked harness shell. Today this is only the dev_server; the shape future-proofs additional background shells.
+  - `port_sweep` surfaces the dev-server probe port for the closer's lsof kill.
+  - `worktree_sweep[]` enumerates per-task worktree dirs and classifies each as stale (branch gone, safe to remove) or preserved (branch present).
+
+### Changed
+- **`no_auth_fixture` advisory is now a pre-flight warning, not background prose.** `scripts/sprint/probe-infra.js` tags the advisory `severity: "warning"`, names the mobile tasks in this sprint's scope, and spells out the consequence (every authenticated UI flow defers to the review queue if the simulator is signed out, collapsed via `dedup_key: simulator_unauthenticated`). Orchestrator Step 2.8 (`commands/sprint.md`) now prefixes `severity: warning` advisories with `⚠` in both the no-prompt and prompt-body paths so the unconfigured auth path is hard to miss during sprint setup. `info`-severity advisories continue to render plain. Closes FIND-4 (six tasks deferred in a single sprint without a visible upstream signal).
+
+### Fixed
+- **Parallel sprints with intra-sprint dependencies are now scheduled correctly.** `sprint-initiator` was writing each `sprint.json.tasks[id]` as `{ status: "pending" }` only — no `depends_on`. `scripts/sprint/ready-tasks.js` reads dependencies exclusively from that field, so every task looked immediately ready and `build-batch.js` happily co-scheduled dependent tasks alongside their prereqs in the same parallel batch. Serial mode masked the bug; parallel mode hit it. Step 3 of the execute phase now reads `depends_on` for the selected tasks via `plan-query.js --fields id,depends_on` and writes it into each task entry alongside `status`. Downstream consumers (`update-task-status.js`, sprint-closer merge schema) already preserve the field through status flips.
+
+## [0.10.3] - 2026-05-14
+
+### Added
+- **Playwright-preferred verification on Chromium-driveable projects.** Routes UI verification through Playwright MCP instead of Maestro / Peekaboo for Electron, Tauri, Expo (web), and Capacitor when explicitly opted in — useful when the web surface is a faithful proxy for the shipped UI.
+  - New config knobs `verification.visual_prefer_playwright` (default `false`) and `verification.visual_electron_main` (default `null`, autodetected from `package.json#main` then common build paths).
+  - `scripts/sprint/probe-playwright-target.js` detects the target type (`electron` / `tauri` / `expo` / `capacitor` / `none`), resolves the Electron main entry, and caches the result in `sprint.json` at sprint-initiator time so per-task verifiers don't re-probe.
+  - `skills/visual-verify` adds a **Playwright preference pre-step** before Path Selection: when the toggle is on, the probe succeeded, and the task does *not* touch native-only files (`*.ios.*`, `*.android.*`, `*.native.*`, native module imports), the verifier takes the Playwright path; otherwise it falls back to Maestro / Peekaboo.
+  - `shadow-verifier` / `shadow-sprint-verifier` mirror the pre-step and emit a new `skipped_by_preference` outcome when a platform was skipped because Playwright was chosen instead. `sprint-closer` tallies `skipped_by_preference` alongside the existing visual-coverage counters.
+  - `/soloflow:init` Q2 surfaces a one-line hint about `visual_prefer_playwright` after the platform select. `docs/CUSTOMIZATION.md` and `docs/VISUAL-VERIFICATION-SETUP.md` document the toggle, the autodetect fallback chain, and the native-file escape hatches.
+- **`/soloflow:summarize-roadmap` command.** Read-only reporter that groups every active task by epic, one line per task with status and (when blocked) a `↳ blocked by:` line, plus a status-rollup footer. Thin wrapper over `plan-query.js` — no new scripts, no state mutation. Useful when you want a roadmap-shaped view of the backlog without running a sprint.
+- **`compound.skeptic.auto_accept_verdicts` config toggle** (default `false`). When `true` AND `skeptic.enabled` is `true`, `/soloflow:compound` Step 3 skips the per-bucket `AskUserQuestion` for buckets A/B/C: every `IMPLEMENT` verdict applies, every `DONT_IMPLEMENT` is rejected — same semantics as the existing "Accept skeptic's recommendations" option, but without prompting. **Bucket D (SoloFlow self-improvement feedback, tester mode) is always reviewed by the user regardless of this flag** — auto-archiving feedback meant for a maintainer would defeat its purpose. Step 6's report prepends a one-line annotation when auto-accept fired.
+- **`/soloflow:sprint-and-compound` command** — runs `/soloflow:sprint` Steps 0.4 → 3.7, then `/soloflow:compound` Steps 0 → 5 inline against the just-finished sprint on the same run branch, then resumes sprint Steps 4 → 4.6 for the merge-choice prompt. Compound's per-item commits land in the merge candidate, so a single final merge prompt decides the fate of both the executed task work and the applied learnings together. Forwards sprint flags (`--quick` / `--no-code-review` / `--no-verification`) verbatim. Pair with `compound.skeptic.auto_accept_verdicts: true` for an autonomous flow whose only remaining prompts are sprint setup, optional human review for stuck tasks, optional Bucket D (tester mode), and the final merge choice.
+- **`/soloflow:config` — new "Compound" sub-flow (5i)** under Operations. Surfaces the five `compound.*` keys (`skeptic.enabled`, `skeptic.auto_accept_verdicts`, `claude_md_reviewer.enabled`, `claude_md_reviewer.pre_review_feedback_rounds`, `pending_sprints.picker_threshold`) — closes a pre-existing gap where no `compound.*` knob was reachable via `/soloflow:config`.
+
+### Fixed
+- **`visual_macos` outcomes are tallied at sprint close.** Previously `close-gather.js` only counted mobile + web visual-coverage columns; `visual_macos` outcomes from per-task done-reports and the sprint-verifier output were silently dropped. The sprint-closer now threads a `macos` column through the per-task tally and the sprint-level rollup (with `macos_note`), and `/soloflow:sprint` + `/soloflow:mad-max` final report templates display the new line.
+
 ## [0.10.0] - 2026-05-11
 
 ### Added

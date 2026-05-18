@@ -32,6 +32,51 @@ Parse the JSON `online` field:
 
 This preflight runs **only on the visual_mobile path**. The web (Playwright) path has its own availability section below and does not depend on the dev server (Playwright launches its own browser).
 
+## Playwright Preference (run-once pre-step)
+
+Before the platform-based **Path Selection** below, check whether the project is a Chromium-driveable target and the user has opted into routing UI verification through Playwright. For Electron/Tauri the Playwright `_electron` API drives the actual shipped renderer; for Expo Web / Capacitor a file-pattern guard skips the preference when the task touches native-divergent code so iOS/Android-only regressions are not masked.
+
+1. **Resolve the toggle.** Run:
+   ```
+   node "${CLAUDE_PLUGIN_ROOT}/scripts/config/resolve.js" \
+       --key verification.visual_prefer_playwright --fallback false
+   ```
+   If the value resolves to anything other than `true`, **skip this pre-step entirely** and fall through to the platform-based Path Selection below.
+
+2. **Read the cached project type.** The per-sprint detection runs once in `sprint-initiator` and stashes the result in `.soloflow/active/sprints/{sprint.id}/sprint.json` under `playwright_target`. Read it:
+   ```bash
+   node -e 'const p=JSON.parse(require("fs").readFileSync(process.argv[1])); console.log(JSON.stringify(p.playwright_target||null));' .soloflow/active/sprints/{sprint.id}/sprint.json
+   ```
+   If the field is missing or `kind` is `null` → **fall through** to Path Selection. The project isn't Playwright-driveable; preference is a no-op.
+
+3. **Check `visual_web` and Playwright tool availability.** Resolve `verification.visual_web` (fallback `false`). If false, OR `mcp__playwright__*` is not in your available-tools list, OR a lightweight Playwright probe errors → emit ONE config-gap queue entry (see §"Unavailable-but-preferred" below) and **fall through** to Path Selection.
+
+4. **CLAUDE.md E2E gate override (precedence).** Native-verification gates in the project's CLAUDE.md **win over** the Playwright preference. If the current task's `files_owned` overlaps any file the project's CLAUDE.md `E2E Verification Gates` section mandates for Maestro / Peekaboo verification, **skip the preference** and fall through. The native gate must be honored.
+
+5. **Native-divergence guard (Expo Web / Capacitor only).** If `playwright_target.kind` is `expo-web` or `capacitor` AND any file in `files_owned` matches one of:
+   - `*.ios.{ts,tsx,js,jsx}`
+   - `*.android.{ts,tsx,js,jsx}`
+   - `*.native.{ts,tsx,js,jsx}`
+   - imports `Platform` from `react-native`, OR `react-native-gesture-handler`, OR any of `expo-camera`, `expo-notifications`, `expo-local-authentication`, `expo-secure-store`, `expo-linking`
+   
+   → **skip the preference** (fall through to platform-based selection). These cases need the native driver to catch regressions in branches that don't exist on web. Electron and Tauri are exempt — the renderer Playwright drives IS the renderer that ships, so there is no divergence to worry about.
+
+6. **Commit the path.** If all gates passed, set `USE_PLAYWRIGHT=true` and `PLAYWRIGHT_TARGET={kind}` for the rest of the run. **Skip the Maestro / Peekaboo path selection entirely.** Continue to **Playwright (Web) Availability** below for the final lightweight probe, then run the verification through `mcp__playwright__*`. Report `visual_mobile` / `visual_macos` as `skipped_by_preference` (with the kind in the reason) if the project's `visual_mobile` / `visual_macos` toggles were true — see verifier outcome classification.
+
+### Unavailable-but-preferred
+
+When `visual_prefer_playwright=true` AND `playwright_target.kind` is non-null AND a Playwright availability check fails (e.g., `visual_web=false`, `mcp__playwright__*` unbound, or npx missing), emit ONE entry to `.soloflow/human-review-queue.md` with `dedup_key: visual_prefer_playwright_unavailable` and `severity: low`, then **fall through** to platform-based selection (don't double-skip). The dedup_key collapses multi-task sprints to one row.
+
+### Electron-specific runner
+
+Playwright drives the binary directly via `_electron.launch({ args: [<main path>] })` — no dev server. Resolve the main path in this order:
+
+1. `verification.visual_electron_main` (config).
+2. `package.json#main`.
+3. `out/main.js`, `dist/main.js`, `electron/main.js` (first existing wins).
+
+If none resolves, emit `skipped_unable` with reason `"could not locate Electron main; set verification.visual_electron_main"` and the verifier proceeds to Level 3.
+
 ## Path Selection (once per run)
 
 Before running any mobile verification, probe which path to use and record the decision for the rest of the run:

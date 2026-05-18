@@ -279,7 +279,7 @@ Surface four orthogonal signals from the phase 2 output: the smoke baseline, tas
 If none of the above triggers a prompt:
 - If `dev_server_action` was `"start"` or `"restart"` AND `sprint.json.dev_server.online == true`, print `{name} running under sprint (task_id: {task_id}; agents can read output_path from sprint.json.dev_server.output_path).`
 - Print `Smoke baseline clean; all required infra available; all task prerequisites satisfied.`
-- If `infra_check.advisories` is non-empty, print one line per advisory: `Advisory ({category}/{kind}): {message}` — inform-only, do not prompt.
+- If `infra_check.advisories` is non-empty, print one line per advisory — inform-only, do not prompt. Prefix advisories whose `severity` is `"warning"` with `⚠ ` so they stand out from the rest of the setup output (e.g. `⚠ Advisory (maestro/no_auth_fixture): ...`); advisories with `severity: "info"` (or no severity field) render plain (`Advisory ({category}/{kind}): {message}`).
 - Proceed to Step 3 with no prompt.
 
 Let `gated_task_ids` = the set of task IDs in `task_prerequisites` with at least one failing entry where `blocking: true`. This set drives the gating behavior below.
@@ -296,12 +296,12 @@ Compose the question body from these sections (omit a section if it has nothing 
 **Task-level infra** (only if `infra_check.missing` is non-empty):
 - Header: `{N} task(s) in this sprint expect infrastructure that isn't available:`
 - Per `missing` entry: `- {category} — {reason}. Affected: {task_id list}. Tests that will be skipped: {flattened test_targets}.`
-- Per `infra_check.advisories` entry whose `category` matches a `missing` entry, append a sub-line: `  · Advisory ({kind}): {message}` indented under the matching category line.
+- Per `infra_check.advisories` entry whose `category` matches a `missing` entry, append a sub-line indented under the matching category line. Prefix with `⚠ ` for `severity: "warning"`, otherwise leave plain (e.g. `  · ⚠ Advisory ({kind}): {message}` vs `  · Advisory ({kind}): {message}`).
 - Trailer: `Continuing will skip these checks; verifier will mark them SKIPPED — {category} not available.`
 
 **Advisories** (only if `infra_check.advisories` has entries whose `category` does NOT appear in `infra_check.missing` — surface them as their own section so they aren't lost):
 - Header: `Advisory check(s) — inform-only, will not block the sprint:`
-- Per advisory: `- {category}/{kind}: {message}`
+- Per advisory: prefix with `⚠ ` for `severity: "warning"`, otherwise plain (e.g. `- ⚠ {category}/{kind}: {message}` vs `- {category}/{kind}: {message}`).
 
 **Dev server** (only if `dev_server_action` was `"start"` or `"restart"` AND `sprint.json.dev_server.online == false`):
 - `{name} failed to come online within {startup_timeout_seconds}s after {dev_server_action}. Output captured at {sprint.json.dev_server.output_path}.`
@@ -610,13 +610,20 @@ Handle the outcome:
 
 The closer handles all staging and committing internally — do not run additional `git add` or `git commit` here.
 
-## Step 4.6: Stop sprint-managed dev server
+## Step 4.6: Stop sprint-managed background shells
 
-If the closer's gather output contained `dev_server_to_stop`, call **`TaskStop({ task_id: "<task_id>" })`** with the captured task_id. Print `{name} (task_id: {task_id}) stopped at sprint close.`
+For each entry in the closer's gather output `processes_to_stop` array, call **`TaskStop({ task_id: "<task_id>" })`** with that entry's `task_id`. Print one line per stopped entry: `{name} (task_id: {task_id}, kind: {kind}) stopped at sprint close.`
 
-If gather output did not contain `dev_server_to_stop`, this step is a no-op (the sprint either had `verification.dev_server.enabled: false`, or the user chose `Skip` / `Keep external` at Step 1.5f).
+If `processes_to_stop` is empty, this step is a no-op (the sprint either had `verification.dev_server.enabled: false`, or the user chose `Skip` / `Keep external` at Step 1.5f, and no other background shells were tracked).
 
-The harness retains the output file in its task store; no SoloFlow-managed cleanup is needed. `sprint.json.dev_server` was never committed (Step 2.5), so it is naturally archived with the rest of `sprint.json` at the closer's finalize step without leaking the now-stale `task_id`.
+The harness retains each task's output file in its task store; no SoloFlow-managed cleanup is needed. `sprint.json.dev_server` was never committed (Step 2.5), so it is naturally archived with the rest of `sprint.json` at the closer's finalize step without leaking the now-stale `task_id`.
+
+The closer's finalize Step 5 (`sweep-processes.js`) already runs the git/filesystem-side sweep — stale per-task worktrees removed, dev-server probe port lsof-killed, `git worktree prune`. Surface its results from `process_sweep` here if anything was non-empty:
+- `process_sweep.removed_worktrees` → print `Removed stale worktree: {task_id} ({path}).` per entry.
+- `process_sweep.preserved_worktrees` → print `Preserved worktree for inspection: {task_id} ({path}, branch {branch}).` per entry — these survived because their task branch is still around (typically a merge-conflict from a parallel task).
+- `process_sweep.port_kills` with `method ∈ {SIGTERM, SIGKILL}` → print `Killed straggler PID {pid} on dev-server port ({method}).` per entry.
+
+**Pending subagents.** No action needed: every Agent call this orchestrator spawned during Step 3 / 3.5 / 3.6 / 4.5 was awaited synchronously before reaching this step, so there are no in-flight subagents at sprint close. This is an invariant of the leaf-node agent model — if it ever stops holding (e.g. a future change introduces background Agent spawns), surface those task_ids through `processes_to_stop` so they're cleaned up here too.
 
 ## Step 5: Report
 
@@ -633,7 +640,8 @@ Sprint SPRINT-{NNN} complete.
 Visual coverage:
   Per-task mobile: {per_task.mobile.pass} pass / {per_task.mobile.fail} fail / {per_task.mobile.not_applicable} N/A / {per_task.mobile.skipped_user_preference} skipped (user pref) / {per_task.mobile.skipped_unable} skipped (unable)
   Per-task web:    {per_task.web.pass} pass / {per_task.web.fail} fail / {per_task.web.not_applicable} N/A / {per_task.web.skipped_user_preference} skipped (user pref) / {per_task.web.skipped_unable} skipped (unable)
-  Sprint-level:    mobile={sprint_level.mobile}{sprint_level.mobile_note ? " (" + sprint_level.mobile_note + ")" : ""}, web={sprint_level.web}{sprint_level.web_note ? " (" + sprint_level.web_note + ")" : ""}
+  Per-task macos:  {per_task.macos.pass} pass / {per_task.macos.fail} fail / {per_task.macos.not_applicable} N/A / {per_task.macos.skipped_user_preference} skipped (user pref) / {per_task.macos.skipped_unable} skipped (unable)
+  Sprint-level:    mobile={sprint_level.mobile}{sprint_level.mobile_note ? " (" + sprint_level.mobile_note + ")" : ""}, web={sprint_level.web}{sprint_level.web_note ? " (" + sprint_level.web_note + ")" : ""}, macos={sprint_level.macos}{sprint_level.macos_note ? " (" + sprint_level.macos_note + ")" : ""}
 
 Run branch: {run.branch or "none — ran on <base_branch>"}
   Status: {merge.outcome rendered as "merged into <base>" | "pr-opened: <url>" | "kept open" | "deleted" | "n/a"}
