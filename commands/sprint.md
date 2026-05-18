@@ -610,13 +610,20 @@ Handle the outcome:
 
 The closer handles all staging and committing internally — do not run additional `git add` or `git commit` here.
 
-## Step 4.6: Stop sprint-managed dev server
+## Step 4.6: Stop sprint-managed background shells
 
-If the closer's gather output contained `dev_server_to_stop`, call **`TaskStop({ task_id: "<task_id>" })`** with the captured task_id. Print `{name} (task_id: {task_id}) stopped at sprint close.`
+For each entry in the closer's gather output `processes_to_stop` array, call **`TaskStop({ task_id: "<task_id>" })`** with that entry's `task_id`. Print one line per stopped entry: `{name} (task_id: {task_id}, kind: {kind}) stopped at sprint close.`
 
-If gather output did not contain `dev_server_to_stop`, this step is a no-op (the sprint either had `verification.dev_server.enabled: false`, or the user chose `Skip` / `Keep external` at Step 1.5f).
+If `processes_to_stop` is empty, this step is a no-op (the sprint either had `verification.dev_server.enabled: false`, or the user chose `Skip` / `Keep external` at Step 1.5f, and no other background shells were tracked).
 
-The harness retains the output file in its task store; no SoloFlow-managed cleanup is needed. `sprint.json.dev_server` was never committed (Step 2.5), so it is naturally archived with the rest of `sprint.json` at the closer's finalize step without leaking the now-stale `task_id`.
+The harness retains each task's output file in its task store; no SoloFlow-managed cleanup is needed. `sprint.json.dev_server` was never committed (Step 2.5), so it is naturally archived with the rest of `sprint.json` at the closer's finalize step without leaking the now-stale `task_id`.
+
+The closer's finalize Step 5 (`sweep-processes.js`) already runs the git/filesystem-side sweep — stale per-task worktrees removed, dev-server probe port lsof-killed, `git worktree prune`. Surface its results from `process_sweep` here if anything was non-empty:
+- `process_sweep.removed_worktrees` → print `Removed stale worktree: {task_id} ({path}).` per entry.
+- `process_sweep.preserved_worktrees` → print `Preserved worktree for inspection: {task_id} ({path}, branch {branch}).` per entry — these survived because their task branch is still around (typically a merge-conflict from a parallel task).
+- `process_sweep.port_kills` with `method ∈ {SIGTERM, SIGKILL}` → print `Killed straggler PID {pid} on dev-server port ({method}).` per entry.
+
+**Pending subagents.** No action needed: every Agent call this orchestrator spawned during Step 3 / 3.5 / 3.6 / 4.5 was awaited synchronously before reaching this step, so there are no in-flight subagents at sprint close. This is an invariant of the leaf-node agent model — if it ever stops holding (e.g. a future change introduces background Agent spawns), surface those task_ids through `processes_to_stop` so they're cleaned up here too.
 
 ## Step 5: Report
 

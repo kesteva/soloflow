@@ -4,6 +4,16 @@ All notable changes to SoloFlow are documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Sprint close sweep.** `sprint-closer` finalize now runs `scripts/sprint/sweep-processes.js` as its last step to clean up anything the sprint pipeline may have started:
+  - lsof-kills any straggler PID holding the dev-server probe port (SIGTERM, escalating to SIGKILL after 3s) — defends against a lost `dev_server.task_id` from a session restart.
+  - removes any `.soloflow/worktrees/TASK-NNN/` dir whose task branch is gone (stale residue from `worktree-merge.js`); preserves dirs whose branch still exists (typically merge-conflict inspection surfaces) and reports them.
+  - `git worktree prune` to flush stale metadata.
+- **`close-gather` output schema expanded** to support the sweep:
+  - `processes_to_stop[]` (array) replaces the singleton `dev_server_to_stop` — `/soloflow:sprint` Step 4.6 now iterates and `TaskStop`s every tracked harness shell. Today this is only the dev_server; the shape future-proofs additional background shells.
+  - `port_sweep` surfaces the dev-server probe port for the closer's lsof kill.
+  - `worktree_sweep[]` enumerates per-task worktree dirs and classifies each as stale (branch gone, safe to remove) or preserved (branch present).
+
 ### Changed
 - **`no_auth_fixture` advisory is now a pre-flight warning, not background prose.** `scripts/sprint/probe-infra.js` tags the advisory `severity: "warning"`, names the mobile tasks in this sprint's scope, and spells out the consequence (every authenticated UI flow defers to the review queue if the simulator is signed out, collapsed via `dedup_key: simulator_unauthenticated`). Orchestrator Step 2.8 (`commands/sprint.md`) now prefixes `severity: warning` advisories with `⚠` in both the no-prompt and prompt-body paths so the unconfigured auth path is hard to miss during sprint setup. `info`-severity advisories continue to render plain. Closes FIND-4 (six tasks deferred in a single sprint without a visible upstream signal).
 
