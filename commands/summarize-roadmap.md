@@ -1,6 +1,7 @@
 ---
 description: Summarize the backlog as a one-line-per-task roadmap, grouped by epic
 allowed-tools: [Read, Glob, Bash]
+model: haiku
 ---
 
 # /soloflow:summarize-roadmap
