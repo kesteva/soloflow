@@ -146,7 +146,6 @@ All workflow state lives in `.soloflow/`, created by `scripts/init.sh`:
 │   ├── reviews/                # Human review reports
 │   ├── findings/               # Archived per-sprint findings files (post-compound)
 │   └── compound/               # SPRINT-NNN-proposal.md (archived Phase 5 output)
-├── active/backlog.json         # Ready tasks awaiting execution
 ├── active/sprint.json          # Active sprint + in-flight tasks
 ├── checkpoint.md               # Context restoration after compaction
 └── human-review-queue.md       # Batched items for human review

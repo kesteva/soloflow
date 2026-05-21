@@ -11,7 +11,7 @@
 // Usage:
 //   node commit-atomic.js --message "chore(SPRINT-NNN): start sprint" \
 //       --path .soloflow/active/sprint.json \
-//       --path .soloflow/active/backlog.json
+//       --path .soloflow/active/plans/auth/TASK-042-plan.md
 //
 // Optional:
 //   --allow-empty-paths   don't die if no paths were passed (for idempotent callers)
