@@ -7,7 +7,6 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 **`.soloflow/active/`** — read during execution:
 - `roadmaps/` — roadmap files (ROADMAP-NNN.md)
 - `ideas/`, `research/`, `plans/`, `stuck/` — in-flight task files
-- `backlog.json` — tasks awaiting execution (written by refinement, read by execution)
 - `sprint.json` — active sprint + in-flight tasks (written/read by execution)
 - `findings/SPRINT-NNN-findings.md` — append-only queue of out-of-scope observations for a specific sprint, logged by executor / verifier / code-reviewer. Sprint-initiator creates the file at sprint start; it stays in `active/findings/` after sprint close and is archived by `/soloflow:compound` after that sprint is compounded. Multiple sprints' findings files can coexist (compound backlog).
 - `compound/SPRINT-NNN-proposal.md` (single sprint) or `compound/SPRINT-{MIN}-{MAX}-proposal.md` (merged batch) — transient compound proposal written by the compounder during `/soloflow:compound`, archived after the user approves/rejects items. Span-named files cover multiple sprints (frontmatter `sprints:` array is canonical membership; the filename is a label).
@@ -25,9 +24,9 @@ All workflow state lives in `.soloflow/` (created per-project by `scripts/init.s
 - `human-review-queue.md` — batched items for human review, organized into four buckets (see "Human review queue" section below)
 - `config.json` — project-level overrides for every key in `config/defaults.yaml`. Read at runtime via the three-tier recipe in `CUSTOMIZATION.md#config-resolution`. Edit interactively via `/soloflow:config`. Unknown keys are preserved; nothing reads them until they're documented in `defaults.yaml`.
 
-**Why two JSON files (backlog, sprint):** enables parallel worktree execution without merge conflicts. Completed tasks are removed from `sprint.json` and their reports move to `archive/done/`.
+**Why `sprint.json` is the only JSON file:** plan frontmatter (`status: ready|deferred|in-flight|done` on each `TASK-NNN-plan.md`) is the source of truth for the queue — see `scripts/state/plan-query.js`. `sprint.json` exists only to track the in-flight set for the active sprint, which enables parallel worktree execution without merge conflicts on a shared queue file. Completed tasks are removed from `sprint.json` and their reports move to `archive/done/`.
 
-**`backlog.json` invariant:** only contains tasks with `status: ready` or `status: deferred`. Completed tasks are removed by `settle-task.js` on the `done` verdict; any stale entry that slips past (crash between writes, hand-edit) is caught by `cruft-detect.js` Scenario 7 (`completed_in_backlog`).
+**Plan frontmatter invariant:** every `active/plans/**/TASK-*-plan.md` must carry `status` set to one of `ready` / `deferred` / `in-flight` / `done`. Missing or unrecognized values are caught by `cruft-detect.js` Scenario 8 (`untracked_plan`).
 
 ## ID allocation
 
@@ -94,6 +93,6 @@ The compounder consumes the sprint's findings file at learning time and uses it 
 
 Tasks may optionally be grouped into epics via nested folders: `plans/<epic>/TASK-NNN-plan.md`, `stuck/<epic>/TASK-NNN-stuck.md`, `done/<epic>/TASK-NNN-done.md`. Each epic folder contains an `EPIC-<epic>.md` manifest (objective, scope, success signal) authored by the task-refiner when the epic is first created.
 
-Epics are **optional** — orphan tasks live flat at the state-root level (e.g. `plans/TASK-NNN-plan.md`), and a single idea may produce tasks across multiple epics + orphans. Task IDs remain **globally unique**; `backlog.json` / `sprint.json` are epic-unaware.
+Epics are **optional** — orphan tasks live flat at the state-root level (e.g. `plans/TASK-NNN-plan.md`), and a single idea may produce tasks across multiple epics + orphans. Task IDs remain **globally unique**; `sprint.json` is epic-unaware (plan frontmatter's `epic` field carries the slug directly).
 
 The source of truth for a task's epic is its plan frontmatter `epic: <slug>` field (absent/null for orphans); the folder is a convenience mirror. When all tasks in an epic complete, the executor prompts the user to archive the epic (moves `EPIC-<epic>.md` to `archive/done/<epic>/` and flips its status to `complete`); archival is never automatic.
