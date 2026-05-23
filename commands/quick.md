@@ -68,7 +68,7 @@ Write a plan file to `.soloflow/active/plans/TASK-{NNN}-plan.md` with this exact
 ---
 id: TASK-{NNN}
 idea: inline
-status: approved
+status: ready
 created: {ISO timestamp}
 files_owned:
   - {files that need to change}

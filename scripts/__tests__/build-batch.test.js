@@ -14,7 +14,7 @@ function writePlan(cwd, taskId, filesOwned, { epic } = {}) {
   const fm = [
     '---',
     `id: ${taskId}`,
-    'status: approved',
+    'status: ready',
     epic ? `epic: ${epic}` : 'epic: null',
     'files_owned:',
     ...filesOwned.map((f) => `  - ${f}`),

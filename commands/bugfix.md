@@ -95,7 +95,7 @@ Write `.soloflow/active/plans/TASK-{NNN}-plan.md` with `noclobber`/`wx` semantic
 ---
 id: TASK-{NNN}
 idea: inline
-status: approved
+status: ready
 created: {ISO timestamp}
 files_owned:
   - {paths from investigator's affected_files where role is fault, symptom, or test_target}

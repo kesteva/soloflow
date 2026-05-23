@@ -7,7 +7,7 @@ const { sanitize } = require('../refiner/sanitize-plan');
 const cleanPlan = `---
 id: TASK-180
 idea: IDEA-042
-status: approved
+status: ready
 files_owned:
   - src/foo.ts
 ---

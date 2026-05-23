@@ -208,7 +208,7 @@ Output each plan file's complete content, clearly separated. Use this structure 
 ---
 id: TASK-{NNN}
 idea: {IDEA-NNN}
-status: approved
+status: ready
 created: {ISO timestamp}
 files_owned:
   - {path/to/file}
