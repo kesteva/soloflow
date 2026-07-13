@@ -1,6 +1,6 @@
 ---
 description: Propose learnings from completed sprint(s) in three buckets (clean-ups, backlog tasks, CLAUDE.md improvements) plus optional SoloFlow self-improvement feedback (tester mode), then apply what the user approves. Batches multiple pending sprints into one merged proposal when --all or multi-select subset is used.
-argument-hint: [optional: SPRINT-NNN | --all | --oldest]
+argument-hint: "[optional: SPRINT-NNN | --all | --oldest]"
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 

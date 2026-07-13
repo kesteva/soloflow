@@ -1,6 +1,6 @@
 ---
 description: Unattended backlog-drain mode — runs executor → verifier → code-reviewer loops on all ready tasks, logs stuck/human-needed, never prompts. Visual verify off; parallel by default.
-argument-hint: [optional: TASK-NNN TASK-NNN ... or IDEA-NNN to filter]
+argument-hint: "[optional: TASK-NNN TASK-NNN ... or IDEA-NNN to filter]"
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 
