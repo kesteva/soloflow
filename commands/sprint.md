@@ -1,6 +1,6 @@
 ---
 description: Run an execution sprint over ready tasks in the backlog
-argument-hint: [TASK-NNN... | IDEA-NNN] [--quick | --no-code-review | --no-verification]
+argument-hint: "[TASK-NNN... | IDEA-NNN] [--quick | --no-code-review | --no-verification]"
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 

@@ -1,6 +1,6 @@
 ---
 description: Run /soloflow:sprint with /soloflow:compound interleaved before the merge choice — one end-to-end flow with a single final merge prompt
-argument-hint: [TASK-NNN... | IDEA-NNN] [--quick | --no-code-review | --no-verification]
+argument-hint: "[TASK-NNN... | IDEA-NNN] [--quick | --no-code-review | --no-verification]"
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 

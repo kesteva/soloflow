@@ -1,6 +1,6 @@
 ---
 description: Survey the project and create missing CLAUDE.md, ARCHITECTURE.md, and CODE-PATTERNS.md so future agents have shared context to load on entry
-argument-hint: [--skip-claudemd] [--skip-architecture] [--skip-codepatterns]
+argument-hint: "[--skip-claudemd] [--skip-architecture] [--skip-codepatterns]"
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, AskUserQuestion]
 model: sonnet
 ---

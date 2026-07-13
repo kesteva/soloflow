@@ -1,6 +1,6 @@
 ---
 description: Deep-clean the codebase — remove dead code, trim CLAUDE.md files, and verify no regressions
-argument-hint: [optional: scope path to focus on]
+argument-hint: "[optional: scope path to focus on]"
 allowed-tools: [Read, Write, Edit, Glob, Grep, Bash, Agent, AskUserQuestion]
 ---
 
